@@ -1,0 +1,71 @@
+schema: spec-driven
+
+context: |
+  Product:
+  Collaborative notes, documentation and project management application.
+
+  Frontend:
+  - Next.js
+  - TypeScript
+  - Feature Sliced Design
+  - TanStack Query for server state
+  - Zustand for client global state
+  - shadcn/ui + Tailwind
+  - React Hook Form + Zod
+  - Vitest + React Testing Library
+
+  Backend:
+  - NestJS
+  - TypeScript
+  - PostgreSQL
+  - Redis
+  - Prisma
+  - BullMQ
+  - Socket.IO
+  - Swagger
+
+  Engineering:
+  - pnpm workspace
+  - Docker for local and production environments
+  - trunk-based development
+  - all changes through Pull Requests
+  - tests are required for core functionality
+  - human code review is mandatory
+
+  Architecture:
+  - Frontend follows Feature Sliced Design
+  - Backend follows modular and layered architecture
+  - Controllers must not contain business logic
+  - Prefer existing abstractions over introducing new ones
+
+rules:
+  proposal:
+    - Clearly state the problem being solved
+    - Define what is explicitly out of scope
+    - Identify affected frontend, backend and infrastructure areas
+
+  specs:
+    - Requirements must describe observable behaviour
+    - Include happy path, error and permission scenarios
+    - Use Given/When/Then scenarios where appropriate
+
+  design:
+    - Describe affected modules
+    - Describe database changes when applicable
+    - Describe API changes when applicable
+    - Describe realtime events when applicable
+    - Consider authorization and security
+    - Consider testing strategy
+
+  tasks:
+    - Split implementation into independently verifiable steps
+    - Include tests as implementation tasks
+    - Avoid large generic tasks such as "implement backend"
+
+operations:
+  apply:
+    guidance:
+      - Follow the approved design
+      - Do not introduce new dependencies unless required by the design
+      - Run relevant tests after implementation
+      
