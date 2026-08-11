@@ -93,10 +93,24 @@ PORT=4000 pnpm --filter @lite-notion/api dev
 
 ## OpenSpec
 
-OpenSpec уже инициализирован в каталоге `openspec`. Активные изменения можно посмотреть командой:
+OpenSpec уже инициализирован в каталоге `openspec`. Участникам, которые планируют разработку с coding agents, нужна совместимая версия CLI:
+
+```bash
+npm install -g @fission-ai/openspec@1.7.0
+openspec --version
+```
+
+Не запускайте `openspec init` повторно. Активные изменения можно посмотреть командой:
 
 ```bash
 openspec list
 ```
 
-Новые возможности и инфраструктурные изменения следует сначала оформлять как OpenSpec change, а затем реализовывать по его задачам.
+Краткая последовательность работы:
+
+1. Создать OpenSpec change и провести human review planning artifacts.
+2. Реализовать утверждённые задачи с агентом и выполнить проверки.
+3. Открыть Pull Request и получить human review реализации.
+4. Архивировать change в том же PR, получить финальное approval и выполнить merge.
+
+Команды для Codex, Claude Code, Cursor и OpenCode, критерии перехода между этапами и правила синхронизации specs описаны в [гайде по OpenSpec workflow](docs/openspec-workflow.md).

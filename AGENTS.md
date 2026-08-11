@@ -53,11 +53,14 @@ Use English for source-code identifiers, package names, routes, and scripts. Kee
 
 OpenSpec is the source of truth for planned changes.
 
-1. Run `openspec list` and inspect the relevant change before implementation.
-2. Read every context file returned by `openspec instructions apply --change <name> --json`.
-3. Follow the approved proposal and design; do not expand scope silently.
-4. Work through pending tasks in order and mark each checkbox only after its implementation is verified.
-5. If implementation changes a design decision, update and reconcile the planning artifacts before continuing.
-6. Run `openspec validate <name> --strict` and the relevant repository checks before declaring the change complete.
+Human contributors using coding agents should follow `docs/openspec-workflow.md`. Use one logical OpenSpec change per short-lived branch and Pull Request. Process, architecture, team-rule, and other significant documentation changes require an OpenSpec change; typo, broken-link, and minor wording fixes may go directly through a Pull Request.
 
-Do not archive a change until all tasks are complete and its implementation has been reviewed.
+1. Run `openspec list` and inspect the relevant change before implementation.
+2. Obtain human review of the proposal, specs, design, and tasks before implementation.
+3. Read every context file returned by `openspec instructions apply --change <name> --json`.
+4. Follow the approved proposal and design; do not expand scope silently.
+5. Work through pending tasks in order and mark each checkbox only after its implementation is verified.
+6. If implementation changes a design decision, update and reconcile the planning artifacts, then obtain human review before continuing.
+7. Run `openspec validate <name> --strict` and the relevant repository checks before declaring the change complete.
+
+Do not archive a change until all tasks and checks are complete and its implementation has received human review. Archive it in the same Pull Request, review the archive and any synced main-spec changes, then merge.
