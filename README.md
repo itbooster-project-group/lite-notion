@@ -114,3 +114,4 @@ openspec list
 4. Архивировать change в том же PR, получить финальное approval и выполнить merge.
 
 Команды для Codex, Claude Code, Cursor и OpenCode, критерии перехода между этапами и правила синхронизации specs описаны в [гайде по OpenSpec workflow](docs/openspec-workflow.md).
+
