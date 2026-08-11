@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "lib": ["ES2022"],
+    "allowSyntheticDefaultImports": true,
+    "declaration": true,
+    "removeComments": true,
+    "sourceMap": true,
+    "outDir": "./dist",
+    "baseUrl": "./",
+    "incremental": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "noEmit": false
+  },
+  "include": ["src/**/*.ts", "vitest.config.mts", "vitest.setup.ts"],
+  "exclude": ["node_modules", "dist"]
+}
