@@ -1,20 +1,20 @@
 ## 1. Workflow: базовая структура
 
-- [ ] 1.1 Создать `.github/workflows/ci.yml` с триггером `pull_request` (`opened`, `synchronize`, `reopened`) на `branches: [main]`.
-- [ ] 1.2 Добавить `concurrency` с `group: ci-${{ github.workflow }}-${{ github.event.pull_request.number }}` и `cancel-in-progress: true`.
-- [ ] 1.3 Вынести общий шаблон установки (`corepack enable`, `pnpm/action-setup@v4` с версией `11.21.0`, `actions/setup-node@v4` с Node 22 и `cache: pnpm`, `pnpm install --frozen-lockfile`) в каждый джоб.
+- [x] 1.1 Создать `.github/workflows/ci.yml` с триггером `pull_request` (`opened`, `synchronize`, `reopened`) на `branches: [main]`.
+- [x] 1.2 Добавить `concurrency` с `group: ci-${{ github.workflow }}-${{ github.event.pull_request.number }}` и `cancel-in-progress: true`.
+- [x] 1.3 Вынести общий шаблон установки (`pnpm/action-setup@v4` с версией `11.21.0`, `actions/setup-node@v4` с Node 22 и `cache: pnpm`, `pnpm install --frozen-lockfile`) в каждый джоб.
 
 ## 2. Джоб `lint`
 
-- [ ] 2.1 Добавить джоб `lint`, выполняющий `pnpm lint` для всего workspace.
+- [x] 2.1 Добавить джоб `lint`, выполняющий `pnpm lint` (Biome) для всего workspace.
 
 ## 3. Джоб `web`
 
-- [ ] 3.1 Добавить джоб `web`, выполняющий последовательно `pnpm --filter @lite-notion/web run typecheck`, `run test`, `run build`.
+- [x] 3.1 Добавить джоб `web`, выполняющий последовательно `pnpm --filter @lite-notion/web run typecheck`, `run test`, `run build`.
 
 ## 4. Джоб `api`
 
-- [ ] 4.1 Добавить джоб `api`, выполняющий последовательно `pnpm --filter @lite-notion/api run typecheck`, `run test`, `run build`.
+- [x] 4.1 Добавить джоб `api`, выполняющий последовательно `pnpm --filter @lite-notion/api run typecheck`, `run test`, `run build`.
 
 ## 5. Проверка workflow
 
