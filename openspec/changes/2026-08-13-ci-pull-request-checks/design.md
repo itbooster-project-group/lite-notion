@@ -47,7 +47,7 @@ concurrency:
 
 ### 4. Установка зависимостей в каждом джобе
 
-Каждый джоб самостоятельно выполняет `corepack enable`, `pnpm/action-setup` (версия закреплена как `11.21.0`, синхронно с `packageManager` в `package.json`), `actions/setup-node` (Node 22, `cache: pnpm`) и `pnpm install --frozen-lockfile`. Общий build-джоб с шарингом артефактов между `lint`/`web`/`api` не вводится: три параллельных установки с pnpm-кэшем (`actions/setup-node` кэширует store по хэшу `pnpm-lock.yaml`) быстрее и проще, чем настройка artifact upload/download между джобами при текущем размере репозитория.
+Каждый джоб самостоятельно выполняет `pnpm/action-setup` (версия закреплена как `11.21.0`, синхронно с `packageManager` в `package.json`), `actions/setup-node` (Node 22, `cache: pnpm`) и `pnpm install --frozen-lockfile`. `pnpm/action-setup` сам устанавливает нужную версию pnpm, поэтому отдельный `corepack enable` не требуется. Общий build-джоб с шарингом артефактов между `lint`/`web`/`api` не вводится: три параллельных установки с pnpm-кэшем (`actions/setup-node` кэширует store по хэшу `pnpm-lock.yaml`) быстрее и проще, чем настройка artifact upload/download между джобами при текущем размере репозитория.
 
 ### 5. Branch protection на `main`
 
