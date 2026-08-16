@@ -38,7 +38,7 @@
 | Настройки бэкенда: конфигурация, префикс, CORS, Swagger | [#8](https://github.com/itbooster-project-group/lite-notion/issues/8) |
 | Проектирование схемы БД | [#9](https://github.com/itbooster-project-group/lite-notion/issues/9) |
 
-**Задач ещё нет:** подключение PostgreSQL и Prisma, реализация `schema.prisma` и первой миграции по согласованной [схеме БД](database-schema.md).
+**Данные:** [#23](https://github.com/itbooster-project-group/lite-notion/issues/23) подключение PostgreSQL и Prisma, реализация `schema.prisma` и миграций по согласованной [схеме БД](database-schema.md). Эта задача разблокирует данные для всех последующих этапов.
 
 Этап #4 блокирует весь UI-бэклог: до него в `apps/web` нет ни Tailwind, ни shadcn/ui, ни Zustand, TanStack Query, React Hook Form и Zod.
 
@@ -48,11 +48,11 @@
 
 | Слой | Состав |
 | --- | --- |
-| Данные | Таблица `USER`, enum `user_role` |
-| API | Регистрация, вход, выход, текущий пользователь; хеширование паролей, выпуск и проверка токенов |
+| Данные | [#23](https://github.com/itbooster-project-group/lite-notion/issues/23) таблица `USER`, enum `user_role` |
+| API | [#24](https://github.com/itbooster-project-group/lite-notion/issues/24) регистрация, вход, выход, текущий пользователь; хеширование паролей, выпуск и проверка токенов |
 | Интерфейс | [#19](https://github.com/itbooster-project-group/lite-notion/issues/19) формы входа и регистрации, защита приватных маршрутов |
 
-**Задач ещё нет:** миграция таблицы `USER`, серверная аутентификация. В #19 серверная часть явно вынесена из скоупа.
+В #19 серверная часть явно вынесена из скоупа и покрывается #24.
 
 ## Этап 2. Страницы
 
@@ -60,11 +60,9 @@
 
 | Слой | Состав |
 | --- | --- |
-| Данные | Таблица `PAGE` с self-relation `parent_id` и владельцем `owner_id` |
-| API | CRUD страниц, выдача дерева страниц текущего пользователя |
+| Данные | [#23](https://github.com/itbooster-project-group/lite-notion/issues/23) таблица `PAGE` с self-relation `parent_id` и владельцем `owner_id` |
+| API | [#25](https://github.com/itbooster-project-group/lite-notion/issues/25) CRUD страниц, выдача дерева страниц текущего пользователя |
 | Интерфейс | [#10](https://github.com/itbooster-project-group/lite-notion/issues/10) каркас приложения, [#11](https://github.com/itbooster-project-group/lite-notion/issues/11) дерево страниц, [#12](https://github.com/itbooster-project-group/lite-notion/issues/12) шапка страницы и действия |
-
-**Задач ещё нет:** миграция таблицы `PAGE`, CRUD API страниц.
 
 ## Этап 3. Блочный редактор
 
@@ -72,13 +70,11 @@
 
 | Слой | Состав |
 | --- | --- |
-| Данные | Таблица `BLOCK`, enum `block_type`, порядок через `sort_order`, содержимое в `jsonb` |
-| API | CRUD блоков, пакетное обновление порядка и вложенности |
+| Данные | [#23](https://github.com/itbooster-project-group/lite-notion/issues/23) таблица `BLOCK`, enum `block_type`, порядок через `sort_order`, содержимое в `jsonb` |
+| API | [#26](https://github.com/itbooster-project-group/lite-notion/issues/26) CRUD блоков, пакетное обновление порядка и вложенности |
 | Интерфейс | [#14](https://github.com/itbooster-project-group/lite-notion/issues/14) компоненты блоков, [#13](https://github.com/itbooster-project-group/lite-notion/issues/13) контейнер редактора, [#15](https://github.com/itbooster-project-group/lite-notion/issues/15) меню типов, [#16](https://github.com/itbooster-project-group/lite-notion/issues/16) drag & drop |
 
 Внутри этапа #14 не зависит от API и может выполняться параллельно с backend-работами. #15 и #16 требуют готового контейнера из #13.
-
-**Задач ещё нет:** миграция таблицы `BLOCK`, CRUD API блоков.
 
 ## Этап 4. Задачи
 
@@ -86,11 +82,9 @@
 
 | Слой | Состав |
 | --- | --- |
-| Данные | Таблица `TASK` с владельцем `owner_id`, enum `task_status` |
-| API | CRUD задач, фильтрация по статусу |
+| Данные | [#23](https://github.com/itbooster-project-group/lite-notion/issues/23) таблица `TASK` с владельцем `owner_id`, enum `task_status` |
+| API | [#27](https://github.com/itbooster-project-group/lite-notion/issues/27) CRUD задач, фильтрация по статусу |
 | Интерфейс | [#17](https://github.com/itbooster-project-group/lite-notion/issues/17) список, карточка и форма задач |
-
-**Задач ещё нет:** миграция таблицы `TASK`, CRUD API задач.
 
 ## Этап 5. Гостевой доступ
 
@@ -98,21 +92,25 @@
 
 | Слой | Состав |
 | --- | --- |
-| Данные | Признак публикации и публичный идентификатор у `PAGE` |
-| API | Публикация и снятие публикации, публичное чтение опубликованной страницы без авторизации |
+| Данные | [#28](https://github.com/itbooster-project-group/lite-notion/issues/28) признак публикации и публичный идентификатор у `PAGE` |
+| API | [#28](https://github.com/itbooster-project-group/lite-notion/issues/28) публикация и снятие публикации, публичное чтение страницы без авторизации |
 | Интерфейс | [#18](https://github.com/itbooster-project-group/lite-notion/issues/18) read-only просмотр страницы, управление публикацией в шапке страницы |
 
-**Задач ещё нет:** поля публикации в схеме БД, API публикации и публичного чтения.
+**Требуется доработка схемы.** В текущей [схеме БД](database-schema.md) у `PAGE` нет полей для публикации: гостевой доступ по ссылке спроектирован не был. Поэтому #28 начинается не с реализации, а с проектирования — это единственная backend-задача MVP с таким порядком.
 
-**Требуется доработка схемы.** В текущей [схеме БД](database-schema.md) у `PAGE` нет полей для публикации: гостевой доступ по ссылке спроектирован не был. Перед этапом 5 схему нужно дополнить признаком публикации и публичным идентификатором страницы.
+## Зависимости между задачами
 
-## Сводка: чего не хватает в бэклоге
+Две задачи блокируют большую часть бэклога, и начинать стоит с них:
 
-Между спроектированной схемой БД и заведёнными UI-задачами нет ни одной задачи на данные и API. Из десяти UI-задач без API можно выполнить только три: #10, #14 и частично #19.
-
-| Область | Недостающие работы |
+| Задача | Что разблокирует |
 | --- | --- |
-| Данные | Подключение PostgreSQL и Prisma, реализация `schema.prisma`, миграции по всем сущностям, поля публикации страницы |
-| API | Аутентификация, CRUD страниц, CRUD блоков с пакетным обновлением порядка, CRUD задач, публикация и публичное чтение страницы |
+| [#4](https://github.com/itbooster-project-group/lite-notion/issues/4) Tailwind и shadcn/ui | Весь UI-бэклог: до неё в `apps/web` нет ни Tailwind, ни shadcn/ui, ни Zustand, TanStack Query, React Hook Form и Zod |
+| [#23](https://github.com/itbooster-project-group/lite-notion/issues/23) PostgreSQL, Prisma и миграции | Все API-задачи: #24, #25, #26, #27 и #28 |
 
-Эти работы нужно завести отдельными задачами до старта соответствующих этапов.
+Дальше зависимости идут по этапам: API этапа требует данных из #23, интерфейс этапа требует своего API. Исключения, которые можно брать раньше:
+
+- [#14](https://github.com/itbooster-project-group/lite-notion/issues/14) компоненты блоков — чистая презентация на пропсах, API не нужен.
+- [#10](https://github.com/itbooster-project-group/lite-notion/issues/10) каркас приложения — layout и состояние сайдбара, API не нужен.
+- [#19](https://github.com/itbooster-project-group/lite-notion/issues/19) формы входа — вёрстку и валидацию можно собрать до готовности #24.
+
+Внутри этапа 3 порядок такой: #14 и #13 независимы друг от друга, а #15 и #16 требуют готового контейнера из #13.
