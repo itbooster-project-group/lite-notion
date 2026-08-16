@@ -38,6 +38,14 @@ pnpm install
 
 ## Запуск для разработки
 
+При необходимости скопируйте пример локальной конфигурации API:
+
+```bash
+cp apps/api/.env.example apps/api/.env
+```
+
+Все переменные имеют defaults, поэтому для стандартного локального запуска создавать `.env` необязательно.
+
 ```bash
 pnpm dev
 ```
@@ -46,12 +54,14 @@ pnpm dev
 
 - frontend: [http://localhost:3000](http://localhost:3000);
 - API: [http://localhost:3001](http://localhost:3001);
-- health endpoint: [http://localhost:3001/health](http://localhost:3001/health).
+- health endpoint: [http://localhost:3001/api/v1/health](http://localhost:3001/api/v1/health);
+- Swagger UI: [http://localhost:3001/api/docs](http://localhost:3001/api/docs);
+- OpenAPI JSON: [http://localhost:3001/api/openapi.json](http://localhost:3001/api/openapi.json).
 
 Проверить API можно из терминала:
 
 ```bash
-curl http://localhost:3001/health
+curl http://localhost:3001/api/v1/health
 ```
 
 Ожидаемый ответ:
@@ -60,11 +70,21 @@ curl http://localhost:3001/health
 {"status":"ok"}
 ```
 
-Порт API можно переопределить переменной окружения `PORT`:
+API использует следующие переменные окружения:
+
+| Переменная | Default | Ограничения |
+| --- | --- | --- |
+| `NODE_ENV` | `development` | `development`, `test` или `production` |
+| `PORT` | `3001` | Целое число от 1 до 65535 |
+| `CORS_ORIGIN` | `http://localhost:3000` | Один точный HTTP(S) origin без path, query и fragment |
+
+Например, порт API можно переопределить так:
 
 ```bash
 PORT=4000 pnpm --filter @lite-notion/api dev
 ```
+
+Все прикладные маршруты API находятся под prefix `/api/v1`. Старый адрес `/health` не поддерживается. Swagger UI и OpenAPI JSON доступны только при `NODE_ENV`, отличном от `production`; YAML-схема не публикуется.
 
 ## Команды
 
@@ -114,4 +134,3 @@ openspec list
 4. Архивировать change в том же PR, получить финальное approval и выполнить merge.
 
 Команды для Codex, Claude Code, Cursor и OpenCode, критерии перехода между этапами и правила синхронизации specs описаны в [гайде по OpenSpec workflow](docs/openspec-workflow.md).
-
