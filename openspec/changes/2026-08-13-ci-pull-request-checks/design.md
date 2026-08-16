@@ -51,13 +51,13 @@ concurrency:
 
 ### 5. Branch protection на `main`
 
-Настраивается через `gh api repos/itbooster-project-group/lite-notion/branches/main/protection` (PUT) или эквивалентно в Settings → Branches:
+Фактически настроено через GitHub Repository Rulesets (`repos/.../rulesets`) — современную замену legacy branch protection API, доступную в Settings → Rules → Rulesets. Ruleset `main` включает:
 
-- `required_pull_request_reviews`: обязательный PR перед merge (соответствует существующему правилу "human code review is mandatory" из `config.yaml`).
-- `required_status_checks.contexts`: `["lint", "web", "api"]`, `strict: true` (ветка должна быть актуальной относительно `main` перед merge).
-- `enforce_admins`: включено, чтобы правило действовало без исключений для администраторов.
-- `allow_force_pushes: false`, `allow_deletions: false`.
-- Прямой push в `main` запрещается тем же правилом required PR reviews: push без PR отклоняется GitHub при включённой защите.
+- Правило `pull_request` с `required_approving_review_count: 1`: обязательный PR перед merge (соответствует существующему правилу "human code review is mandatory" из `config.yaml`).
+- Правило `required_status_checks` с контекстами `["lint", "web", "api"]`, `strict_required_status_checks_policy: true` (ветка должна быть актуальной относительно `main` перед merge).
+- `current_user_can_bypass: never` — правило действует без исключений, эквивалент `enforce_admins`.
+- Правила `non_fast_forward` и `deletion` — запрет force-push и удаления ветки.
+- Прямой push в `main` запрещается правилом `pull_request`: push без PR отклоняется GitHub (`GH013: Repository rule violations`) при включённом ruleset.
 
 Названия контекстов (`lint`, `web`, `api`) должны точно совпадать с именами джобов в `ci.yml`, иначе GitHub не сможет сопоставить обязательный чек с результатом workflow.
 
@@ -65,9 +65,9 @@ concurrency:
 
 - [Три независимые установки зависимостей увеличивают суммарное время CI по сравнению с одной инсталляцией] → pnpm-кэш через `actions/setup-node` делает повторные установки быстрыми; при росте времени можно вернуться к общему setup-джобу с артефактами.
 - [Отсутствие path-based skip означает, что оба приложения проверяются даже при изменении только одного] → при текущем размере репозитория (2 небольших приложения) это не создаёт заметной задержки; пересмотр — отдельное изменение при необходимости.
-- [`enforce_admins: true` может заблокировать экстренный hotfix push] → это осознанный компромисс ради соблюдения "PR с failed checks нельзя смержить" без исключений; экстренные изменения тоже идут через PR, при необходимости админ может временно снять защиту через Settings.
+- [`current_user_can_bypass: never` может заблокировать экстренный hotfix push] → это осознанный компромисс ради соблюдения "PR с failed checks нельзя смержить" без исключений; экстренные изменения тоже идут через PR, при необходимости админ может временно отключить или изменить ruleset в Settings.
 - [Названия job id должны совпадать со строками в required status checks] → зафиксировано явно в decision 5, чтобы не разошлось при будущих переименованиях workflow.
 
 ## Migration Plan
 
-Изменение аддитивно: добавляется новый workflow-файл, существующий код и scripts не меняются. После мержа PR с `ci.yml` в `main` (единственный PR, который может пройти без required status checks, так как они появятся только после первого успешного запуска на этой ветке) branch protection включается отдельным шагом через `gh api`, применяемым вручную человеком с правами admin. Порядок: сначала merge workflow, затем — после успешного первого прогона на `main` — включение required status checks, чтобы GitHub успел зарегистрировать контексты `lint`/`web`/`api`. Откат — отключение branch protection в Settings и/или удаление `ci.yml`, без миграции данных.
+Изменение аддитивно: добавляется новый workflow-файл, существующий код и scripts не меняются. На практике ruleset для `main` (PR review + `non_fast_forward` + `deletion`) уже существовал с прошлого изменения (`init-project`); в рамках этой задачи в него добавлен `required_status_checks` с контекстами `lint`/`web`/`api` после того, как эти джобы прогнались на PR #6 и GitHub зарегистрировал контексты. Откат — удаление правила `required_status_checks` из ruleset и/или `ci.yml`, без миграции данных.
