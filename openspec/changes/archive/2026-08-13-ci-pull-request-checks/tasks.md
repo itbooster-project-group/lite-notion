@@ -38,4 +38,4 @@
 - [x] 8.1 Отметить все выполненные задачи в этом файле.
 - [x] 8.2 Выполнить `openspec validate 2026-08-13-ci-pull-request-checks --strict`.
 - [x] 8.3 Получить human review proposal, design и tasks до реализации; после реализации — review итогового PR. PR #6 approved ревьюером VAnastasia.
-- [ ] 8.4 Заархивировать change в том же PR, где реализован CI.
+- [x] 8.4 Заархивировать change в том же PR, где реализован CI.
