@@ -1,9 +1,9 @@
 import { Logger } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { Test } from "@nestjs/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { handleBootstrapError, startApplication } from "./bootstrap";
+import { applicationConfig } from "./config/application-config";
 import { NodeEnvironment } from "./config/environment";
 
 describe("bootstrap", () => {
@@ -12,16 +12,16 @@ describe("bootstrap", () => {
     vi.restoreAllMocks();
   });
 
-  it("слушает порт из ConfigService и включает shutdown hooks", async () => {
+  it("слушает порт из типизированного конфига и включает shutdown hooks", async () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         {
-          provide: ConfigService,
-          useValue: new ConfigService({
-            CORS_ORIGIN: "http://localhost:3000",
-            NODE_ENV: NodeEnvironment.Test,
-            PORT: 4321,
-          }),
+          provide: applicationConfig.KEY,
+          useValue: {
+            corsOrigin: "http://localhost:3000",
+            nodeEnvironment: NodeEnvironment.Test,
+            port: 4321,
+          },
         },
       ],
     }).compile();

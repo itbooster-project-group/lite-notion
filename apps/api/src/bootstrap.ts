@@ -1,20 +1,16 @@
 import { type INestApplication, Logger } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
 
 import { AppModule } from "./app.module";
 import { configureApplication } from "./application";
-import type { EnvironmentConfig } from "./config/environment";
+import { type ApplicationConfig, applicationConfig } from "./config/application-config";
 
 export async function startApplication(app: INestApplication): Promise<void> {
-  const config = app.get<ConfigService<EnvironmentConfig, true>>(ConfigService);
+  const config = app.get<ApplicationConfig>(applicationConfig.KEY);
 
-  configureApplication(app, {
-    CORS_ORIGIN: config.getOrThrow("CORS_ORIGIN", { infer: true }),
-    NODE_ENV: config.getOrThrow("NODE_ENV", { infer: true }),
-  });
+  configureApplication(app, config);
 
-  await app.listen(config.getOrThrow("PORT", { infer: true }));
+  await app.listen(config.port);
 }
 
 export async function bootstrap(): Promise<void> {

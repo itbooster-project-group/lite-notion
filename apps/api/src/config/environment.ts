@@ -15,9 +15,6 @@ export enum NodeEnvironment {
   Test = "test",
 }
 
-export const DEFAULT_API_PORT = 3001;
-export const DEFAULT_CORS_ORIGIN = "http://localhost:3000";
-
 function isHttpOrigin(value: unknown): boolean {
   if (typeof value !== "string") {
     return false;
@@ -53,32 +50,26 @@ function IsHttpOrigin(validationOptions?: ValidationOptions): PropertyDecorator 
 
 export class EnvironmentConfig {
   @IsEnum(NodeEnvironment)
-  NODE_ENV: NodeEnvironment = NodeEnvironment.Development;
+  NODE_ENV!: NodeEnvironment;
 
-  @Transform(({ value }) => (value === undefined ? DEFAULT_API_PORT : Number(value)), {
-    toClassOnly: true,
-  })
+  @Transform(({ value }) => Number(value), { toClassOnly: true })
   @IsInt()
   @Min(1)
   @Max(65_535)
-  PORT = DEFAULT_API_PORT;
+  PORT!: number;
 
   @IsHttpOrigin()
-  CORS_ORIGIN = DEFAULT_CORS_ORIGIN;
+  CORS_ORIGIN!: string;
 }
 
 export function validateEnvironment(
   environment: Record<string, unknown>,
 ): Record<string, unknown> & EnvironmentConfig {
-  const validatedEnvironment = plainToInstance(
-    EnvironmentConfig,
-    {
-      CORS_ORIGIN: environment.CORS_ORIGIN,
-      NODE_ENV: environment.NODE_ENV,
-      PORT: environment.PORT,
-    },
-    { exposeDefaultValues: true },
-  );
+  const validatedEnvironment = plainToInstance(EnvironmentConfig, {
+    CORS_ORIGIN: environment.CORS_ORIGIN,
+    NODE_ENV: environment.NODE_ENV,
+    PORT: environment.PORT,
+  });
   const errors = validateSync(validatedEnvironment, {
     forbidUnknownValues: true,
     skipMissingProperties: false,

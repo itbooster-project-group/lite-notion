@@ -10,7 +10,7 @@ These instructions apply to `apps/api` and extend the repository-level `AGENTS.m
 - Keep controllers limited to transport concerns: routing, input extraction, validation handoff, and response mapping. Put business rules and orchestration in services or use-case classes.
 - Keep framework and external-system details at module boundaries so core behavior can be tested without starting the HTTP server.
 - Prefer constructor injection and explicit module exports over service locators or global mutable state.
-- Preserve the current bootstrap contract: validated `PORT` overrides the default API port 3001, `NODE_ENV` defaults to `development`, and `CORS_ORIGIN` defaults to `http://localhost:3000`.
+- Preserve the current bootstrap contract: `NODE_ENV`, `PORT`, and `CORS_ORIGIN` are all required and validated; `apps/api/.env.example` provides the recommended local values.
 - Keep `GET /api/v1/health` lightweight and free of sensitive configuration. Expand its checks only when the corresponding dependencies are introduced by an approved change.
 - Keep application routes under the `/api/v1` global prefix. Swagger UI at `/api/docs` and OpenAPI JSON at `/api/openapi.json` remain disabled in production.
 

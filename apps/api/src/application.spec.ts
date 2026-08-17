@@ -42,8 +42,8 @@ describe("application HTTP configuration", () => {
 
     app = moduleRef.createNestApplication();
     configureApplication(app, {
-      CORS_ORIGIN: "http://localhost:3000",
-      NODE_ENV: NodeEnvironment.Test,
+      corsOrigin: "http://localhost:3000",
+      nodeEnvironment: NodeEnvironment.Test,
     });
     await app.init();
   });
@@ -177,8 +177,8 @@ describe("application HTTP configuration", () => {
     const productionApp = moduleRef.createNestApplication();
 
     configureApplication(productionApp, {
-      CORS_ORIGIN: "http://localhost:3000",
-      NODE_ENV: NodeEnvironment.Production,
+      corsOrigin: "http://localhost:3000",
+      nodeEnvironment: NodeEnvironment.Production,
     });
     await productionApp.init();
 
