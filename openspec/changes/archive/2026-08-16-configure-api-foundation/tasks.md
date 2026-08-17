@@ -1,13 +1,13 @@
 ## 1. Зависимости и конфигурация окружения
 
 - [x] 1.1 Добавить в `apps/api` runtime dependencies `@nestjs/config`, `@nestjs/swagger`, `class-transformer`, `class-validator`, dev dependencies `supertest`, `@types/supertest` и обновить `pnpm-lock.yaml` через pnpm.
-- [x] 1.2 Реализовать типизированную env-схему с defaults и безопасной валидацией `NODE_ENV`, `PORT`, `CORS_ORIGIN`, подключить её через глобальный cached `ConfigModule`.
-- [x] 1.3 Добавить `apps/api/.env.example` с документированными defaults и unit tests для defaults, coercion, допустимых пользовательских значений и каждого невалидного случая.
+- [x] 1.2 Реализовать типизированную env-схему с обязательными `NODE_ENV`, `PORT`, `CORS_ORIGIN`, замаппить её во внутренний camelCase-конфиг и подключить через глобальный cached `ConfigModule`.
+- [x] 1.3 Добавить `apps/api/.env.example` с полным набором рекомендуемых локальных значений и unit tests для обязательности ключей, coercion, допустимых пользовательских значений и каждого невалидного случая.
 
 ## 2. Общий HTTP runtime
 
 - [x] 2.1 Выделить тестируемую функцию настройки Nest application и подключить global prefix `api/v1`, single-origin CORS, глобальный `ValidationPipe` с утверждёнными options и shutdown hooks.
-- [x] 2.2 Перевести bootstrap на типизированный `ConfigService`, сохранить default port 3001 и добавить безопасную обработку startup failure с ненулевым exit code.
+- [x] 2.2 Перевести bootstrap на получение единого типизированного config provider по DI-токену без строковых lookup отдельных полей и добавить безопасную обработку startup failure с ненулевым exit code при отсутствующей или невалидной конфигурации.
 - [x] 2.3 Реализовать DI-managed global exception filter с фиксированным `{ statusCode, error, message, path, timestamp }`, сохранением validation messages и безопасным логированием неожиданных исключений.
 - [x] 2.4 Добавить HTTP tests для versioned routing, разрешённого и запрещённого CORS, DTO transform, запрета лишних полей и единого формата `400`, `404`, `500`; проверить bootstrap port и shutdown setup.
 

@@ -2,7 +2,7 @@ import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { APP_FILTER } from "@nestjs/core";
 
-import { validateEnvironment } from "./config/environment";
+import { applicationConfig } from "./config/application-config";
 import { HealthModule } from "./health/health.module";
 import { HttpExceptionFilter } from "./http-exception.filter";
 
@@ -11,7 +11,7 @@ import { HttpExceptionFilter } from "./http-exception.filter";
     ConfigModule.forRoot({
       cache: true,
       isGlobal: true,
-      validate: validateEnvironment,
+      load: [applicationConfig],
     }),
     HealthModule,
   ],

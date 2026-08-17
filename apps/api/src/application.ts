@@ -1,11 +1,12 @@
 import { type INestApplication, ValidationPipe } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 
-import { type EnvironmentConfig, NodeEnvironment } from "./config/environment";
+import type { ApplicationConfig } from "./config/application-config";
+import { NodeEnvironment } from "./config/environment";
 
 export const API_GLOBAL_PREFIX = "api/v1";
 
-type ApplicationEnvironment = Pick<EnvironmentConfig, "CORS_ORIGIN" | "NODE_ENV">;
+type ApplicationEnvironment = Pick<ApplicationConfig, "corsOrigin" | "nodeEnvironment">;
 type CorsCallback = (error: Error | null, allow?: boolean) => void;
 
 export function configureApplication(
@@ -16,7 +17,7 @@ export function configureApplication(
   app.enableCors({
     credentials: false,
     origin: (requestOrigin: string | undefined, callback: CorsCallback) => {
-      callback(null, requestOrigin === undefined || requestOrigin === environment.CORS_ORIGIN);
+      callback(null, requestOrigin === undefined || requestOrigin === environment.corsOrigin);
     },
   });
   app.useGlobalPipes(
@@ -28,7 +29,7 @@ export function configureApplication(
   );
   app.enableShutdownHooks();
 
-  if (environment.NODE_ENV !== NodeEnvironment.Production) {
+  if (environment.nodeEnvironment !== NodeEnvironment.Production) {
     const swaggerConfig = new DocumentBuilder()
       .setTitle("Lite Notion API")
       .setDescription("HTTP API for Lite Notion")

@@ -27,23 +27,27 @@
 
 ### Глобальный ConfigModule и одна схема окружения
 
-`AppModule` импортирует `ConfigModule.forRoot` с `isGlobal: true`, caching и собственной validate-функцией. Схема преобразует только контролируемые ключи `NODE_ENV`, `PORT` и `CORS_ORIGIN`, применяет defaults и проверяет их через `class-transformer` и `class-validator`; остальные переменные процесса не запрещаются и сохраняются для совместимости с Node/tooling.
+`AppModule` импортирует `ConfigModule.forRoot` с `isGlobal: true`, caching и зарегистрированным config factory. После загрузки `.env` factory передаёт `process.env` единой validate-функции, которая требует контролируемые ключи `NODE_ENV`, `PORT` и `CORS_ORIGIN`, преобразует их и проверяет через `class-transformer` и `class-validator`; остальные переменные процесса не запрещаются и сохраняются для совместимости с Node/tooling.
+
+Валидированные env-ключи один раз маппятся во внутренний типизированный `ApplicationConfig` с полями `nodeEnvironment`, `port` и `corsOrigin`. Factory регистрирует этот объект за собственным DI-токеном, поэтому consumers получают конфигурацию целиком и не выполняют строковые lookup отдельных полей через `ConfigService`.
 
 `NODE_ENV` моделируется enum со значениями `development`, `test`, `production`. `PORT` преобразуется из строки и проверяется как integer в диапазоне 1–65535. Для `CORS_ORIGIN` отдельная проверка на основе WHATWG `URL` допускает только `http:`/`https:` и требует, чтобы значение было точным origin без path, query, fragment или завершающего slash. Ошибка агрегирует только имена ключей и validation constraints, не сериализует исходный config.
 
-Альтернатива Joi отклонена: `class-validator` и `class-transformer` уже обязательны для глобального `ValidationPipe`, поэтому отдельная schema dependency не нужна. Прямое чтение `process.env` отклонено из-за отсутствия преобразования, единой валидации и типизированного DI.
+Runtime-defaults отсутствуют: локальный разработчик копирует `apps/api/.env.example` в `.env`, а CI и production могут передать те же обязательные ключи через environment процесса без физического файла. Значения `development`, `3001` и `http://localhost:3000` принадлежат только локальному шаблону и не используются приложением как fallback.
+
+Альтернатива Joi отклонена: `class-validator` и `class-transformer` уже обязательны для глобального `ValidationPipe`, поэтому отдельная schema dependency не нужна. Прямое чтение `process.env` вне config factory отклонено из-за отсутствия преобразования, единой валидации и типизированного DI.
 
 ### Тестируемая конфигурация Nest application
 
-Bootstrap создаёт приложение с контролируемой обработкой startup errors, получает типизированный `ConfigService` и передаёт приложение в отдельную функцию настройки. Функция до `listen`:
+Bootstrap создаёт приложение с контролируемой обработкой startup errors, получает по DI-токену типизированный `ApplicationConfig` и передаёт приложение в отдельную функцию настройки. Функция до `listen`:
 
 1. устанавливает global prefix `api/v1`;
-2. включает CORS для точного `CORS_ORIGIN` с `credentials: false`;
+2. включает CORS для точного `corsOrigin` с `credentials: false`;
 3. регистрирует `ValidationPipe` с `whitelist`, `transform` и `forbidNonWhitelisted`;
 4. включает shutdown hooks;
 5. условно настраивает Swagger.
 
-Порт читается только из `ConfigService`. Верхняя граница bootstrap перехватывает ошибку, логирует безопасное сообщение и устанавливает ненулевой exit code. Выделенная функция позволяет тестировать вызовы bootstrap-настроек и собирать HTTP test application без запуска production entrypoint.
+Порт читается из поля `port` единого runtime-конфига. Верхняя граница bootstrap перехватывает ошибку, логирует безопасное сообщение и устанавливает ненулевой exit code. Выделенная функция позволяет тестировать вызовы bootstrap-настроек и собирать HTTP test application без запуска production entrypoint.
 
 Альтернатива оставить всю настройку в `main.ts` отклонена, поскольку потребовала бы тестировать её через отдельный OS process или дублировать настройки в тестах.
 
@@ -85,14 +89,14 @@ Health controller получает явные OpenAPI decorators для tag, ope
 
 `apps/api` напрямую объявляет runtime dependencies `@nestjs/config`, `@nestjs/swagger`, `class-transformer`, `class-validator` и dev dependencies `supertest`, `@types/supertest`; lockfile обновляется pnpm. Зависимости остаются app-specific и не выносятся в catalog, пока второго consumer нет.
 
-`apps/api/.env.example` содержит все defaults. README меняет health URL, описывает копирование env-файла, переменные и непроизводственные documentation endpoints. `apps/api/AGENTS.md` перестаёт утверждать, что Swagger отсутствует, и фиксирует новый стабильный bootstrap contract.
+`apps/api/.env.example` содержит полный набор рекомендуемых локальных значений. README требует подготовить локальный env-файл или передать переменные через environment процесса, описывает переменные и непроизводственные documentation endpoints. `apps/api/AGENTS.md` перестаёт утверждать, что Swagger отсутствует, и фиксирует новый стабильный bootstrap contract.
 
 ### Стратегия тестирования
 
-- Unit tests вызывают env validate-функцию напрямую и проверяют defaults, coercion, пользовательские значения и безопасные ошибки для каждого невалидного поля.
+- Unit tests вызывают env validate-функцию и config mapper напрямую, проверяя обязательность каждого ключа, coercion, значения шаблона, пользовательские значения, внутренний camelCase-контракт и безопасные ошибки для каждого невалидного поля.
 - Unit test собирает минимальный testing module только с health controller; HTTP tests импортируют `AppModule`, применяют production setup-функцию и используют Supertest против in-memory HTTP server для module wiring, prefix, health, CORS, validation и error filter.
 - Swagger tests собирают приложения с development и production config: проверяют UI, JSON document, отсутствие YAML, path health и отсутствие documentation routes в production.
-- Bootstrap-focused unit test использует test doubles для подтверждения ConfigService port и shutdown setup; все созданные Nest applications закрываются после тестов, чтобы не оставлять signal listeners.
+- Bootstrap-focused unit test подменяет типизированный config provider для подтверждения runtime-порта и shutdown setup; все созданные Nest applications закрываются после тестов, чтобы не оставлять signal listeners.
 
 ## Risks / Trade-offs
 
@@ -101,10 +105,11 @@ Health controller получает явные OpenAPI decorators для tag, ope
 - **Swagger UI увеличивает dev/test startup и dependency footprint** → документ создаётся lazy factory и полностью отсутствует в production.
 - **Global exception filter может скрыть полезные custom response fields будущих модулей** → wire format намеренно фиксирован; структурированные продуктовые error details должны проектироваться отдельным изменением.
 - **Shutdown hooks добавляют process signal listeners в тестах** → тестовые приложения всегда закрываются, а unit tests изолируют bootstrap configuration.
+- **Отсутствующая env-переменная блокирует запуск** → API намеренно падает до открытия порта; `.env.example`, README и контролируемый test env поддерживают полный набор ключей.
 
 ## Migration Plan
 
-1. Добавить зависимости и env schema, затем перевести bootstrap на ConfigService при сохранении default port 3001.
+1. Добавить зависимости и env schema с обязательными ключами, зарегистрировать маппинг в типизированный `ApplicationConfig`, затем перевести bootstrap на его DI-токен; рекомендуемый локальный порт 3001 оставить только в `.env.example`.
 2. Подключить общие HTTP-настройки, error filter и Swagger, вынести health controller в `HealthModule`, после чего обновить health contract и тесты атомарно.
 3. Обновить README и agent guidance до merge; consumers переключаются с `/health` на `/api/v1/health`.
 4. Перед merge проверить development endpoints и production-отсутствие Swagger, выполнить строгую OpenSpec-валидацию и полный root check set.
