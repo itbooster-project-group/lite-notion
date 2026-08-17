@@ -30,6 +30,8 @@ Use Node.js 22 and pnpm 11.21.0. Run commands from the repository root unless a 
 
 Before finishing a change, run the checks relevant to the edited scope. Run the complete root check set for cross-cutting, dependency, or configuration changes.
 
+Every Pull Request into `main` must pass the required `lint`, `web`, and `api` GitHub Actions checks (`.github/workflows/ci.yml`) before it can be merged; direct pushes to `main` are rejected by repository rules.
+
 ## Dependency policy
 
 - Every application must explicitly declare the packages it imports or invokes. Do not rely on root hoisting.
