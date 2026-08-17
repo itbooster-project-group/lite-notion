@@ -13,7 +13,20 @@ These instructions apply to `apps/web` and extend the repository-level `AGENTS.m
 - Preserve the `@/*` alias for imports from `src` and avoid deep relative imports across future slice boundaries.
 - Keep accessibility in the component contract: prefer semantic elements, accessible names, and keyboard-compatible interactions.
 
-The current application intentionally has no Tailwind, shadcn/ui, TanStack Query, Zustand, React Hook Form, or Zod setup. Do not add these planned technologies until an approved change requires them.
+Tailwind CSS v4 and shadcn/ui are configured for this application. Keep shadcn CLI-managed
+components in the vendor zone at `src/shared/ui/shadcn/`; do not customize those files manually.
+For every vendor component used by the application, maintain a same-named customizable wrapper in
+`src/shared/ui/*.tsx`. Put project defaults and custom styles in these wrappers, merge consumer
+`className` values with `cn()`, and preserve the vendor component's supported props. Export wrappers
+through the public `@/shared/ui` API and use only that API from application code.
+
+Add or update vendor components from the repository root with
+`pnpm dlx shadcn@latest add <component> -c apps/web`. CLI writes and overwrites must stay inside
+`src/shared/ui/shadcn/` so wrapper customizations remain intact. Dark mode is class-based and is
+applied by `next-themes` through the root theme provider.
+
+TanStack Query, Zustand, React Hook Form, and Zod are not configured yet. Do not add them until an
+approved change requires them.
 
 ## Testing
 
