@@ -10,8 +10,12 @@
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
+    "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-express": "^11.0.0",
+    "@nestjs/swagger": "^11.4.6",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.0"
   },
@@ -20,6 +24,8 @@
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.0",
     "@types/node": "catalog:",
+    "@types/supertest": "^7.2.1",
+    "supertest": "^7.2.2",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }
