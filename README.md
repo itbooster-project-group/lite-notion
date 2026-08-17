@@ -38,6 +38,14 @@ pnpm install
 
 ## Запуск для разработки
 
+Перед локальным запуском создайте конфигурацию API из шаблона:
+
+```bash
+cp apps/api/.env.example apps/api/.env
+```
+
+Все три переменные обязательны. Вместо файла `.env` их также можно передать через environment процесса, например в CI или production.
+
 ```bash
 pnpm dev
 ```
@@ -46,12 +54,14 @@ pnpm dev
 
 - frontend: [http://localhost:3000](http://localhost:3000);
 - API: [http://localhost:3001](http://localhost:3001);
-- health endpoint: [http://localhost:3001/health](http://localhost:3001/health).
+- health endpoint: [http://localhost:3001/api/v1/health](http://localhost:3001/api/v1/health);
+- Swagger UI: [http://localhost:3001/api/docs](http://localhost:3001/api/docs);
+- OpenAPI JSON: [http://localhost:3001/api/openapi.json](http://localhost:3001/api/openapi.json).
 
 Проверить API можно из терминала:
 
 ```bash
-curl http://localhost:3001/health
+curl http://localhost:3001/api/v1/health
 ```
 
 Ожидаемый ответ:
@@ -60,11 +70,21 @@ curl http://localhost:3001/health
 {"status":"ok"}
 ```
 
-Порт API можно переопределить переменной окружения `PORT`:
+API использует следующие переменные окружения:
+
+| Переменная | Значение в `.env.example` | Ограничения |
+| --- | --- | --- |
+| `NODE_ENV` | `development` | `development`, `test` или `production` |
+| `PORT` | `3001` | Целое число от 1 до 65535 |
+| `CORS_ORIGIN` | `http://localhost:3000` | Один точный HTTP(S) origin без path, query и fragment |
+
+После создания `.env` порт API можно переопределить для отдельного запуска:
 
 ```bash
 PORT=4000 pnpm --filter @lite-notion/api dev
 ```
+
+Все прикладные маршруты API находятся под prefix `/api/v1`. Старый адрес `/health` не поддерживается. Swagger UI и OpenAPI JSON доступны только при `NODE_ENV`, отличном от `production`; YAML-схема не публикуется.
 
 ## Команды
 
@@ -114,4 +134,3 @@ openspec list
 4. Архивировать change в том же PR, получить финальное approval и выполнить merge.
 
 Команды для Codex, Claude Code, Cursor и OpenCode, критерии перехода между этапами и правила синхронизации specs описаны в [гайде по OpenSpec workflow](docs/openspec-workflow.md).
-
