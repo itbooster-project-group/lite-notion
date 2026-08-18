@@ -1,4 +1,4 @@
-import { STATUS_CODES } from "node:http";
+import { STATUS_CODES } from 'node:http';
 import {
   type ArgumentsHost,
   Catch,
@@ -8,8 +8,8 @@ import {
   Inject,
   Injectable,
   Logger,
-} from "@nestjs/common";
-import { HttpAdapterHost } from "@nestjs/core";
+} from '@nestjs/common';
+import { HttpAdapterHost } from '@nestjs/core';
 
 type ErrorMessage = string | string[];
 
@@ -27,13 +27,13 @@ interface RequestWithUrl {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === 'object' && value !== null;
 }
 
 function isErrorMessage(value: unknown): value is ErrorMessage {
   return (
-    typeof value === "string" ||
-    (Array.isArray(value) && value.every((item) => typeof item === "string"))
+    typeof value === 'string' ||
+    (Array.isArray(value) && value.every((item) => typeof item === 'string'))
   );
 }
 
@@ -50,7 +50,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const request = context.getRequest<RequestWithUrl>();
     const statusCode =
       exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
-    const fallbackError = STATUS_CODES[statusCode] ?? "Error";
+    const fallbackError = STATUS_CODES[statusCode] ?? 'Error';
     const exceptionResponse =
       exception instanceof HttpException ? exception.getResponse() : undefined;
     const { error, message } = this.normalizeExceptionResponse(exceptionResponse, fallbackError);
@@ -62,7 +62,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const response: ErrorResponse = {
       error,
       message,
-      path: request.originalUrl ?? request.url ?? "",
+      path: request.originalUrl ?? request.url ?? '',
       statusCode,
       timestamp: new Date().toISOString(),
     };
@@ -76,20 +76,20 @@ export class HttpExceptionFilter implements ExceptionFilter {
       return;
     }
 
-    this.logger.error("Unknown non-Error exception");
+    this.logger.error('Unknown non-Error exception');
   }
 
   private normalizeExceptionResponse(
     response: object | string | undefined,
     fallbackError: string,
-  ): Pick<ErrorResponse, "error" | "message"> {
-    if (typeof response === "string") {
+  ): Pick<ErrorResponse, 'error' | 'message'> {
+    if (typeof response === 'string') {
       return { error: fallbackError, message: response };
     }
 
     if (isRecord(response)) {
       return {
-        error: typeof response.error === "string" ? response.error : fallbackError,
+        error: typeof response.error === 'string' ? response.error : fallbackError,
         message: isErrorMessage(response.message) ? response.message : fallbackError,
       };
     }
@@ -98,7 +98,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       error: fallbackError,
       message:
         fallbackError === STATUS_CODES[HttpStatus.INTERNAL_SERVER_ERROR]
-          ? "Internal server error"
+          ? 'Internal server error'
           : fallbackError,
     };
   }

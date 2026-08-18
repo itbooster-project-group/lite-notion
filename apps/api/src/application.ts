@@ -1,12 +1,12 @@
-import { type INestApplication, ValidationPipe } from "@nestjs/common";
-import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import { type INestApplication, ValidationPipe } from '@nestjs/common';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
-import type { ApplicationConfig } from "./config/application-config";
-import { NodeEnvironment } from "./config/environment";
+import type { ApplicationConfig } from './config/application-config';
+import { NodeEnvironment } from './config/environment';
 
-export const API_GLOBAL_PREFIX = "api/v1";
+export const API_GLOBAL_PREFIX = 'api/v1';
 
-type ApplicationEnvironment = Pick<ApplicationConfig, "corsOrigin" | "nodeEnvironment">;
+type ApplicationEnvironment = Pick<ApplicationConfig, 'corsOrigin' | 'nodeEnvironment'>;
 type CorsCallback = (error: Error | null, allow?: boolean) => void;
 
 export function configureApplication(
@@ -31,15 +31,15 @@ export function configureApplication(
 
   if (environment.nodeEnvironment !== NodeEnvironment.Production) {
     const swaggerConfig = new DocumentBuilder()
-      .setTitle("Lite Notion API")
-      .setDescription("HTTP API for Lite Notion")
-      .setVersion("1.0")
+      .setTitle('Lite Notion API')
+      .setDescription('HTTP API for Lite Notion')
+      .setVersion('1.0')
       .build();
     const documentFactory = () => SwaggerModule.createDocument(app, swaggerConfig);
 
-    SwaggerModule.setup("api/docs", app, documentFactory, {
-      jsonDocumentUrl: "/api/openapi.json",
-      raw: ["json"],
+    SwaggerModule.setup('api/docs', app, documentFactory, {
+      jsonDocumentUrl: '/api/openapi.json',
+      raw: ['json'],
       useGlobalPrefix: false,
     });
   }
