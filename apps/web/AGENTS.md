@@ -6,7 +6,7 @@ These instructions apply to `apps/web` and extend the repository-level `AGENTS.m
 
 ## Architecture
 
-- This application uses Next.js App Router under `src/app`.
+- This application uses Next.js App Router under `./app`.
 - Use Server Components by default. Add `"use client"` only at the smallest boundary that needs interaction, browser APIs, or client-side state.
 - Keep route files focused on routing and composition. Move reusable product behavior into Feature Sliced Design modules as features are introduced.
 - Introduce only the FSD layers required by implemented behavior, such as `shared`, `entities`, `features`, or `widgets`; do not create empty placeholder layers.
