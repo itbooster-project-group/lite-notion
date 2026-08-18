@@ -4,8 +4,8 @@ import type { ReactNode } from "react";
 
 import "./globals.css";
 
-import { cn } from "@/shared/libs/cn";
-import { ThemeProvider } from "@/shared/ui/theme-provider";
+import { ThemeProvider } from "@/_app/providers/theme-provider";
+import { cn } from "@/shared/lib/cn";
 
 const inter = Inter({ subsets: ["latin", "cyrillic"], variable: "--font-sans" });
 

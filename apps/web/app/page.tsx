@@ -1,4 +1,17 @@
-import { SmokeForm } from "@/shared/ui/smoke-form";
+import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
+
+export function SmokeForm() {
+  return (
+    <form className="flex w-full max-w-sm flex-col gap-3 sm:flex-row">
+      <label className="sr-only" htmlFor="smoke-note">
+        Название заметки
+      </label>
+      <Input id="smoke-note" name="note" placeholder="Название заметки" />
+      <Button type="button">Создать заметку</Button>
+    </form>
+  );
+}
 
 export default function HomePage() {
   return (
