@@ -12,15 +12,6 @@ type RootLayoutProps = Readonly<{
   children: ReactNode;
 }>;
 
-type Test = {
-  name: string;
-  age: number;
-};
-
-const user: Test = {
-  name: 'some name',
-};
-
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="ru">
