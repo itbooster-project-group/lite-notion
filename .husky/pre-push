@@ -22,4 +22,4 @@ if [ "$(git rev-list --count HEAD..origin/main)" -gt 0 ]; then
 fi
 
 
-pnpm build && pnpm test && pnpm typecheck
+pnpm build && pnpm test && pnpm typecheck && pnpm steiger
