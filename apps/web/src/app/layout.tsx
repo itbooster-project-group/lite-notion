@@ -1,11 +1,11 @@
-import type { Metadata } from "next";
-import type { ReactNode } from "react";
+import type { Metadata } from 'next';
+import type { ReactNode } from 'react';
 
-import "./globals.css";
+import './globals.css';
 
 export const metadata: Metadata = {
-  title: "Lite Notion",
-  description: "Базовое web-приложение Lite Notion",
+  title: 'Lite Notion',
+  description: 'Базовое web-приложение Lite Notion',
 };
 
 type RootLayoutProps = Readonly<{

@@ -1,6 +1,6 @@
-import { registerAs } from "@nestjs/config";
+import { registerAs } from '@nestjs/config';
 
-import { type NodeEnvironment, validateEnvironment } from "./environment";
+import { type NodeEnvironment, validateEnvironment } from './environment';
 
 export interface ApplicationConfig {
   corsOrigin: string;
@@ -18,6 +18,6 @@ export function createApplicationConfig(environment: Record<string, unknown>): A
   };
 }
 
-export const applicationConfig = registerAs("application", () =>
+export const applicationConfig = registerAs('application', () =>
   createApplicationConfig(process.env),
 );

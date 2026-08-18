@@ -1,15 +1,15 @@
-import { Test } from "@nestjs/testing";
-import { describe, expect, it } from "vitest";
+import { Test } from '@nestjs/testing';
+import { describe, expect, it } from 'vitest';
 
-import { HealthController } from "./health.controller";
+import { HealthController } from './health.controller';
 
-describe("HealthController", () => {
-  it("возвращает технический статус", async () => {
+describe('HealthController', () => {
+  it('возвращает технический статус', async () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [HealthController],
     }).compile();
     const controller = moduleRef.get(HealthController);
 
-    expect(controller.getHealth()).toEqual({ status: "ok" });
+    expect(controller.getHealth()).toEqual({ status: 'ok' });
   });
 });
