@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 
 import './globals.css';
 
-import { ThemeProvider } from '@/_app/providers/theme-provider';
+import { ThemeProvider } from '@/_app/providers/ui/theme-provider';
 import { cn } from '@/shared/lib/cn';
 
 const inter = Inter({ subsets: ['latin', 'cyrillic'], variable: '--font-sans' });
