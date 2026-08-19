@@ -1,25 +1,2 @@
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-NC='\033[0m'
-
-git fetch origin main
-
-if [ "$(git rev-list --count HEAD..origin/main)" -gt 0 ]; then
-  echo ""
-  echo "${RED}╔══════════════════════════════════════════════════════╗${NC}"
-  echo "${RED}║  ❌  ВЕТКА НЕ АКТУАЛЬНА                              ║${NC}"
-  echo "${RED}╠══════════════════════════════════════════════════════╣${NC}"
-  echo "${RED}║${NC}                                                      ${RED}║${NC}"
-  echo "${RED}║${NC}  ♻️ Ветка отстаёт от ${YELLOW}origin/main${NC}.                     ${RED}║${NC}"
-  echo "${RED}║${NC}                                                      ${RED}║${NC}"
-  echo "${RED}║${NC}  ${YELLOW}Выполни:${NC}                                            ${RED}║${NC}"
-  echo "${RED}║${NC}    ${YELLOW}git rebase origin/main${NC}                            ${RED}║${NC}"
-  echo "${RED}║${NC}                                                      ${RED}║${NC}"
-  echo "${RED}╚══════════════════════════════════════════════════════╝${NC}"
-  echo ""
-  exit 1
-fi
-
 
 pnpm lint && pnpm typecheck && pnpm build && pnpm test && pnpm steiger
