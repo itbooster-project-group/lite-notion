@@ -10,10 +10,17 @@
     "format": "biome check --write .",
     "typecheck": "pnpm --recursive run typecheck",
     "test": "pnpm --recursive run test",
+    "prepare": "husky",
     "steiger": "pnpm steiger:web",
     "steiger:web": "steiger ./apps/web/src",
     "steiger:watch": "pnpm steiger:web:watch",
     "steiger:web:watch": "steiger --watch ./apps/web/src"
+  },
+  "lint-staged": {
+    "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc}": [
+      "biome format --write --no-errors-on-unmatched",
+      "biome check --write --no-errors-on-unmatched"
+    ]
   },
   "packageManager": "pnpm@11.21.0",
   "engines": {
@@ -23,6 +30,8 @@
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
     "@feature-sliced/steiger-plugin": "^0.7.0",
-    "steiger": "^0.6.0"
+    "steiger": "^0.6.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.3.0"
   }
 }
