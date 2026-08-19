@@ -1,5 +1,5 @@
-import { Button } from "@/shared/ui/button";
-import { Input } from "@/shared/ui/input";
+import { Button } from '@/shared/ui/button';
+import { Input } from '@/shared/ui/input';
 
 export function SmokeForm() {
   return (
