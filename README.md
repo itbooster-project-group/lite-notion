@@ -2,20 +2,23 @@
 
 Базовый монорепозиторий приложения для совместных заметок, документации и управления проектами.
 
-На текущем этапе репозиторий содержит только техническую основу:
+На текущем этапе репозиторий содержит техническую основу:
 
 - `apps/web` — Next.js-приложение;
 - `apps/api` — NestJS API;
+- PostgreSQL 18 в Docker Compose и Prisma для доступа к данным;
+- OpenAPI-driven TanStack Query client и MSW mocks для frontend;
 - общие команды pnpm, TypeScript, Biome и Vitest;
 - OpenSpec для планирования изменений.
 
-Продуктовые функции, базы данных, Redis, Docker и авторизация пока не реализованы.
+Продуктовые функции, Prisma-модели и миграции, Redis и авторизация пока не реализованы.
 
 ## Требования
 
 - Node.js 22;
 - Corepack;
 - pnpm 11.21.0.
+- Docker с поддержкой команды `docker compose`.
 
 Node.js 22 обычно поставляется с Corepack. Если команда `corepack` недоступна с ошибкой `corepack: command not found`, установите Corepack глобально:
 
@@ -38,19 +41,20 @@ pnpm install
 
 ## Запуск для разработки
 
-Перед локальным запуском создайте конфигурацию API из шаблона:
+Перед локальным запуском создайте конфигурацию приложений из шаблонов:
 
 ```bash
 cp apps/api/.env.example apps/api/.env
+cp apps/web/.env.example apps/web/.env.local
 ```
 
-Все три переменные обязательны. Вместо файла `.env` их также можно передать через environment процесса, например в CI или production.
+Запустите полное окружение разработки:
 
 ```bash
 pnpm dev
 ```
 
-Команда одновременно запускает:
+Команда поднимает PostgreSQL, дожидается его healthcheck и затем одновременно запускает:
 
 - frontend: [http://localhost:3000](http://localhost:3000);
 - API: [http://localhost:3001](http://localhost:3001);
@@ -67,7 +71,7 @@ curl http://localhost:3001/api/v1/health
 Ожидаемый ответ:
 
 ```json
-{"status":"ok"}
+{"status":"ok","database":"up"}
 ```
 
 API использует следующие переменные окружения:
@@ -77,20 +81,90 @@ API использует следующие переменные окружен�
 | `NODE_ENV` | `development` | `development`, `test` или `production` |
 | `PORT` | `3001` | Целое число от 1 до 65535 |
 | `CORS_ORIGIN` | `http://localhost:3000` | Один точный HTTP(S) origin без path, query и fragment |
+| `DATABASE_URL` | local Compose URL | PostgreSQL URL с protocol `postgresql` или `postgres` |
+| `DATABASE_CONNECTION_TIMEOUT_MS` | `5000` | Целое число от 1 до 60000 |
 
-После создания `.env` порт API можно переопределить для отдельного запуска:
+Все API-переменные обязательны в runtime. Prisma CLI использует URL локального Compose как development fallback, если `DATABASE_URL` не передан процессу.
+
+Frontend использует следующие публичные переменные:
+
+| Переменная | Значение в `.env.example` | Назначение |
+| --- | --- | --- |
+| `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:3001` | Origin NestJS API для generated fetch client |
+| `NEXT_PUBLIC_API_MOCKING` | `disabled` | Значение `enabled` включает MSW browser worker только в development |
+
+### Автономная разработка frontend
+
+Для работы над frontend без API, PostgreSQL и Docker достаточно создать только web-конфигурацию:
 
 ```bash
-PORT=4000 pnpm --filter @lite-notion/api dev
+cp apps/web/.env.example apps/web/.env.local
 ```
 
-Все прикладные маршруты API находятся под prefix `/api/v1`. Старый адрес `/health` не поддерживается. Swagger UI и OpenAPI JSON доступны только при `NODE_ENV`, отличном от `production`; YAML-схема не публикуется.
+Включите browser mocks в `apps/web/.env.local`:
+
+```dotenv
+NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
+NEXT_PUBLIC_API_MOCKING=enabled
+```
+
+Запустите только Next.js-приложение:
+
+```bash
+pnpm dev:web
+```
+
+Frontend будет доступен на [http://localhost:3000](http://localhost:3000). MSW перехватывает запросы, для которых существуют generated handlers; необработанные запросы пропускаются к `NEXT_PUBLIC_API_BASE_URL`.
+
+Для отдельной разработки backend запустите API вместе с PostgreSQL:
+
+```bash
+pnpm dev:api
+```
+
+Команда поднимает PostgreSQL, дожидается его healthcheck и запускает NestJS в watch mode. После создания `.env` порт API можно переопределить:
+
+```bash
+PORT=4000 pnpm dev:api
+```
+
+Все прикладные маршруты API находятся под prefix `/api/v1`. `GET /api/v1/health` проверяет доступность API и PostgreSQL, возвращая безопасный `503`, если база недоступна. Swagger UI и OpenAPI JSON доступны только при `NODE_ENV`, отличном от `production`; YAML-схема не публикуется.
+
+## Prisma и API-контракт
+
+Текущая Prisma schema пока не содержит продуктовых моделей. Основные команды:
+
+```bash
+pnpm --filter @lite-notion/api prisma:generate
+pnpm --filter @lite-notion/api db:migrate:dev
+pnpm --filter @lite-notion/api db:studio
+```
+
+После изменения Swagger decorators или DTO обновите коммитируемый OpenAPI snapshot, TanStack Query hooks и MSW handlers:
+
+```bash
+pnpm api:generate
+```
+
+`pnpm api:check` выполняет ту же генерацию и завершается ошибкой при незакоммиченном drift.
+
+После остановки `pnpm dev` или `pnpm dev:api` PostgreSQL продолжает работать для следующих запусков. Остановить локальную базу без удаления именованного volume можно явно:
+
+```bash
+pnpm db:down
+```
 
 ## Команды
 
 | Команда | Назначение |
 | --- | --- |
-| `pnpm dev` | Запустить frontend и API в watch mode |
+| `pnpm dev` | Поднять PostgreSQL, дождаться healthcheck и запустить frontend и API в watch mode |
+| `pnpm dev:web` | Запустить только frontend без API и Docker; API mocking определяется web environment |
+| `pnpm dev:api` | Поднять PostgreSQL, дождаться healthcheck и запустить API в watch mode |
+| `pnpm db:up` | Поднять локальный PostgreSQL и дождаться healthcheck |
+| `pnpm db:down` | Остановить Compose services без удаления database volume |
+| `pnpm api:generate` | Обновить OpenAPI snapshot, web client и MSW handlers |
+| `pnpm api:check` | Проверить generated API artifacts на drift |
 | `pnpm build` | Собрать оба приложения |
 | `pnpm lint` | Проверить workspace через Biome без изменения файлов |
 | `pnpm format` | Отформатировать файлы и применить безопасные исправления Biome |
