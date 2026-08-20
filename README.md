@@ -111,6 +111,13 @@ PORT=4000 pnpm --filter @lite-notion/api dev
 └── tsconfig.base.json
 ```
 
+## Документация
+
+- [План на MVP](docs/mvp-plan.md) — объём MVP, этапы работ и состав задач по каждому этапу.
+- [Схемы экранов MVP](docs/mvp-screens.md) — схематичные макеты интерфейса по каждому этапу.
+- [Схема базы данных](docs/database-schema.md) — ER-диаграмма, описание сущностей и ключевые проектные решения.
+- [Гайд по OpenSpec workflow](docs/openspec-workflow.md) — процесс работы с изменениями и coding agents.
+
 ## OpenSpec
 
 OpenSpec уже инициализирован в каталоге `openspec`. Участникам, которые планируют разработку с coding agents, нужна совместимая версия CLI:
