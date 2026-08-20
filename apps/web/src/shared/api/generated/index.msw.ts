@@ -1,1 +1,1 @@
-export { getHealthMock } from "./health/health.msw";
+export { getHealthMock } from './health/health.msw';

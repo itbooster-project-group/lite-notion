@@ -6,7 +6,7 @@
  * OpenAPI spec version: 1.0
  */
 
-export * from "./healthResponseDto";
-export * from "./healthResponseDtoDatabase";
-export * from "./healthResponseDtoStatus";
-export * from "./httpErrorResponseDto";
+export * from './healthResponseDto';
+export * from './healthResponseDtoDatabase';
+export * from './healthResponseDtoStatus';
+export * from './httpErrorResponseDto';

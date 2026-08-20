@@ -1,17 +1,17 @@
-"use client";
+'use client';
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 
-import { ThemeProvider } from "./theme-provider";
+import { ThemeProvider } from './ui/theme-provider';
 
 type AppProvidersProps = Readonly<{
   children: ReactNode;
 }>;
 
 const shouldEnableBrowserMocking =
-  process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_API_MOCKING === "enabled";
+  process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_API_MOCKING === 'enabled';
 
 export function AppProviders({ children }: AppProvidersProps) {
   const [queryClient] = useState(() => new QueryClient());
@@ -25,7 +25,7 @@ export function AppProviders({ children }: AppProvidersProps) {
 
     let active = true;
 
-    void import("@/shared/api/mocks/browser")
+    void import('@/shared/api')
       .then(({ startBrowserMocking }) => startBrowserMocking())
       .then(() => {
         if (active) {
@@ -35,7 +35,7 @@ export function AppProviders({ children }: AppProvidersProps) {
       .catch((error: unknown) => {
         if (active) {
           setMockingError(
-            error instanceof Error ? error : new Error("Failed to start browser API mocking"),
+            error instanceof Error ? error : new Error('Failed to start browser API mocking'),
           );
         }
       });

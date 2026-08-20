@@ -16,12 +16,12 @@ import type {
   UndefinedInitialDataOptions,
   UseQueryOptions,
   UseQueryResult,
-} from "@tanstack/react-query";
-import { useQuery } from "@tanstack/react-query";
-import type { ErrorType } from "../../api-fetch";
+} from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
+import type { ErrorType } from '../../api-fetch';
 
-import { apiFetch } from "../../api-fetch";
-import type { HealthResponseDto, HttpErrorResponseDto } from "../model";
+import { apiFetch } from '../../api-fetch';
+import type { HealthResponseDto, HttpErrorResponseDto } from '../model';
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
@@ -30,7 +30,7 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   for (const key of Object.keys(query)) {
     // The explicit queryKey always wins, matching the previous
     // `{ ...query, queryKey }` spread where it was set last.
-    if (key === "queryKey") continue;
+    if (key === 'queryKey') continue;
     Object.defineProperty(result, key, {
       enumerable: true,
       configurable: true,
@@ -52,7 +52,7 @@ export const getHealth = async (
 ): Promise<HealthResponseDto> => {
   return apiFetch<HealthResponseDto>(getGetHealthUrl(), {
     ...options,
-    method: "GET",
+    method: 'GET',
   });
 };
 
@@ -96,7 +96,7 @@ export function useGetHealth<
           TError,
           Awaited<ReturnType<typeof getHealth>>
         >,
-        "initialData"
+        'initialData'
       >;
     request?: SecondParameter<typeof apiFetch>;
   },
@@ -114,7 +114,7 @@ export function useGetHealth<
           TError,
           Awaited<ReturnType<typeof getHealth>>
         >,
-        "initialData"
+        'initialData'
       >;
     request?: SecondParameter<typeof apiFetch>;
   },

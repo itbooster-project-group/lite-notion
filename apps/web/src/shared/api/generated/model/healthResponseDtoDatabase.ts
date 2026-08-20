@@ -10,5 +10,5 @@ export type HealthResponseDtoDatabase =
   (typeof HealthResponseDtoDatabase)[keyof typeof HealthResponseDtoDatabase];
 
 export const HealthResponseDtoDatabase = {
-  up: "up",
+  up: 'up',
 } as const;

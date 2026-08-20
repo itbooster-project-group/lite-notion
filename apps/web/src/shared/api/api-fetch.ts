@@ -1,4 +1,4 @@
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
 
 export type ErrorType<ErrorData> = Error & {
   info?: ErrorData;
@@ -12,7 +12,7 @@ export async function apiFetch<ResponseData>(
   options: RequestInit,
 ): Promise<ResponseData> {
   const response = await fetch(new URL(url, apiBaseUrl), options);
-  const body = [204, 205, 304].includes(response.status) ? "" : await response.text();
+  const body = [204, 205, 304].includes(response.status) ? '' : await response.text();
   const data: unknown = body.length > 0 ? JSON.parse(body) : undefined;
 
   if (!response.ok) {

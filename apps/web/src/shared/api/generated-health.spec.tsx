@@ -1,12 +1,12 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
-import { HttpResponse, http } from "msw";
-import type { PropsWithChildren } from "react";
-import { describe, expect, expectTypeOf, it } from "vitest";
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { renderHook, waitFor } from '@testing-library/react';
+import { HttpResponse, http } from 'msw';
+import type { PropsWithChildren } from 'react';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 
-import { type getHealth, useGetHealth } from "./generated/health/health";
-import type { HealthResponseDto } from "./generated/model";
-import { server } from "./mocks/server";
+import { type getHealth, useGetHealth } from './generated/health/health';
+import type { HealthResponseDto } from './generated/model';
+import { server } from './mocks/server';
 
 function createWrapper() {
   const queryClient = new QueryClient({
@@ -22,8 +22,8 @@ function createWrapper() {
   };
 }
 
-describe("generated health client", () => {
-  it("получает типизированный success через generated MSW handler", async () => {
+describe('generated health client', () => {
+  it('получает типизированный success через generated MSW handler', async () => {
     expectTypeOf<Awaited<ReturnType<typeof getHealth>>>().toEqualTypeOf<HealthResponseDto>();
 
     const { result } = renderHook(() => useGetHealth(), { wrapper: createWrapper() });
@@ -31,19 +31,19 @@ describe("generated health client", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(result.current.data).toEqual({ database: "up", status: "ok" });
+    expect(result.current.data).toEqual({ database: 'up', status: 'ok' });
   });
 
-  it("переводит query в error state при неуспешном HTTP status", async () => {
+  it('переводит query в error state при неуспешном HTTP status', async () => {
     server.use(
-      http.get("*/api/v1/health", () =>
+      http.get('*/api/v1/health', () =>
         HttpResponse.json(
           {
-            error: "Service Unavailable",
-            message: "Database is unavailable",
-            path: "/api/v1/health",
+            error: 'Service Unavailable',
+            message: 'Database is unavailable',
+            path: '/api/v1/health',
             statusCode: 503,
-            timestamp: "2026-08-18T12:00:00.000Z",
+            timestamp: '2026-08-18T12:00:00.000Z',
           },
           { status: 503 },
         ),

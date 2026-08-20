@@ -5,8 +5,8 @@
  * HTTP API for Lite Notion
  * OpenAPI spec version: 1.0
  */
-import type { HealthResponseDtoDatabase } from "./healthResponseDtoDatabase";
-import type { HealthResponseDtoStatus } from "./healthResponseDtoStatus";
+import type { HealthResponseDtoDatabase } from './healthResponseDtoDatabase';
+import type { HealthResponseDtoStatus } from './healthResponseDtoStatus';
 
 export interface HealthResponseDto {
   status: HealthResponseDtoStatus;

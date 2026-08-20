@@ -10,5 +10,5 @@ export type HealthResponseDtoStatus =
   (typeof HealthResponseDtoStatus)[keyof typeof HealthResponseDtoStatus];
 
 export const HealthResponseDtoStatus = {
-  ok: "ok",
+  ok: 'ok',
 } as const;

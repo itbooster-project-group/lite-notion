@@ -1,7 +1,7 @@
-import { Inject, Injectable, ServiceUnavailableException } from "@nestjs/common";
+import { Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
 
-import { PrismaService } from "../database/prisma.service";
-import type { HealthResponseDto } from "./health.dto";
+import { PrismaService } from '../database/prisma.service';
+import type { HealthResponseDto } from './health.dto';
 
 @Injectable()
 export class HealthService {
@@ -11,12 +11,12 @@ export class HealthService {
     try {
       await this.prisma.checkConnection();
     } catch {
-      throw new ServiceUnavailableException("Database is unavailable");
+      throw new ServiceUnavailableException('Database is unavailable');
     }
 
     return {
-      status: "ok",
-      database: "up",
+      status: 'ok',
+      database: 'up',
     };
   }
 }

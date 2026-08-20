@@ -1,1 +1,2 @@
-export { AppProviders } from "./app-providers";
+export { AppProviders } from './app-providers';
+export { ThemeProvider } from './ui/theme-provider';

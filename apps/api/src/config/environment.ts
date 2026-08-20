@@ -1,4 +1,4 @@
-import { plainToInstance, Transform } from "class-transformer";
+import { plainToInstance, Transform } from 'class-transformer';
 import {
   IsEnum,
   IsInt,
@@ -7,16 +7,16 @@ import {
   ValidateBy,
   type ValidationOptions,
   validateSync,
-} from "class-validator";
+} from 'class-validator';
 
 export enum NodeEnvironment {
-  Development = "development",
-  Production = "production",
-  Test = "test",
+  Development = 'development',
+  Production = 'production',
+  Test = 'test',
 }
 
 function isHttpOrigin(value: unknown): boolean {
-  if (typeof value !== "string") {
+  if (typeof value !== 'string') {
     return false;
   }
 
@@ -24,11 +24,11 @@ function isHttpOrigin(value: unknown): boolean {
     const url = new URL(value);
 
     return (
-      (url.protocol === "http:" || url.protocol === "https:") &&
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
       url.origin === value &&
-      url.pathname === "/" &&
-      url.search === "" &&
-      url.hash === ""
+      url.pathname === '/' &&
+      url.search === '' &&
+      url.hash === ''
     );
   } catch {
     return false;
@@ -38,9 +38,9 @@ function isHttpOrigin(value: unknown): boolean {
 function IsHttpOrigin(validationOptions?: ValidationOptions): PropertyDecorator {
   return ValidateBy(
     {
-      name: "isHttpOrigin",
+      name: 'isHttpOrigin',
       validator: {
-        defaultMessage: () => "$property must be an HTTP(S) origin without path, query or fragment",
+        defaultMessage: () => '$property must be an HTTP(S) origin without path, query or fragment',
         validate: isHttpOrigin,
       },
     },
@@ -62,12 +62,12 @@ export class EnvironmentConfig {
   CORS_ORIGIN!: string;
 
   @ValidateBy({
-    name: "isPostgreSqlUrl",
+    name: 'isPostgreSqlUrl',
     validator: {
       defaultMessage: () =>
-        "DATABASE_URL must be a PostgreSQL URL using the postgresql or postgres protocol",
+        'DATABASE_URL must be a PostgreSQL URL using the postgresql or postgres protocol',
       validate: (value: unknown) => {
-        if (typeof value !== "string") {
+        if (typeof value !== 'string') {
           return false;
         }
 
@@ -75,7 +75,7 @@ export class EnvironmentConfig {
           const url = new URL(value);
 
           return (
-            (url.protocol === "postgresql:" || url.protocol === "postgres:") &&
+            (url.protocol === 'postgresql:' || url.protocol === 'postgres:') &&
             url.hostname.length > 0
           );
         } catch {
@@ -115,7 +115,7 @@ export function validateEnvironment(
       ),
     );
 
-    throw new Error(`Environment validation failed: ${messages.join("; ")}`);
+    throw new Error(`Environment validation failed: ${messages.join('; ')}`);
   }
 
   return {

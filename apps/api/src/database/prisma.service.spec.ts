@@ -1,20 +1,20 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from 'vitest';
 
-import { NodeEnvironment } from "../config/environment";
-import { PrismaService } from "./prisma.service";
+import { NodeEnvironment } from '../config/environment';
+import { PrismaService } from './prisma.service';
 
 const config = {
-  corsOrigin: "http://localhost:3000",
+  corsOrigin: 'http://localhost:3000',
   databaseConnectionTimeoutMs: 100,
-  databaseUrl: "postgresql://lite_notion:lite_notion@localhost:5432/lite_notion",
+  databaseUrl: 'postgresql://lite_notion:lite_notion@localhost:5432/lite_notion',
   nodeEnvironment: NodeEnvironment.Test,
   port: 3001,
 };
 
-describe("PrismaService", () => {
-  it("проверяет соединение простым запросом", async () => {
+describe('PrismaService', () => {
+  it('проверяет соединение простым запросом', async () => {
     const service = new PrismaService(config);
-    const query = vi.spyOn(service, "$queryRaw").mockResolvedValue([{ result: 1 }]);
+    const query = vi.spyOn(service, '$queryRaw').mockResolvedValue([{ result: 1 }]);
 
     await service.checkConnection();
 
@@ -22,9 +22,9 @@ describe("PrismaService", () => {
     await service.$disconnect();
   });
 
-  it("закрывает Prisma client при завершении module lifecycle", async () => {
+  it('закрывает Prisma client при завершении module lifecycle', async () => {
     const service = new PrismaService(config);
-    const disconnect = vi.spyOn(service, "$disconnect").mockResolvedValue(undefined);
+    const disconnect = vi.spyOn(service, '$disconnect').mockResolvedValue(undefined);
 
     await service.onModuleDestroy();
 

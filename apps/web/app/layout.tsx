@@ -1,17 +1,17 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
-import type { ReactNode } from "react";
+import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
+import type { ReactNode } from 'react';
 
-import "./globals.css";
+import './globals.css';
 
-import { AppProviders } from "@/_app/providers";
-import { cn } from "@/shared/lib/cn";
+import { AppProviders } from '@/_app/providers';
+import { cn } from '@/shared/lib/cn';
 
-const inter = Inter({ subsets: ["latin", "cyrillic"], variable: "--font-sans" });
+const inter = Inter({ subsets: ['latin', 'cyrillic'], variable: '--font-sans' });
 
 export const metadata: Metadata = {
-  title: "Lite Notion",
-  description: "Базовое web-приложение Lite Notion",
+  title: 'Lite Notion',
+  description: 'Базовое web-приложение Lite Notion',
 };
 
 type RootLayoutProps = Readonly<{
@@ -20,7 +20,7 @@ type RootLayoutProps = Readonly<{
 
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
-    <html lang="ru" className={cn("font-sans", inter.variable)} suppressHydrationWarning>
+    <html lang="ru" className={cn('font-sans', inter.variable)} suppressHydrationWarning>
       <body>
         <AppProviders>{children}</AppProviders>
       </body>

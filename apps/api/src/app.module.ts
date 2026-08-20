@@ -1,10 +1,10 @@
-import { Module } from "@nestjs/common";
-import { ConfigModule } from "@nestjs/config";
-import { APP_FILTER } from "@nestjs/core";
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { APP_FILTER } from '@nestjs/core';
 
-import { applicationConfig } from "./config/application-config";
-import { HealthModule } from "./health/health.module";
-import { HttpExceptionFilter } from "./http-exception.filter";
+import { applicationConfig } from './config/application-config';
+import { HealthModule } from './health/health.module';
+import { HttpExceptionFilter } from './http-exception.filter';
 
 @Module({
   imports: [

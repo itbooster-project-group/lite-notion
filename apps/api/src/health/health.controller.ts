@@ -1,28 +1,28 @@
-import { Controller, Get, Inject } from "@nestjs/common";
+import { Controller, Get, Inject } from '@nestjs/common';
 import {
   ApiOkResponse,
   ApiOperation,
   ApiServiceUnavailableResponse,
   ApiTags,
-} from "@nestjs/swagger";
+} from '@nestjs/swagger';
 
-import { HttpErrorResponseDto } from "../http-error-response.dto";
-import { HealthResponseDto } from "./health.dto";
-import { HealthService } from "./health.service";
+import { HttpErrorResponseDto } from '../http-error-response.dto';
+import { HealthResponseDto } from './health.dto';
+import { HealthService } from './health.service';
 
-@ApiTags("health")
-@Controller("health")
+@ApiTags('health')
+@Controller('health')
 export class HealthController {
   constructor(@Inject(HealthService) private readonly healthService: HealthService) {}
 
   @Get()
-  @ApiOperation({ operationId: "getHealth", summary: "Check API and database availability" })
+  @ApiOperation({ operationId: 'getHealth', summary: 'Check API and database availability' })
   @ApiOkResponse({
-    description: "API and database are available",
+    description: 'API and database are available',
     type: HealthResponseDto,
   })
   @ApiServiceUnavailableResponse({
-    description: "The database is unavailable",
+    description: 'The database is unavailable',
     type: HttpErrorResponseDto,
   })
   getHealth(): Promise<HealthResponseDto> {

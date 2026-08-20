@@ -5,17 +5,17 @@
  * HTTP API for Lite Notion
  * OpenAPI spec version: 1.0
  */
-import { faker } from "@faker-js/faker";
-import type { RequestHandlerOptions } from "msw";
-import { HttpResponse, http } from "msw";
+import { faker } from '@faker-js/faker';
+import type { RequestHandlerOptions } from 'msw';
+import { HttpResponse, http } from 'msw';
 
-import type { HealthResponseDto } from "../model";
+import type { HealthResponseDto } from '../model';
 
 export const getGetHealthResponseMock = (
   overrideResponse: Partial<Extract<HealthResponseDto, object>> = {},
 ): HealthResponseDto => ({
-  status: faker.helpers.arrayElement(["ok"] as const),
-  database: faker.helpers.arrayElement(["up"] as const),
+  status: faker.helpers.arrayElement(['ok'] as const),
+  database: faker.helpers.arrayElement(['up'] as const),
   ...overrideResponse,
 });
 
@@ -28,11 +28,11 @@ export const getGetHealthMockHandler = (
   options?: RequestHandlerOptions,
 ) => {
   return http.get(
-    "*/api/v1/health",
+    '*/api/v1/health',
     async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
       return HttpResponse.json(
         overrideResponse !== undefined
-          ? typeof overrideResponse === "function"
+          ? typeof overrideResponse === 'function'
             ? await overrideResponse(info)
             : overrideResponse
           : getGetHealthResponseMock(),
