@@ -1,6 +1,15 @@
 {
   "files": {
-    "includes": ["**", "!!**/node_modules", "!!**/.next", "!!**/dist", "!!**/coverage"]
+    "includes": [
+      "**",
+      "!!apps/web/next-env.d.ts",
+      "!!**/node_modules",
+      "!!**/.next",
+      "!!**/dist",
+      "!!**/coverage",
+      "!!apps/api/src/generated/prisma",
+      "!!apps/web/public/mockServiceWorker.js"
+    ]
   },
   "formatter": {
     "enabled": true,

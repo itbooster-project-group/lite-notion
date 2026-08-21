@@ -1,4 +1,11 @@
 {
   "extends": "./tsconfig.json",
-  "exclude": ["node_modules", "dist", "src/**/*.spec.ts", "vitest.config.mts", "vitest.setup.ts"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/**/*.spec.ts",
+    "prisma.config.ts",
+    "vitest.config.mts",
+    "vitest.setup.ts"
+  ]
 }

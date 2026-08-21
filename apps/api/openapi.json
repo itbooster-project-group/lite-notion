@@ -1,0 +1,90 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "operationId": "getHealth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "API and database are available",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponseDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The database is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Check API and database availability",
+        "tags": ["health"]
+      }
+    }
+  },
+  "info": {
+    "title": "Lite Notion API",
+    "description": "HTTP API for Lite Notion",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "schemas": {
+      "HealthResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["ok"],
+            "example": "ok"
+          },
+          "database": {
+            "type": "string",
+            "enum": ["up"],
+            "example": "up"
+          }
+        },
+        "required": ["status", "database"]
+      },
+      "HttpErrorResponseDto": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "example": "Service Unavailable"
+          },
+          "message": {
+            "type": "string",
+            "example": "Database is unavailable"
+          },
+          "path": {
+            "type": "string",
+            "example": "/api/v1/health"
+          },
+          "statusCode": {
+            "type": "number",
+            "example": 503
+          },
+          "timestamp": {
+            "type": "string",
+            "example": "2026-08-18T12:00:00.000Z",
+            "format": "date-time"
+          }
+        },
+        "required": ["error", "message", "path", "statusCode", "timestamp"]
+      }
+    }
+  }
+}

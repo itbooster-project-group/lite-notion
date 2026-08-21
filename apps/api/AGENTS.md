@@ -10,11 +10,14 @@ These instructions apply to `apps/api` and extend the repository-level `AGENTS.m
 - Keep controllers limited to transport concerns: routing, input extraction, validation handoff, and response mapping. Put business rules and orchestration in services or use-case classes.
 - Keep framework and external-system details at module boundaries so core behavior can be tested without starting the HTTP server.
 - Prefer constructor injection and explicit module exports over service locators or global mutable state.
-- Preserve the current bootstrap contract: `NODE_ENV`, `PORT`, and `CORS_ORIGIN` are all required and validated; `apps/api/.env.example` provides the recommended local values.
-- Keep `GET /api/v1/health` lightweight and free of sensitive configuration. Expand its checks only when the corresponding dependencies are introduced by an approved change.
+- Preserve the current bootstrap contract: `NODE_ENV`, `PORT`, `CORS_ORIGIN`, `DATABASE_URL`, and `DATABASE_CONNECTION_TIMEOUT_MS` are all required and validated; `apps/api/.env.example` provides the recommended local values.
+- Read runtime environment only at configuration boundaries. Application modules and services must use the injected `ApplicationConfig`; standalone tooling such as Prisma CLI may read its own environment directly.
+- Keep `GET /api/v1/health` as the single database-aware health endpoint. It must return bounded, safe failures without connection details; do not add a separate readiness route.
 - Keep application routes under the `/api/v1` global prefix. Swagger UI at `/api/docs` and OpenAPI JSON at `/api/openapi.json` remain disabled in production.
 
-The current API intentionally has no PostgreSQL, Prisma, Redis, BullMQ, Socket.IO, authentication, or authorization setup. Do not add these planned technologies without an approved OpenSpec change.
+PostgreSQL access is owned by `DatabaseModule` and `PrismaService`. Keep Prisma lazy so the API process can start during database outages and report them through health, and do not add product models or migrations without an approved OpenSpec change. Redis, BullMQ, Socket.IO, authentication, and authorization are still intentionally absent.
+
+The committed `openapi.json` snapshot is generated from Nest metadata. After changing controllers, DTOs, or Swagger decorators, run `pnpm api:generate` from the repository root and commit both the snapshot and generated web output. Never edit generated artifacts manually.
 
 ## Testing
 
@@ -29,6 +32,7 @@ The current API intentionally has no PostgreSQL, Prisma, Redis, BullMQ, Socket.I
 - `pnpm --filter @lite-notion/api dev`: start the API in watch mode.
 - `pnpm --filter @lite-notion/api typecheck`: run the API TypeScript check.
 - `pnpm --filter @lite-notion/api test`: run the API test suite.
+- `pnpm --filter @lite-notion/api prisma:generate`: regenerate the ignored Prisma Client output.
 - `pnpm --filter @lite-notion/api build`: compile the production output.
 - `pnpm lint`: run the repository Biome check from the root.
 

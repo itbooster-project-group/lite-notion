@@ -46,6 +46,12 @@ jobs:
   api:
     name: api
     runs-on: ubuntu-latest
+    env:
+      CORS_ORIGIN: http://localhost:3000
+      DATABASE_CONNECTION_TIMEOUT_MS: 5000
+      DATABASE_URL: postgresql://lite_notion:lite_notion@localhost:5432/lite_notion?schema=public
+      NODE_ENV: test
+      PORT: 3001
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -56,6 +62,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm api:check
       - run: pnpm --filter @lite-notion/api run typecheck
       - run: pnpm --filter @lite-notion/api run test
       - run: pnpm --filter @lite-notion/api run build

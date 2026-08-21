@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppModule } from './app.module';
 import { configureApplication } from './application';
 import { NodeEnvironment } from './config/environment';
+import { PrismaService } from './database/prisma.service';
 
 class TestPayloadDto {
   @Type(() => Number)
@@ -33,12 +34,18 @@ class TestController {
 
 describe('application HTTP configuration', () => {
   let app: INestApplication;
+  const checkConnection = vi.fn(async () => undefined);
 
   beforeEach(async () => {
+    checkConnection.mockReset();
+    checkConnection.mockResolvedValue(undefined);
     const moduleRef = await Test.createTestingModule({
       controllers: [TestController],
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(PrismaService)
+      .useValue({ checkConnection })
+      .compile();
 
     app = moduleRef.createNestApplication();
     configureApplication(app, {
@@ -54,7 +61,10 @@ describe('application HTTP configuration', () => {
   });
 
   it('публикует health только под versioned prefix', async () => {
-    await request(app.getHttpServer()).get('/api/v1/health').expect(200).expect({ status: 'ok' });
+    await request(app.getHttpServer())
+      .get('/api/v1/health')
+      .expect(200)
+      .expect({ database: 'up', status: 'ok' });
 
     const response = await request(app.getHttpServer()).get('/health').expect(404);
 
@@ -65,6 +75,30 @@ describe('application HTTP configuration', () => {
       statusCode: 404,
     });
     expect(response.body.timestamp).toEqual(expect.any(String));
+  });
+
+  it('возвращает безопасный 503 при недоступной базе и не публикует readiness route', async () => {
+    await request(app.getHttpServer())
+      .get('/api/v1/health')
+      .expect(200)
+      .expect({ database: 'up', status: 'ok' });
+
+    checkConnection.mockRejectedValueOnce(
+      new Error('postgresql://admin:secret-value@database.internal/notes'),
+    );
+    const unavailableResponse = await request(app.getHttpServer())
+      .get('/api/v1/health')
+      .expect(503);
+
+    expect(unavailableResponse.body).toMatchObject({
+      error: 'Service Unavailable',
+      message: 'Database is unavailable',
+      path: '/api/v1/health',
+      statusCode: 503,
+    });
+    expect(JSON.stringify(unavailableResponse.body)).not.toContain('secret-value');
+
+    await request(app.getHttpServer()).get('/api/v1/health/ready').expect(404);
   });
 
   it('разрешает CORS только настроенному origin без credentials', async () => {
@@ -139,27 +173,31 @@ describe('application HTTP configuration', () => {
       openapi: expect.any(String),
     });
     expect(documentResponse.body.paths['/api/v1/health'].get).toMatchObject({
+      operationId: 'getHealth',
       responses: {
         200: {
           content: {
             'application/json': {
-              schema: {
-                properties: {
-                  status: {
-                    example: 'ok',
-                    type: 'string',
-                  },
-                },
-                required: ['status'],
-                type: 'object',
-              },
+              schema: { $ref: '#/components/schemas/HealthResponseDto' },
             },
           },
         },
       },
-      summary: 'Check API availability',
+      summary: 'Check API and database availability',
       tags: ['health'],
     });
+    expect(documentResponse.body.paths['/api/v1/health'].get).toMatchObject({
+      responses: {
+        503: {
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/HttpErrorResponseDto' },
+            },
+          },
+        },
+      },
+    });
+    expect(documentResponse.body.paths['/api/v1/health/ready']).toBeUndefined();
 
     const yamlResponse = await request(app.getHttpServer()).get('/api/docs-yaml').expect(404);
 

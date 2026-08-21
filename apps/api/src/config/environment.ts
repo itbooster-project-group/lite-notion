@@ -60,6 +60,37 @@ export class EnvironmentConfig {
 
   @IsHttpOrigin()
   CORS_ORIGIN!: string;
+
+  @ValidateBy({
+    name: 'isPostgreSqlUrl',
+    validator: {
+      defaultMessage: () =>
+        'DATABASE_URL must be a PostgreSQL URL using the postgresql or postgres protocol',
+      validate: (value: unknown) => {
+        if (typeof value !== 'string') {
+          return false;
+        }
+
+        try {
+          const url = new URL(value);
+
+          return (
+            (url.protocol === 'postgresql:' || url.protocol === 'postgres:') &&
+            url.hostname.length > 0
+          );
+        } catch {
+          return false;
+        }
+      },
+    },
+  })
+  DATABASE_URL!: string;
+
+  @Transform(({ value }) => Number(value), { toClassOnly: true })
+  @IsInt()
+  @Min(1)
+  @Max(60_000)
+  DATABASE_CONNECTION_TIMEOUT_MS!: number;
 }
 
 export function validateEnvironment(
@@ -67,6 +98,8 @@ export function validateEnvironment(
 ): Record<string, unknown> & EnvironmentConfig {
   const validatedEnvironment = plainToInstance(EnvironmentConfig, {
     CORS_ORIGIN: environment.CORS_ORIGIN,
+    DATABASE_CONNECTION_TIMEOUT_MS: environment.DATABASE_CONNECTION_TIMEOUT_MS,
+    DATABASE_URL: environment.DATABASE_URL,
     NODE_ENV: environment.NODE_ENV,
     PORT: environment.PORT,
   });

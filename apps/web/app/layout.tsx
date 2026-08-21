@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 
 import './globals.css';
 
-import { ThemeProvider } from '@/_app/providers/ui/theme-provider';
+import { AppProviders } from '@/_app/providers';
 import { cn } from '@/shared/lib/cn';
 
 const inter = Inter({ subsets: ['latin', 'cyrillic'], variable: '--font-sans' });
@@ -22,7 +22,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="ru" className={cn('font-sans', inter.variable)} suppressHydrationWarning>
       <body>
-        <ThemeProvider>{children}</ThemeProvider>
+        <AppProviders>{children}</AppProviders>
       </body>
     </html>
   );

@@ -11,6 +11,7 @@ import { HttpExceptionFilter } from './http-exception.filter';
     ConfigModule.forRoot({
       cache: true,
       isGlobal: true,
+      expandVariables: true,
       load: [applicationConfig],
     }),
     HealthModule,

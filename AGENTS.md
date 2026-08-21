@@ -21,7 +21,9 @@ Do not create shared packages until at least two applications have concrete code
 Use Node.js 22 and pnpm 11.21.0. Run commands from the repository root unless a scoped instruction says otherwise.
 
 - `pnpm install --frozen-lockfile`: verify a clean, reproducible install.
-- `pnpm dev`: start web and API in parallel.
+- `pnpm dev`: start PostgreSQL, wait for its healthcheck, then start web and API in parallel. PostgreSQL remains running after the app processes stop; use `pnpm db:down` to stop it.
+- `pnpm dev:web`: start only web without managing Docker Compose services.
+- `pnpm dev:api`: start PostgreSQL, wait for its healthcheck, then start only API. PostgreSQL remains running after API stops.
 - `pnpm lint`: run the non-mutating Biome check.
 - `pnpm typecheck`: type-check every application.
 - `pnpm test`: run all Vitest suites once.
