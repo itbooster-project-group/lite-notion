@@ -178,12 +178,18 @@ pnpm db:down
 ├── apps
 │   ├── api
 │   └── web
+├── docs
 ├── openspec
 ├── biome.json
 ├── package.json
 ├── pnpm-workspace.yaml
 └── tsconfig.base.json
 ```
+
+## Документация
+
+- [Схема базы данных](docs/database-schema.md) — ER-диаграмма, описание сущностей и ключевые проектные решения.
+- [Гайд по OpenSpec workflow](docs/openspec-workflow.md) — процесс работы с изменениями и coding agents.
 
 ## OpenSpec
 
