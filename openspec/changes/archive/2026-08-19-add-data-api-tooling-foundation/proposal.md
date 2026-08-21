@@ -28,6 +28,6 @@
 
 - **Frontend:** `apps/web` получает TanStack Query, Orval-generated API слой, MSW test/browser setup и публичную конфигурацию API URL и mocking flag.
 - **Backend:** `apps/api` получает Prisma/PostgreSQL dependencies, database module, database-aware health behavior, дополнительные env contracts и генератор OpenAPI snapshot.
-- **Infrastructure:** в корне появляются локальный Docker Compose workflow, команды data/API codegen и CI-проверка generated contract drift.
+- **Infrastructure:** В `apps/api` появляются локальный Docker Compose workflow, команды data/API codegen и CI-проверка generated contract drift.
 - **Публичный API:** `GET /api/v1/health` возвращает `{ "status": "ok", "database": "up" }` либо безопасный `503`.
 - **Артефакты:** OpenAPI snapshot и Orval output коммитятся; Prisma Client генерируется локально/в CI и не коммитится.

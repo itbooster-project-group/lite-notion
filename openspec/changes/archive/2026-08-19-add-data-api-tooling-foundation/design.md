@@ -22,7 +22,7 @@
 
 ### PostgreSQL остаётся единственным Compose service
 
-Корневой `compose.yaml` использует официальный `postgres:18-alpine`, development-only credentials, порт `5432`, именованный volume и `pg_isready`. Корневой `pnpm dev` сначала выполняет `db:up`, дожидается healthy PostgreSQL и только затем запускает API и web на host для быстрого watch/HMR. Для раздельной разработки корневой `pnpm dev:web` запускает только web без управления Compose, а `pnpm dev:api` сначала поднимает healthy PostgreSQL и затем запускает API. Низкоуровневые scoped-команды приложений по-прежнему не управляют Compose.
+`./apps/api/docker-compose.yaml` использует официальный `postgres:18-alpine`, development-only credentials, порт `5432`, именованный volume и `pg_isready`. Корневой `pnpm dev` сначала выполняет `db:up`, дожидается healthy PostgreSQL и только затем запускает API и web на host для быстрого watch/HMR. Для раздельной разработки корневой `pnpm dev:web` запускает только web без управления Compose, а `pnpm dev:api` сначала поднимает healthy PostgreSQL и затем запускает API. Низкоуровневые scoped-команды приложений по-прежнему не управляют Compose.
 
 Отдельные команды `db:up` и `db:down` сохраняются для явного управления базой. Остановка watch-процессов `pnpm dev` или `pnpm dev:api` не останавливает PostgreSQL: service продолжает работать для следующих запусков, а `db:down` выключает его без удаления именованного volume.
 

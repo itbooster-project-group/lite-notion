@@ -1,37 +1,4 @@
-# database-runtime-foundation Specification
-
-## Purpose
-
-Определяет воспроизводимое локальное окружение PostgreSQL и наблюдаемый контракт состояния подключения API к базе данных.
-
-## Requirements
-
-### Requirement: Локальный PostgreSQL
-Репозиторий MUST предоставлять Docker Compose service PostgreSQL с фиксированной major-версией, постоянным именованным volume, опубликованным локальным портом и healthcheck готовности принимать соединения. Запуск service MUST NOT требовать контейнеризации web или API.
-
-#### Scenario: Первый локальный запуск базы данных
-- **WHEN** разработчик запускает документированную команду поднятия базы
-- **THEN** Compose создаёт PostgreSQL с локальными development credentials и сообщает healthy после готовности принимать соединения
-
-#### Scenario: Полный запуск окружения для разработки
-- **WHEN** разработчик запускает корневую команду разработки
-- **THEN** команда поднимает PostgreSQL, дожидается его состояния healthy и только затем запускает web и API на host
-
-#### Scenario: Отдельный запуск frontend через корневую команду
-- **WHEN** разработчик запускает документированную корневую команду разработки web
-- **THEN** команда запускает только web на host и не управляет Docker Compose services
-
-#### Scenario: Отдельный запуск backend через корневую команду
-- **WHEN** разработчик запускает документированную корневую команду разработки API
-- **THEN** команда поднимает PostgreSQL, дожидается его состояния healthy и только затем запускает API на host
-
-#### Scenario: Автономный запуск приложения
-- **WHEN** разработчик запускает scoped-команду разработки web или API
-- **THEN** команда запускает только выбранное приложение и не управляет Docker Compose services
-
-#### Scenario: Повторный запуск базы данных
-- **WHEN** PostgreSQL service останавливается и затем запускается повторно без удаления volume
-- **THEN** данные базы сохраняются в именованном volume
+## MODIFIED Requirements
 
 ### Requirement: Валидируемое подключение Prisma
 API MUST получать PostgreSQL connection URL и ограниченный timeout установки соединения из валидируемой конфигурации. Невалидная или отсутствующая конфигурация MUST останавливать запуск с безопасной ошибкой без раскрытия credentials; временно недоступный сервер PostgreSQL MUST NOT препятствовать запуску процесса API.
@@ -54,17 +21,6 @@ API MUST получать PostgreSQL connection URL и ограниченный 
 - **WHEN** API запускается, а стартовая проверка PostgreSQL завершается ошибкой или timeout
 - **THEN** серверный лог содержит предупреждение с безопасным сообщением без connection URL, credentials и исходной database error
 - **AND** API продолжает запуск, начинает слушать настроенный порт и завершает процесс с нулевым кодом при штатной остановке
-
-### Requirement: Database-aware health-проверка
-API MUST публиковать `GET /api/v1/health`, который проверяет PostgreSQL через основной database client. Проверка MUST завершаться в ограниченное время и не раскрывать детали подключения или исходную database error.
-
-#### Scenario: База данных доступна
-- **WHEN** клиент запрашивает `GET /api/v1/health` и PostgreSQL принимает запросы
-- **THEN** API отвечает `200` и `{ "status": "ok", "database": "up" }`
-
-#### Scenario: База данных недоступна
-- **WHEN** клиент запрашивает `GET /api/v1/health` и проверка PostgreSQL завершается ошибкой или timeout
-- **THEN** API отвечает `503` в едином формате HTTP-ошибок с безопасным сообщением `Database is unavailable`
 
 ### Requirement: Управляемый lifecycle database client
 API MUST пробовать установить соединение с PostgreSQL один раз при старте приложения. Если стартовая попытка не удалась, API MUST устанавливать соединение лениво при первом последующем database operation. API MUST закрывать ресурсы database client через lifecycle приложения.

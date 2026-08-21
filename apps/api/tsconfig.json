@@ -15,6 +15,6 @@
     "emitDecoratorMetadata": true,
     "noEmit": false
   },
-  "include": ["src/**/*.ts", "vitest.config.mts", "vitest.setup.ts"],
+  "include": ["src/**/*.ts", "prisma.config.ts", "vitest.config.mts", "vitest.setup.ts"],
   "exclude": ["node_modules", "dist"]
 }
