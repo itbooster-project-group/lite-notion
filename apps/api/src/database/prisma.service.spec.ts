@@ -1,15 +1,20 @@
 import { Logger } from '@nestjs/common';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { ApplicationConfig } from '../config/application-config';
 import { NodeEnvironment } from '../config/environment';
 import { PrismaService } from './prisma.service';
 
-const config = {
+const config: ApplicationConfig = {
+  accessTokenTtlS: 900,
+  bcryptRounds: 4,
   corsOrigin: 'http://localhost:3000',
   databaseConnectionTimeoutMs: 100,
   databaseUrl: 'postgresql://lite_notion:lite_notion@localhost:5432/lite_notion',
+  jwtSecret: 'test-jwt-secret-value-at-least-32-chars',
   nodeEnvironment: NodeEnvironment.Test,
   port: 3001,
+  refreshTokenTtlS: 2592000,
 };
 
 describe('PrismaService', () => {
