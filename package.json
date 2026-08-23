@@ -11,6 +11,7 @@
     "dev": "pnpm db:up && pnpm --parallel --filter \"./apps/*\" run dev",
     "dev:api": "pnpm db:up && pnpm --filter @lite-notion/api dev",
     "dev:web": "pnpm --filter @lite-notion/web dev",
+    "docs:screens": "node docs/screens/generate.js docs/screens",
     "build": "pnpm --recursive run build",
     "lint": "biome check .",
     "format": "biome check --write .",
@@ -36,8 +37,9 @@
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
     "@feature-sliced/steiger-plugin": "^0.7.0",
-    "steiger": "^0.6.0",
     "husky": "^9.1.7",
-    "lint-staged": "^17.3.0"
+    "lint-staged": "^17.3.0",
+    "puppeteer-core": "^25.8.0",
+    "steiger": "^0.6.0"
   }
 }
