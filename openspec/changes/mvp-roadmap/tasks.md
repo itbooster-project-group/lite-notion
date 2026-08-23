@@ -26,6 +26,6 @@
 
 - [x] 4.1 Проверить внутренние Markdown-ссылки, URL всех новых issues, отсутствие task-specific roadmap/screens и выполнить `git diff --check`.
 - [x] 4.2 Выполнить `openspec validate mvp-roadmap --strict` и проверить состояние change.
-- [ ] 4.3 Выполнить `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` и `pnpm steiger`.
+- [x] 4.3 Выполнить `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` и `pnpm steiger`.
 - [x] 4.4 Проверить итоговый diff на отсутствие runtime-кода, миграций и незаявленных изменений.
-- [ ] 4.5 Отправить ветку `docs/plan` и открыть новый PR, закрывающий только новую meta issue и ссылающийся на PR #22 как источник материалов.
+- [x] 4.5 Отправить ветку `docs/plan` и открыть новый PR, закрывающий только новую meta issue и ссылающийся на PR #22 как источник материалов.
