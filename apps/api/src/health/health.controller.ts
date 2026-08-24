@@ -6,6 +6,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 
+import { Public } from '../common/decorators/public.decorator';
 import { HttpErrorResponseDto } from '../http-error-response.dto';
 import { HealthResponseDto } from './health.dto';
 import { HealthService } from './health.service';
@@ -16,6 +17,7 @@ export class HealthController {
   constructor(@Inject(HealthService) private readonly healthService: HealthService) {}
 
   @Get()
+  @Public()
   @ApiOperation({ operationId: 'getHealth', summary: 'Check API and database availability' })
   @ApiOkResponse({
     description: 'API and database are available',

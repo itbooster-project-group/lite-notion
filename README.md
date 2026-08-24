@@ -11,7 +11,7 @@
 - общие команды pnpm, TypeScript, Biome и Vitest;
 - OpenSpec для планирования изменений.
 
-Продуктовые функции, Prisma-модели и миграции, Redis и авторизация пока не реализованы.
+Продуктовые функции и Redis пока не реализованы. Из прикладной функциональности доступны email-регистрация и session-backed аутентификация: Prisma-модели `User` и `Session` с миграцией и маршруты под `/api/v1/auth`.
 
 ## Требования
 
@@ -83,6 +83,10 @@ API использует следующие переменные окружен�
 | `CORS_ORIGIN` | `http://localhost:3000` | Один точный HTTP(S) origin без path, query и fragment |
 | `DATABASE_URL` | local Compose URL | PostgreSQL URL с protocol `postgresql` или `postgres` |
 | `DATABASE_CONNECTION_TIMEOUT_MS` | `5000` | Целое число от 1 до 60000 |
+| `JWT_SECRET` | `local-development-only-change-me-before-deploy` | Строка длиной не менее 32 символов; уникальное значение для каждого окружения |
+| `ACCESS_TOKEN_TTL_S` | `900` | Целое число от 60 до 3600 |
+| `REFRESH_TOKEN_TTL_S` | `2592000` | Целое число от 3600 до 7776000 и строго больше `ACCESS_TOKEN_TTL_S` |
+| `BCRYPT_ROUNDS` | `12` | Целое число от 4 до 15 |
 
 Все API-переменные обязательны в runtime. Prisma CLI использует URL локального Compose как development fallback, если `DATABASE_URL` не передан процессу.
 

@@ -49,7 +49,11 @@ jobs:
     env:
       CORS_ORIGIN: http://localhost:3000
       DATABASE_CONNECTION_TIMEOUT_MS: 5000
-      DATABASE_URL: postgresql://lite_notion:lite_notion@localhost:5432/lite_notion?schema=public
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      REFRESH_TOKEN_TTL_S: ${{ secrets.REFRESH_TOKEN_TTL_S }}
+      BCRYPT_ROUNDS: ${{ secrets.BCRYPT_ROUNDS }}
+      ACCESS_TOKEN_TTL_S: ${{ secrets.ACCESS_TOKEN_TTL_S }}
       NODE_ENV: test
       PORT: 3001
     steps:

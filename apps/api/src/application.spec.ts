@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AppModule } from './app.module';
 import { configureApplication } from './application';
+import { Public } from './common/decorators/public.decorator';
 import { NodeEnvironment } from './config/environment';
 import { PrismaService } from './database/prisma.service';
 
@@ -19,16 +20,24 @@ class TestPayloadDto {
 @Controller('_test')
 class TestController {
   @Get('error')
+  @Public()
   getError(): never {
     throw new Error('sensitive internal failure');
   }
 
   @Post('validate')
+  @Public()
   validate(@Body() payload: TestPayloadDto) {
     return {
       count: payload.count,
       isInstance: payload instanceof TestPayloadDto,
     };
+  }
+
+  // Намеренно без @Public(): проверяет, что маршруты закрыты по умолчанию.
+  @Get('guarded')
+  getGuarded(): { reached: true } {
+    return { reached: true };
   }
 }
 
@@ -101,7 +110,7 @@ describe('application HTTP configuration', () => {
     await request(app.getHttpServer()).get('/api/v1/health/ready').expect(404);
   });
 
-  it('разрешает CORS только настроенному origin без credentials', async () => {
+  it('разрешает CORS с credentials только настроенному origin', async () => {
     const allowedResponse = await request(app.getHttpServer())
       .options('/api/v1/health')
       .set('Access-Control-Request-Method', 'GET')
@@ -109,7 +118,7 @@ describe('application HTTP configuration', () => {
       .expect(204);
 
     expect(allowedResponse.headers['access-control-allow-origin']).toBe('http://localhost:3000');
-    expect(allowedResponse.headers['access-control-allow-credentials']).toBeUndefined();
+    expect(allowedResponse.headers['access-control-allow-credentials']).toBe('true');
 
     const rejectedResponse = await request(app.getHttpServer())
       .get('/api/v1/health')
@@ -117,6 +126,36 @@ describe('application HTTP configuration', () => {
       .expect(200);
 
     expect(rejectedResponse.headers['access-control-allow-origin']).toBeUndefined();
+    expect(rejectedResponse.headers['access-control-allow-credentials']).toBeUndefined();
+  });
+
+  it('никогда не отдаёт wildcard origin при включённых credentials', async () => {
+    const response = await request(app.getHttpServer())
+      .options('/api/v1/health')
+      .set('Access-Control-Request-Method', 'GET')
+      .set('Origin', 'http://localhost:3000')
+      .expect(204);
+
+    expect(response.headers['access-control-allow-origin']).not.toBe('*');
+  });
+
+  it('закрывает маршруты по умолчанию и отвечает 401 в едином формате ошибок', async () => {
+    const response = await request(app.getHttpServer()).get('/api/v1/_test/guarded').expect(401);
+
+    expect(response.body).toMatchObject({
+      error: 'Unauthorized',
+      path: '/api/v1/_test/guarded',
+      statusCode: 401,
+    });
+    expect(response.body.timestamp).toEqual(expect.any(String));
+    expect(response.body).not.toHaveProperty('reached');
+  });
+
+  it('оставляет health публичным', async () => {
+    await request(app.getHttpServer())
+      .get('/api/v1/health')
+      .expect(200)
+      .expect({ database: 'up', status: 'ok' });
   });
 
   it('преобразует DTO и отклоняет лишние поля', async () => {
@@ -206,6 +245,25 @@ describe('application HTTP configuration', () => {
       path: '/api/docs-yaml',
       statusCode: 404,
     });
+  });
+
+  it('описывает тело запроса для register и login в OpenAPI', async () => {
+    const { body } = await request(app.getHttpServer()).get('/api/openapi.json').expect(200);
+
+    expect(body.paths['/api/v1/auth/register'].post.requestBody).toEqual({
+      content: {
+        'application/json': { schema: { $ref: '#/components/schemas/RegisterDto' } },
+      },
+      required: true,
+    });
+    expect(body.paths['/api/v1/auth/login'].post.requestBody).toEqual({
+      content: {
+        'application/json': { schema: { $ref: '#/components/schemas/LoginDto' } },
+      },
+      required: true,
+    });
+    expect(body.components.schemas.RegisterDto.required).toEqual(['email', 'name', 'password']);
+    expect(body.components.schemas.LoginDto.required).toEqual(['email', 'password']);
   });
 
   it('не публикует Swagger endpoints в production', async () => {
