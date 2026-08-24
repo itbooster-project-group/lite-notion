@@ -1,21 +1,60 @@
 import { randomUUID } from 'node:crypto';
 
+import { normalizeEmail } from '../common/helpers';
+import type { UserRecord } from '../users/users.service';
 import {
+  AuthRepository,
   type CreateSessionInput,
   type DeleteStaleSessionsInput,
+  type RegisteredUser,
+  type RegisterUserInput,
   type RotateSessionInput,
   type SessionRecord,
-  SessionRepository,
-} from './session.repository';
+} from './auth.repository';
+import { EmailAlreadyRegisteredError } from './errors';
 
 /**
- * Тестовая реализация репозитория сессий. Воспроизводит наблюдаемый контракт
- * Prisma-версии, включая инвариант «в цепочке не более одной строки с
- * revokedAt = null»: в базе его держит `SELECT ... FOR UPDATE`, здесь —
- * однопоточность JavaScript.
+ * Тестовая реализация. Воспроизводит наблюдаемый контракт Prisma-версии, включая
+ * инвариант «в цепочке не более одной строки с revokedAt = null» (в базе его
+ * держит `SELECT ... FOR UPDATE`, здесь — однопоточность JavaScript) и
+ * атомарность регистрации: записи фиксируются только после того, как обе
+ * вставки прошли.
  */
-export class InMemorySessionRepository extends SessionRepository {
+export class InMemoryAuthRepository extends AuthRepository {
   readonly records = new Map<string, SessionRecord>();
+
+  /** Позволяет тесту уронить вставку сессии, не трогая Prisma. */
+  failSessionInsert = false;
+
+  /** Хранилище пользователей передаётся снаружи: тесты читают его же через мок PrismaService. */
+  constructor(readonly users: Map<string, UserRecord> = new Map()) {
+    super();
+  }
+
+  async createUserWithSession(input: RegisterUserInput): Promise<RegisteredUser> {
+    const email = normalizeEmail(input.user.email);
+
+    if (this.users.has(email)) {
+      throw new EmailAlreadyRegisteredError();
+    }
+
+    const user: UserRecord = {
+      ...input.user,
+      createdAt: new Date(),
+      email,
+      id: randomUUID(),
+    };
+
+    if (this.failSessionInsert) {
+      throw new Error('session insert failed');
+    }
+
+    const session = await this.create({ ...input.session, userId: user.id });
+
+    this.users.set(email, user);
+
+    return { session, user };
+  }
 
   async findByTokenHash(tokenHash: string): Promise<SessionRecord | null> {
     for (const record of this.records.values()) {

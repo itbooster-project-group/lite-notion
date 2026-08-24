@@ -1,12 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-
+import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
 import { type ApplicationConfig, applicationConfig } from '../config/application-config';
-import type { AuthenticatedUser } from './current-user.decorator';
-import type { AccessTokenPayload } from './token.service';
-
-export const JWT_STRATEGY_NAME = 'jwt';
+import { JWT_STRATEGY_NAME } from './constants';
+import type { AccessTokenPayload } from './crypto/token.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, JWT_STRATEGY_NAME) {

@@ -13,18 +13,18 @@ import { PrismaService } from '../database/prisma.service';
 import { HttpExceptionFilter } from '../http-exception.filter';
 import { UsersService } from '../users/users.service';
 import { AuthController } from './auth.controller';
+import { AuthRepository } from './auth.repository';
+import { InMemoryAuthRepository } from './auth.repository.in-memory';
 import { AuthService } from './auth.service';
+import { REFRESH_COOKIE_NAME } from './constants';
+import { PasswordService } from './crypto/password.service';
+import { TokenService } from './crypto/token.service';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtStrategy } from './jwt.strategy';
-import { JwtAuthGuard } from './jwt-auth.guard';
-import { PasswordService } from './password.service';
-import { REFRESH_COOKIE_NAME } from './refresh-cookie';
-import { SessionRepository } from './session.repository';
-import { InMemorySessionRepository } from './session.repository.in-memory';
-import { SessionService } from './session.service';
-import { TokenService } from './token.service';
+import { SessionService } from './session/session.service';
 
 const jwtSecret = 'test-jwt-secret-value-at-least-32-chars';
-const credentials = { email: 'ada@example.com', nickname: 'Ada', password: 'correct horse' };
+const credentials = { email: 'ada@example.com', name: 'Ada', password: 'correct horse' };
 
 function readRefreshCookie(headers: Record<string, unknown>): string | undefined {
   const setCookie = headers['set-cookie'];
@@ -36,25 +36,20 @@ function readRefreshCookie(headers: Record<string, unknown>): string | undefined
 
 describe('AuthController', () => {
   let app: INestApplication;
-  let repository: InMemorySessionRepository;
-  let stored: Map<string, Record<string, unknown>>;
-  let byId: Map<string, Record<string, unknown>>;
+  let repository: InMemoryAuthRepository;
+  // biome-ignore lint/suspicious/noExplicitAny: узкое тестовое хранилище пользователей
+  let stored: Map<string, any>;
 
   beforeEach(async () => {
     stored = new Map();
-    byId = new Map();
-    repository = new InMemorySessionRepository();
+
+    repository = new InMemoryAuthRepository(stored);
 
     const user = {
-      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
-        const created = { ...data, createdAt: new Date(), id: `user-${stored.size + 1}` };
-        stored.set(data.email as string, created);
-        byId.set(created.id, created);
-        return created;
-      }),
+      create: vi.fn(),
       findUnique: vi.fn(async ({ where }: { where: { email?: string; id?: string } }) =>
         where.email === undefined
-          ? (byId.get(where.id ?? '') ?? null)
+          ? ([...stored.values()].find((record) => record.id === where.id) ?? null)
           : (stored.get(where.email) ?? null),
       ),
     };
@@ -72,7 +67,7 @@ describe('AuthController', () => {
         { provide: APP_FILTER, useClass: HttpExceptionFilter },
         { provide: APP_GUARD, useClass: JwtAuthGuard },
         { provide: PrismaService, useValue: { user } },
-        { provide: SessionRepository, useValue: repository },
+        { provide: AuthRepository, useValue: repository },
         {
           provide: applicationConfig.KEY,
           useValue: {
@@ -108,7 +103,7 @@ describe('AuthController', () => {
         .expect(201);
 
       expect(response.body.accessToken).toBeTypeOf('string');
-      expect(response.body.user).toMatchObject({ email: 'ada@example.com', nickname: 'Ada' });
+      expect(response.body.user).toMatchObject({ email: 'ada@example.com', name: 'Ada' });
       expect(readRefreshCookie(response.headers)).toMatch(/HttpOnly/i);
     });
 
@@ -132,8 +127,12 @@ describe('AuthController', () => {
     it.each([
       ['некорректный email', { ...credentials, email: 'not-an-email' }],
       ['короткий пароль', { ...credentials, password: 'short' }],
-      ['пароль длиннее 72 символов', { ...credentials, password: 'a'.repeat(73) }],
-      ['пустой nickname', { ...credentials, nickname: '   ' }],
+      ['пароль длиннее 72 байт', { ...credentials, password: 'a'.repeat(73) }],
+      ['кириллический пароль длиннее 72 байт', { ...credentials, password: 'п'.repeat(37) }],
+      // Проходит @Length(72) по символам, но это 80 и 144 байта — bcrypt обрезал бы их.
+      ['40 символов кириллицы (80 байт)', { ...credentials, password: 'п'.repeat(40) }],
+      ['36 emoji (144 байта)', { ...credentials, password: '😀'.repeat(36) }],
+      ['пустой name', { ...credentials, name: '   ' }],
       ['лишнее поле', { ...credentials, role: 'admin' }],
     ])('отклоняет %s статусом 400', async (_case, body) => {
       const response = await request(app.getHttpServer())
@@ -159,6 +158,34 @@ describe('AuthController', () => {
 
       expect(response.body.accessToken).toBeTypeOf('string');
       expect(readRefreshCookie(response.headers)).toBeDefined();
+    });
+
+    it.each([
+      ['73 ASCII-символа', 'a'.repeat(73)],
+      ['37 символов кириллицы (74 байта)', 'п'.repeat(37)],
+      ['40 символов кириллицы (80 байт)', 'п'.repeat(40)],
+      ['36 emoji (144 байта)', '😀'.repeat(36)],
+    ])('отклоняет пароль длиннее 72 байт: %s', async (_case, password) => {
+      const response = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: credentials.email, password })
+        .expect(400);
+
+      expect(response.body).toMatchObject({ statusCode: 400 });
+    });
+
+    it('принимает пароль ровно в 72 байта', async () => {
+      const password = 'п'.repeat(36);
+
+      expect(Buffer.byteLength(password, 'utf8')).toBe(72);
+      await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({ email: 'cyrillic@example.com', name: 'Ада', password })
+        .expect(201);
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: 'cyrillic@example.com', password })
+        .expect(200);
     });
 
     it('отвечает одинаково на неверный пароль и несуществующий email', async () => {
@@ -218,7 +245,7 @@ describe('AuthController', () => {
         .set('Authorization', `Bearer ${registered.body.accessToken}`)
         .expect(200);
 
-      expect(response.body).toMatchObject({ email: 'ada@example.com', nickname: 'Ada' });
+      expect(response.body).toMatchObject({ email: 'ada@example.com', name: 'Ada' });
     });
 
     it.each([

@@ -2,9 +2,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 
-import { type ApplicationConfig, applicationConfig } from '../config/application-config';
-
-const REFRESH_TOKEN_BYTES = 32;
+import { type ApplicationConfig, applicationConfig } from '../../config/application-config';
+import { REFRESH_TOKEN_BYTES } from '../constants';
 
 export interface AccessTokenPayload {
   sub: string;

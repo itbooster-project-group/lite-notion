@@ -5,13 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { applicationConfig } from '../config/application-config';
 import { PrismaService } from '../database/prisma.service';
-import { UsersService } from '../users/users.service';
+import { type UserRecord, UsersService } from '../users/users.service';
+import { AuthRepository } from './auth.repository';
+import { InMemoryAuthRepository } from './auth.repository.in-memory';
 import { AuthService } from './auth.service';
-import { PasswordService } from './password.service';
-import { SessionRepository } from './session.repository';
-import { InMemorySessionRepository } from './session.repository.in-memory';
-import { SessionService } from './session.service';
-import { TokenService } from './token.service';
+import { PasswordService } from './crypto/password.service';
+import { TokenService } from './crypto/token.service';
+import { EmailAlreadyRegisteredError } from './errors';
+import { SessionService } from './session/session.service';
 
 const jwtSecret = 'test-jwt-secret-value-at-least-32-chars';
 const origin = { ip: '127.0.0.1', userAgent: 'vitest' };
@@ -19,20 +20,16 @@ const config = { accessTokenTtlS: 900, bcryptRounds: 4, jwtSecret, refreshTokenT
 
 describe('AuthService', () => {
   let service: AuthService;
-  let repository: InMemorySessionRepository;
+  let repository: InMemoryAuthRepository;
   let passwords: PasswordService;
   let users: { findUnique: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
-  let stored: Map<string, { id: string; email: string; nickname: string; passwordHash: string }>;
+  let stored: Map<string, UserRecord>;
 
   beforeEach(async () => {
     stored = new Map();
-    repository = new InMemorySessionRepository();
+    repository = new InMemoryAuthRepository(stored);
     users = {
-      create: vi.fn(async ({ data }) => {
-        const user = { ...data, createdAt: new Date(), id: `user-${stored.size + 1}` };
-        stored.set(data.email, user);
-        return user;
-      }),
+      create: vi.fn(),
       findUnique: vi.fn(async ({ where }) => stored.get(where.email) ?? null),
     };
 
@@ -45,7 +42,7 @@ describe('AuthService', () => {
         TokenService,
         UsersService,
         { provide: PrismaService, useValue: { user: users } },
-        { provide: SessionRepository, useValue: repository },
+        { provide: AuthRepository, useValue: repository },
         { provide: applicationConfig.KEY, useValue: config },
       ],
     }).compile();
@@ -62,7 +59,7 @@ describe('AuthService', () => {
   describe('register', () => {
     it('создаёт учётную запись и открывает сессию', async () => {
       const result = await service.register(
-        { email: 'ada@example.com', nickname: 'Ada', password: 'correct horse' },
+        { email: 'ada@example.com', name: 'Ada', password: 'correct horse' },
         origin,
       );
 
@@ -73,7 +70,7 @@ describe('AuthService', () => {
 
     it('сохраняет пароль только в виде bcrypt-хеша', async () => {
       const result = await service.register(
-        { email: 'ada@example.com', nickname: 'Ada', password: 'correct horse' },
+        { email: 'ada@example.com', name: 'Ada', password: 'correct horse' },
         origin,
       );
 
@@ -86,28 +83,85 @@ describe('AuthService', () => {
 
     it('отклоняет занятый email', async () => {
       await service.register(
-        { email: 'ada@example.com', nickname: 'Ada', password: 'correct horse' },
+        { email: 'ada@example.com', name: 'Ada', password: 'correct horse' },
         origin,
       );
 
       await expect(
         service.register(
-          { email: 'ada@example.com', nickname: 'Other', password: 'another pass' },
+          { email: 'ada@example.com', name: 'Other', password: 'another pass' },
           origin,
         ),
       ).rejects.toBeInstanceOf(ConflictException);
       expect(stored.size).toBe(1);
     });
 
+    it('переводит конфликт уникального индекса в 409, а не в 500', async () => {
+      // Гонка: предварительная проверка ничего не нашла, а вставку опередил
+      // параллельный запрос. Отказ индекса должен дать тот же 409.
+      vi.spyOn(repository, 'createUserWithSession').mockRejectedValueOnce(
+        new EmailAlreadyRegisteredError(),
+      );
+
+      await expect(
+        service.register(
+          { email: 'ada@example.com', name: 'Ada', password: 'correct horse' },
+          origin,
+        ),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('не создаёт пользователя, если вставка сессии упала', async () => {
+      repository.failSessionInsert = true;
+
+      await expect(
+        service.register(
+          { email: 'ada@example.com', name: 'Ada', password: 'correct horse' },
+          origin,
+        ),
+      ).rejects.toThrow('session insert failed');
+
+      expect(stored.size).toBe(0);
+      expect(repository.records.size).toBe(0);
+    });
+
+    it('оставляет email свободным после неудачной регистрации', async () => {
+      repository.failSessionInsert = true;
+      await expect(
+        service.register(
+          { email: 'ada@example.com', name: 'Ada', password: 'correct horse' },
+          origin,
+        ),
+      ).rejects.toThrow();
+
+      repository.failSessionInsert = false;
+      await expect(
+        service.register(
+          { email: 'ada@example.com', name: 'Ada', password: 'correct horse' },
+          origin,
+        ),
+      ).resolves.toBeDefined();
+    });
+
+    it('создаёт учётную запись и сессию вместе', async () => {
+      await service.register(
+        { email: 'ada@example.com', name: 'Ada', password: 'correct horse' },
+        origin,
+      );
+
+      expect(stored.size).toBe(1);
+      expect(repository.records.size).toBe(1);
+    });
+
     it('считает email занятым при отличии только в регистре', async () => {
       await service.register(
-        { email: 'ada@example.com', nickname: 'Ada', password: 'correct horse' },
+        { email: 'ada@example.com', name: 'Ada', password: 'correct horse' },
         origin,
       );
 
       await expect(
         service.register(
-          { email: 'ADA@Example.COM', nickname: 'Other', password: 'another pass' },
+          { email: 'ADA@Example.COM', name: 'Other', password: 'another pass' },
           origin,
         ),
       ).rejects.toBeInstanceOf(ConflictException);
@@ -117,7 +171,7 @@ describe('AuthService', () => {
   describe('login', () => {
     beforeEach(async () => {
       await service.register(
-        { email: 'ada@example.com', nickname: 'Ada', password: 'correct horse' },
+        { email: 'ada@example.com', name: 'Ada', password: 'correct horse' },
         origin,
       );
     });
@@ -176,31 +230,6 @@ describe('AuthService', () => {
       ).rejects.toBeInstanceOf(UnauthorizedException);
 
       expect(repository.records.size).toBe(sessionsBefore);
-    });
-  });
-
-  describe('выход', () => {
-    it('завершает цепочку текущего запроса', async () => {
-      const { session } = await service.register(
-        { email: 'ada@example.com', nickname: 'Ada', password: 'correct horse' },
-        origin,
-      );
-
-      await service.logout(session.sessionId);
-
-      expect(repository.records.size).toBe(0);
-    });
-
-    it('выход со всех устройств закрывает каждую цепочку пользователя', async () => {
-      const { user } = await service.register(
-        { email: 'ada@example.com', nickname: 'Ada', password: 'correct horse' },
-        origin,
-      );
-      await service.login({ email: 'ada@example.com', password: 'correct horse' }, origin);
-
-      await service.logoutEverywhere(user.id);
-
-      expect(repository.records.size).toBe(0);
     });
   });
 });

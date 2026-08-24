@@ -2,7 +2,7 @@
 CREATE TABLE "User" (
     "id" UUID NOT NULL,
     "email" TEXT NOT NULL,
-    "nickname" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
     "passwordHash" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,

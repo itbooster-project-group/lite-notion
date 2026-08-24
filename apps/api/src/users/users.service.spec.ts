@@ -2,17 +2,7 @@ import { Test } from '@nestjs/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PrismaService } from '../database/prisma.service';
-import { normalizeEmail, UsersService } from './users.service';
-
-describe('normalizeEmail', () => {
-  it.each([
-    ['User@Example.COM', 'user@example.com'],
-    ['  user@example.com  ', 'user@example.com'],
-    ['USER@EXAMPLE.COM', 'user@example.com'],
-  ])('приводит %s к %s', (input, expected) => {
-    expect(normalizeEmail(input)).toBe(expected);
-  });
-});
+import { UsersService } from './users.service';
 
 describe('UsersService', () => {
   let service: UsersService;
@@ -37,24 +27,24 @@ describe('UsersService', () => {
   it('нормализует email при создании', async () => {
     await service.create({
       email: 'User@Example.COM',
-      nickname: 'user',
+      name: 'user',
       passwordHash: 'hash',
     });
 
     expect(user.create).toHaveBeenCalledWith({
-      data: { email: 'user@example.com', nickname: 'user', passwordHash: 'hash' },
+      data: { email: 'user@example.com', name: 'user', passwordHash: 'hash' },
     });
   });
 
-  it('не нормализует nickname', async () => {
+  it('не нормализует name', async () => {
     await service.create({
       email: 'user@example.com',
-      nickname: '  Ada Lovelace ',
+      name: '  Ada Lovelace ',
       passwordHash: 'hash',
     });
 
     expect(user.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ nickname: '  Ada Lovelace ' }) }),
+      expect.objectContaining({ data: expect.objectContaining({ name: '  Ada Lovelace ' }) }),
     );
   });
 

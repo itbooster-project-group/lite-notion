@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiBody,
   ApiConflictResponse,
   ApiCreatedResponse,
   ApiNoContentResponse,
@@ -21,23 +22,20 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
-
+import { type AuthenticatedUser, CurrentUser } from '../common/decorators/current-user.decorator';
+import { Public } from '../common/decorators/public.decorator';
 import { type ApplicationConfig, applicationConfig } from '../config/application-config';
 import { HttpErrorResponseDto } from '../http-error-response.dto';
 import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
-import { type AuthenticatedUser, CurrentUser } from './current-user.decorator';
+import { REFRESH_COOKIE_NAME } from './constants';
 import { AuthResponseDto, TokenResponseDto, UserProfileDto } from './dto/auth-response.dto';
 // Не `import type`: emitDecoratorMetadata кладёт в design:paramtypes рантайм-ссылку
 // на класс, и без неё ValidationPipe молча перестаёт валидировать тело запроса.
-import { LoginDto, RegisterDto } from './dto/register.dto';
-import { Public } from './public.decorator';
-import {
-  createClearRefreshCookieOptions,
-  createRefreshCookieOptions,
-  REFRESH_COOKIE_NAME,
-} from './refresh-cookie';
-import type { IssuedSession, SessionOrigin } from './session.service';
+import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
+import { createClearRefreshCookieOptions, createRefreshCookieOptions } from './helpers';
+import { type IssuedSession, type SessionOrigin, SessionService } from './session/session.service';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -45,11 +43,13 @@ export class AuthController {
   constructor(
     @Inject(applicationConfig.KEY) private readonly config: ApplicationConfig,
     @Inject(AuthService) private readonly authService: AuthService,
+    @Inject(SessionService) private readonly sessions: SessionService,
     @Inject(UsersService) private readonly users: UsersService,
   ) {}
 
   @Post('register')
   @Public()
+  @ApiBody({ type: RegisterDto })
   @ApiOperation({ operationId: 'register', summary: 'Create an account and open a session' })
   @ApiCreatedResponse({ description: 'Account created', type: AuthResponseDto })
   @ApiConflictResponse({ description: 'Email is already registered', type: HttpErrorResponseDto })
@@ -68,6 +68,7 @@ export class AuthController {
   @Post('login')
   @Public()
   @HttpCode(HttpStatus.OK)
+  @ApiBody({ type: LoginDto })
   @ApiOperation({ operationId: 'login', summary: 'Sign in with email and password' })
   @ApiOkResponse({ description: 'Signed in', type: AuthResponseDto })
   @ApiUnauthorizedResponse({ description: 'Invalid credentials', type: HttpErrorResponseDto })
@@ -102,7 +103,7 @@ export class AuthController {
     let session: IssuedSession;
 
     try {
-      session = await this.authService.rotate(refreshToken, this.readOrigin(request));
+      session = await this.sessions.rotate(refreshToken, this.readOrigin(request));
     } catch (error) {
       // Чистим cookie, чтобы браузер перестал долбиться мёртвым токеном
       // и клиент сразу ушёл на форму входа.
@@ -126,7 +127,7 @@ export class AuthController {
     @CurrentUser() user: AuthenticatedUser,
     @Res({ passthrough: true }) response: Response,
   ): Promise<void> {
-    await this.authService.logout(user.sessionId);
+    await this.sessions.logout(user.sessionId);
 
     this.clearRefreshCookie(response);
   }
@@ -141,7 +142,7 @@ export class AuthController {
     @CurrentUser() user: AuthenticatedUser,
     @Res({ passthrough: true }) response: Response,
   ): Promise<void> {
-    await this.authService.logoutEverywhere(user.id);
+    await this.sessions.logoutEverywhere(user.id);
 
     this.clearRefreshCookie(response);
   }

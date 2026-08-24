@@ -42,7 +42,7 @@
 
 ## 7. HTTP-слой и подключение модуля
 
-- [x] 7.1 Реализовать DTO в `src/auth/dto/`: `RegisterDto` (email, nickname, пароль 8…72), `LoginDto`, `AuthResponseDto`, `UserProfileDto`, с нормализацией email трансформацией и Swagger-декораторами. Проверка: HTTP-тест подтверждает `400` на некорректном email, коротком пароле и лишнем поле.
+- [x] 7.1 Реализовать DTO в `src/auth/dto/`: `RegisterDto` (email, name, пароль 8…72), `LoginDto`, `AuthResponseDto`, `UserProfileDto`, с нормализацией email трансформацией и Swagger-декораторами. Проверка: HTTP-тест подтверждает `400` на некорректном email, коротком пароле и лишнем поле.
 - [x] 7.2 Реализовать `auth.controller.ts` с маршрутами `register`, `login`, `refresh`, `logout`, выходом со всех устройств и `me`; контроллер только вызывает сервисы и управляет cookie. Проверка: `auth.controller.spec.ts` подтверждает установку и очистку cookie и отсутствие бизнес-логики в обработчиках.
 - [x] 7.3 Убедиться, что ни один ответ не содержит пароль, его хеш, refresh-токен или его хеш. Проверка: тест проходит по телам ответов `register`, `login`, `refresh` и `me` и утверждает отсутствие соответствующих полей.
 - [x] 7.4 Зарегистрировать `AuthModule`, `UsersModule` и `ScheduleModule.forRoot()` в `app.module.ts`. Проверка: `pnpm --filter @lite-notion/api build` проходит, приложение поднимается при недоступной базе, как раньше.

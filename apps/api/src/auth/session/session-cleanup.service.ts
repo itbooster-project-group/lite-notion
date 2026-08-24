@@ -1,20 +1,13 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-
-import { SessionRepository } from './session.repository';
-
-/**
- * Отозванные строки удаляются не сразу: 30 секунд из них нужны grace-периоду,
- * а сверх того они остаются следом для расследования сработавшего обнаружения
- * повторного использования.
- */
-export const REVOKED_SESSION_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+import { AuthRepository } from '../auth.repository';
+import { REVOKED_SESSION_RETENTION_MS } from '../constants';
 
 @Injectable()
 export class SessionCleanupService {
   private readonly logger = new Logger(SessionCleanupService.name);
 
-  constructor(@Inject(SessionRepository) private readonly sessions: SessionRepository) {}
+  constructor(@Inject(AuthRepository) private readonly sessions: AuthRepository) {}
 
   /**
    * Задача идемпотентна, поэтому запуск на нескольких инстансах API безвреден.

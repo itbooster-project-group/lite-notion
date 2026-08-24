@@ -1,24 +1,25 @@
 import { Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SessionRepository } from './session.repository';
-import { InMemorySessionRepository } from './session.repository.in-memory';
-import { REVOKED_SESSION_RETENTION_MS, SessionCleanupService } from './session-cleanup.service';
+import { AuthRepository } from '../auth.repository';
+import { InMemoryAuthRepository } from '../auth.repository.in-memory';
+import { REVOKED_SESSION_RETENTION_MS } from '../constants';
+import { SessionCleanupService } from '../session/session-cleanup.service';
 
 const now = new Date('2026-08-21T12:00:00.000Z');
 
 describe('SessionCleanupService', () => {
   let service: SessionCleanupService;
-  let repository: InMemorySessionRepository;
+  let repository: InMemoryAuthRepository;
 
   beforeEach(async () => {
     vi.useFakeTimers();
     vi.setSystemTime(now);
 
-    repository = new InMemorySessionRepository();
+    repository = new InMemoryAuthRepository();
 
     const moduleRef = await Test.createTestingModule({
-      providers: [SessionCleanupService, { provide: SessionRepository, useValue: repository }],
+      providers: [SessionCleanupService, { provide: AuthRepository, useValue: repository }],
     }).compile();
 
     service = moduleRef.get(SessionCleanupService);

@@ -45,7 +45,7 @@ Refresh делается opaque, а не вторым JWT: подписанны�
 model User {
   id           String    @id @default(uuid()) @db.Uuid
   email        String    @unique
-  nickname     String
+  name         String
   passwordHash String
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt

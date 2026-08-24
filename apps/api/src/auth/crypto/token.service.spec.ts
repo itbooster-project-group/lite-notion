@@ -2,8 +2,8 @@ import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { applicationConfig } from '../config/application-config';
-import { TokenService } from './token.service';
+import { applicationConfig } from '../../config/application-config';
+import { TokenService } from '../crypto/token.service';
 
 const jwtSecret = 'test-jwt-secret-value-at-least-32-chars';
 const accessTokenTtlS = 900;

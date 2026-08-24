@@ -6,7 +6,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 
-import { Public } from '../auth/public.decorator';
+import { Public } from '../common/decorators/public.decorator';
 import { HttpErrorResponseDto } from '../http-error-response.dto';
 import { HealthResponseDto } from './health.dto';
 import { HealthService } from './health.service';

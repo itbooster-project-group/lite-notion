@@ -2,10 +2,9 @@ import { type INestApplication, ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, type OpenAPIObject, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 
+import { API_GLOBAL_PREFIX } from './common/constants';
 import type { ApplicationConfig } from './config/application-config';
 import { NodeEnvironment } from './config/environment';
-
-export const API_GLOBAL_PREFIX = 'api/v1';
 
 type ApplicationEnvironment = Pick<ApplicationConfig, 'corsOrigin' | 'nodeEnvironment'>;
 type CorsCallback = (error: Error | null, allow?: boolean) => void;

@@ -11,5 +11,7 @@ export * from './healthResponseDto';
 export * from './healthResponseDtoDatabase';
 export * from './healthResponseDtoStatus';
 export * from './httpErrorResponseDto';
+export * from './loginDto';
+export * from './registerDto';
 export * from './tokenResponseDto';
 export * from './userProfileDto';

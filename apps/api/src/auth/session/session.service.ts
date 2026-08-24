@@ -1,16 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 
-import { type ApplicationConfig, applicationConfig } from '../config/application-config';
-import { type SessionRecord, SessionRepository } from './session.repository';
-import { TokenService } from './token.service';
-
-/**
- * Окно, в течение которого отозванная ротацией сессия ещё принимается. Покрывает
- * гонку параллельных запросов клиента и повтор после потерянного ответа; за его
- * пределами предъявление отозванной сессии означает утечку токена.
- */
-export const REFRESH_GRACE_PERIOD_MS = 30_000;
+import { type ApplicationConfig, applicationConfig } from '../../config/application-config';
+import type { CreateUserInput, UserRecord } from '../../users/users.service';
+import { AuthRepository, type SessionRecord } from '../auth.repository';
+import { REFRESH_GRACE_PERIOD_MS } from '../constants';
+import { TokenService } from '../crypto/token.service';
 
 export interface SessionOrigin {
   userAgent: string | null;
@@ -28,14 +23,14 @@ export interface IssuedSession {
 export class SessionService {
   constructor(
     @Inject(applicationConfig.KEY) private readonly config: ApplicationConfig,
-    @Inject(SessionRepository) private readonly sessions: SessionRepository,
+    @Inject(AuthRepository) private readonly repository: AuthRepository,
     @Inject(TokenService) private readonly tokens: TokenService,
   ) {}
 
   /** Новый вход: новая цепочка ротаций, не связанная с уже открытыми устройствами. */
   async issue(userId: string, origin: SessionOrigin): Promise<IssuedSession> {
     const refreshToken = this.tokens.generateRefreshToken();
-    const session = await this.sessions.create({
+    const session = await this.repository.create({
       expiresAt: this.nextExpiry(),
       familyId: randomUUID(),
       ip: origin.ip,
@@ -47,8 +42,33 @@ export class SessionService {
     return this.toIssuedSession(session, refreshToken);
   }
 
+  /**
+   * Регистрация: учётная запись и её первая сессия создаются одной транзакцией для соблюдения атомарности
+   */
+  async issueForNewUser(
+    user: CreateUserInput,
+    origin: SessionOrigin,
+  ): Promise<{ session: IssuedSession; user: UserRecord }> {
+    const refreshToken = this.tokens.generateRefreshToken();
+    const created = await this.repository.createUserWithSession({
+      session: {
+        expiresAt: this.nextExpiry(),
+        familyId: randomUUID(),
+        ip: origin.ip,
+        tokenHash: this.tokens.hashRefreshToken(refreshToken),
+        userAgent: origin.userAgent,
+      },
+      user,
+    });
+
+    return {
+      session: await this.toIssuedSession(created.session, refreshToken),
+      user: created.user,
+    };
+  }
+
   async rotate(refreshToken: string, origin: SessionOrigin): Promise<IssuedSession> {
-    const presented = await this.sessions.findByTokenHash(
+    const presented = await this.repository.findByTokenHash(
       this.tokens.hashRefreshToken(refreshToken),
     );
 
@@ -64,13 +84,13 @@ export class SessionService {
       // Токен предъявлен позже grace-периода, а цепочка уже ротирована — значит
       // копия токена есть у кого-то ещё. Отзываем цепочку целиком, включая
       // действующую голову, и заставляем владельца войти заново.
-      await this.sessions.revokeFamily(presented.familyId);
+      await this.repository.revokeFamily(presented.familyId);
 
       throw new UnauthorizedException('Invalid refresh token');
     }
 
     const nextRefreshToken = this.tokens.generateRefreshToken();
-    const created = await this.sessions.rotate({
+    const created = await this.repository.rotate({
       expiresAt: this.nextExpiry(),
       familyId: presented.familyId,
       ip: origin.ip,
@@ -91,13 +111,13 @@ export class SessionService {
     return this.toIssuedSession(created, nextRefreshToken);
   }
 
-  /** Удаляет цепочку целиком, а не одну сессию: см. комментарий в `SessionRepository`. */
+  /** Удаляет цепочку целиком, а не одну сессию: см. комментарий в `AuthRepository`. */
   logout(sessionId: string): Promise<void> {
-    return this.sessions.deleteFamilyBySessionId(sessionId);
+    return this.repository.deleteFamilyBySessionId(sessionId);
   }
 
   logoutEverywhere(userId: string): Promise<void> {
-    return this.sessions.deleteAllForUser(userId);
+    return this.repository.deleteAllForUser(userId);
   }
 
   private isReuse(session: SessionRecord): boolean {

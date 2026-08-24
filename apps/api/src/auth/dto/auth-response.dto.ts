@@ -14,7 +14,7 @@ export class UserProfileDto {
   email!: string;
 
   @ApiProperty({ example: 'Ada', type: String })
-  nickname!: string;
+  name!: string;
 
   @ApiProperty({ example: '2026-08-21T12:00:00.000Z', format: 'date-time', type: String })
   createdAt!: Date;
@@ -24,7 +24,7 @@ export class UserProfileDto {
       createdAt: user.createdAt,
       email: user.email,
       id: user.id,
-      nickname: user.nickname,
+      name: user.name,
     };
   }
 }

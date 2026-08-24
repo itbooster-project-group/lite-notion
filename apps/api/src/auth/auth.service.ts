@@ -1,18 +1,15 @@
 import { ConflictException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 
-import { normalizeEmail, type UserRecord, UsersService } from '../users/users.service';
-import { PasswordService } from './password.service';
-import { type IssuedSession, type SessionOrigin, SessionService } from './session.service';
-
-/**
- * Единственное сообщение для обеих причин отказа. Разные тексты позволили бы
- * перебором выяснить, какие адреса зарегистрированы.
- */
-const INVALID_CREDENTIALS_MESSAGE = 'Invalid email or password';
+import { normalizeEmail } from '../common/helpers';
+import { type UserRecord, UsersService } from '../users/users.service';
+import { EMAIL_ALREADY_REGISTERED_MESSAGE, INVALID_CREDENTIALS_MESSAGE } from './constants';
+import { PasswordService } from './crypto/password.service';
+import { EmailAlreadyRegisteredError } from './errors';
+import { type IssuedSession, type SessionOrigin, SessionService } from './session/session.service';
 
 export interface RegisterInput {
   email: string;
-  nickname: string;
+  name: string;
   password: string;
 }
 
@@ -37,17 +34,24 @@ export class AuthService {
   async register(input: RegisterInput, origin: SessionOrigin): Promise<AuthenticatedResult> {
     const email = normalizeEmail(input.email);
 
+    // Быстрый путь: отвечает конфликтом, не доводя дело до уникального индекса.
+    // Гарантией он не является — параллельный запрос помещается между проверкой
+    // и вставкой, поэтому ниже отдельно разбирается отказ самого индекса.
     if ((await this.users.findByEmail(email)) !== null) {
-      throw new ConflictException('Email is already registered');
+      throw new ConflictException(EMAIL_ALREADY_REGISTERED_MESSAGE);
     }
 
-    const user = await this.users.create({
-      email,
-      nickname: input.nickname,
-      passwordHash: await this.passwords.hash(input.password),
-    });
+    const passwordHash = await this.passwords.hash(input.password);
 
-    return { session: await this.sessions.issue(user.id, origin), user };
+    try {
+      return await this.sessions.issueForNewUser({ email, name: input.name, passwordHash }, origin);
+    } catch (error) {
+      if (error instanceof EmailAlreadyRegisteredError) {
+        throw new ConflictException(EMAIL_ALREADY_REGISTERED_MESSAGE);
+      }
+
+      throw error;
+    }
   }
 
   async login(input: LoginInput, origin: SessionOrigin): Promise<AuthenticatedResult> {
@@ -67,17 +71,5 @@ export class AuthService {
     }
 
     return { session: await this.sessions.issue(user.id, origin), user };
-  }
-
-  rotate(refreshToken: string, origin: SessionOrigin): Promise<IssuedSession> {
-    return this.sessions.rotate(refreshToken, origin);
-  }
-
-  logout(sessionId: string): Promise<void> {
-    return this.sessions.logout(sessionId);
-  }
-
-  logoutEverywhere(userId: string): Promise<void> {
-    return this.sessions.logoutEverywhere(userId);
   }
 }

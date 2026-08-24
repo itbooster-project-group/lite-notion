@@ -5,13 +5,15 @@ import { PassportModule } from '@nestjs/passport';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-
-import { applicationConfig } from '../config/application-config';
-import { PrismaService } from '../database/prisma.service';
-import { type AuthenticatedUser, CurrentUser } from './current-user.decorator';
-import { JwtStrategy } from './jwt.strategy';
+import {
+  type AuthenticatedUser,
+  CurrentUser,
+} from '../../common/decorators/current-user.decorator';
+import { Public } from '../../common/decorators/public.decorator';
+import { applicationConfig } from '../../config/application-config';
+import { PrismaService } from '../../database/prisma.service';
+import { JwtStrategy } from '../jwt.strategy';
 import { JwtAuthGuard } from './jwt-auth.guard';
-import { Public } from './public.decorator';
 
 const jwtSecret = 'test-jwt-secret-value-at-least-32-chars';
 const prisma = { session: { findUnique: vi.fn() }, user: { findUnique: vi.fn() } };

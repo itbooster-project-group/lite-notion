@@ -3,11 +3,12 @@ import { JwtModule } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { applicationConfig } from '../config/application-config';
-import { SessionRepository } from './session.repository';
-import { InMemorySessionRepository } from './session.repository.in-memory';
-import { REFRESH_GRACE_PERIOD_MS, SessionService } from './session.service';
-import { TokenService } from './token.service';
+import { applicationConfig } from '../../config/application-config';
+import { AuthRepository } from '../auth.repository';
+import { InMemoryAuthRepository } from '../auth.repository.in-memory';
+import { REFRESH_GRACE_PERIOD_MS } from '../constants';
+import { TokenService } from '../crypto/token.service';
+import { SessionService } from '../session/session.service';
 
 const accessTokenTtlS = 900;
 const refreshTokenTtlS = 2_592_000;
@@ -16,20 +17,20 @@ const origin = { ip: '127.0.0.1', userAgent: 'vitest' };
 
 describe('SessionService', () => {
   let service: SessionService;
-  let repository: InMemorySessionRepository;
+  let repository: InMemoryAuthRepository;
 
   beforeEach(async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-21T12:00:00.000Z'));
 
-    repository = new InMemorySessionRepository();
+    repository = new InMemoryAuthRepository();
 
     const moduleRef = await Test.createTestingModule({
       imports: [JwtModule.register({ secret: jwtSecret })],
       providers: [
         SessionService,
         TokenService,
-        { provide: SessionRepository, useValue: repository },
+        { provide: AuthRepository, useValue: repository },
         {
           provide: applicationConfig.KEY,
           useValue: { accessTokenTtlS, jwtSecret, refreshTokenTtlS },

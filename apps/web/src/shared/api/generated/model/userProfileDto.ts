@@ -9,6 +9,6 @@
 export interface UserProfileDto {
   id: string;
   email: string;
-  nickname: string;
+  name: string;
   createdAt: string;
 }

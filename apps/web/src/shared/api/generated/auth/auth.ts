@@ -21,12 +21,14 @@ import type {
   UseQueryResult,
 } from '@tanstack/react-query';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import type { ErrorType } from '../../api-fetch';
+import type { BodyType, ErrorType } from '../../api-fetch';
 
 import { apiFetch } from '../../api-fetch';
 import type {
   AuthResponseDto,
   HttpErrorResponseDto,
+  LoginDto,
+  RegisterDto,
   TokenResponseDto,
   UserProfileDto,
 } from '../model';
@@ -56,11 +58,14 @@ export const getRegisterUrl = () => {
  * @summary Create an account and open a session
  */
 export const register = async (
+  registerDto: RegisterDto,
   options?: Parameters<typeof apiFetch>[1],
 ): Promise<AuthResponseDto> => {
   return apiFetch<AuthResponseDto>(getRegisterUrl(), {
     ...options,
     method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(registerDto),
   });
 };
 
@@ -68,9 +73,19 @@ export const getRegisterMutationOptions = <
   TError = ErrorType<HttpErrorResponseDto>,
   TContext = unknown,
 >(options?: {
-  mutation?: UseMutationOptions<Awaited<ReturnType<typeof register>>, TError, void, TContext>;
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof register>>,
+    TError,
+    { data: BodyType<RegisterDto> },
+    TContext
+  >;
   request?: SecondParameter<typeof apiFetch>;
-}): UseMutationOptions<Awaited<ReturnType<typeof register>>, TError, void, TContext> => {
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof register>>,
+  TError,
+  { data: BodyType<RegisterDto> },
+  TContext
+> => {
   const mutationKey = ['register'];
   const { mutation: mutationOptions, request: requestOptions } = options
     ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
@@ -78,15 +93,20 @@ export const getRegisterMutationOptions = <
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, request: undefined };
 
-  const mutationFn: MutationFunction<Awaited<ReturnType<typeof register>>, void> = () => {
-    return register(requestOptions);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof register>>,
+    { data: BodyType<RegisterDto> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return register(data, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
 };
 
 export type RegisterMutationResult = NonNullable<Awaited<ReturnType<typeof register>>>;
-
+export type RegisterMutationBody = BodyType<RegisterDto>;
 export type RegisterMutationError = ErrorType<HttpErrorResponseDto>;
 
 /**
@@ -94,11 +114,21 @@ export type RegisterMutationError = ErrorType<HttpErrorResponseDto>;
  */
 export const useRegister = <TError = ErrorType<HttpErrorResponseDto>, TContext = unknown>(
   options?: {
-    mutation?: UseMutationOptions<Awaited<ReturnType<typeof register>>, TError, void, TContext>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof register>>,
+      TError,
+      { data: BodyType<RegisterDto> },
+      TContext
+    >;
     request?: SecondParameter<typeof apiFetch>;
   },
   queryClient?: QueryClient,
-): UseMutationResult<Awaited<ReturnType<typeof register>>, TError, void, TContext> => {
+): UseMutationResult<
+  Awaited<ReturnType<typeof register>>,
+  TError,
+  { data: BodyType<RegisterDto> },
+  TContext
+> => {
   return useMutation(getRegisterMutationOptions(options), queryClient);
 };
 export const getLoginUrl = () => {
@@ -108,10 +138,15 @@ export const getLoginUrl = () => {
 /**
  * @summary Sign in with email and password
  */
-export const login = async (options?: Parameters<typeof apiFetch>[1]): Promise<AuthResponseDto> => {
+export const login = async (
+  loginDto: LoginDto,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<AuthResponseDto> => {
   return apiFetch<AuthResponseDto>(getLoginUrl(), {
     ...options,
     method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(loginDto),
   });
 };
 
@@ -119,9 +154,19 @@ export const getLoginMutationOptions = <
   TError = ErrorType<HttpErrorResponseDto>,
   TContext = unknown,
 >(options?: {
-  mutation?: UseMutationOptions<Awaited<ReturnType<typeof login>>, TError, void, TContext>;
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof login>>,
+    TError,
+    { data: BodyType<LoginDto> },
+    TContext
+  >;
   request?: SecondParameter<typeof apiFetch>;
-}): UseMutationOptions<Awaited<ReturnType<typeof login>>, TError, void, TContext> => {
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof login>>,
+  TError,
+  { data: BodyType<LoginDto> },
+  TContext
+> => {
   const mutationKey = ['login'];
   const { mutation: mutationOptions, request: requestOptions } = options
     ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
@@ -129,15 +174,20 @@ export const getLoginMutationOptions = <
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, request: undefined };
 
-  const mutationFn: MutationFunction<Awaited<ReturnType<typeof login>>, void> = () => {
-    return login(requestOptions);
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof login>>,
+    { data: BodyType<LoginDto> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return login(data, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
 };
 
 export type LoginMutationResult = NonNullable<Awaited<ReturnType<typeof login>>>;
-
+export type LoginMutationBody = BodyType<LoginDto>;
 export type LoginMutationError = ErrorType<HttpErrorResponseDto>;
 
 /**
@@ -145,11 +195,21 @@ export type LoginMutationError = ErrorType<HttpErrorResponseDto>;
  */
 export const useLogin = <TError = ErrorType<HttpErrorResponseDto>, TContext = unknown>(
   options?: {
-    mutation?: UseMutationOptions<Awaited<ReturnType<typeof login>>, TError, void, TContext>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof login>>,
+      TError,
+      { data: BodyType<LoginDto> },
+      TContext
+    >;
     request?: SecondParameter<typeof apiFetch>;
   },
   queryClient?: QueryClient,
-): UseMutationResult<Awaited<ReturnType<typeof login>>, TError, void, TContext> => {
+): UseMutationResult<
+  Awaited<ReturnType<typeof login>>,
+  TError,
+  { data: BodyType<LoginDto> },
+  TContext
+> => {
   return useMutation(getLoginMutationOptions(options), queryClient);
 };
 export const getRefreshTokensUrl = () => {

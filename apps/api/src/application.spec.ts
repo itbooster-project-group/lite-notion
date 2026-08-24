@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AppModule } from './app.module';
 import { configureApplication } from './application';
-import { Public } from './auth/public.decorator';
+import { Public } from './common/decorators/public.decorator';
 import { NodeEnvironment } from './config/environment';
 import { PrismaService } from './database/prisma.service';
 
@@ -245,6 +245,25 @@ describe('application HTTP configuration', () => {
       path: '/api/docs-yaml',
       statusCode: 404,
     });
+  });
+
+  it('описывает тело запроса для register и login в OpenAPI', async () => {
+    const { body } = await request(app.getHttpServer()).get('/api/openapi.json').expect(200);
+
+    expect(body.paths['/api/v1/auth/register'].post.requestBody).toEqual({
+      content: {
+        'application/json': { schema: { $ref: '#/components/schemas/RegisterDto' } },
+      },
+      required: true,
+    });
+    expect(body.paths['/api/v1/auth/login'].post.requestBody).toEqual({
+      content: {
+        'application/json': { schema: { $ref: '#/components/schemas/LoginDto' } },
+      },
+      required: true,
+    });
+    expect(body.components.schemas.RegisterDto.required).toEqual(['email', 'name', 'password']);
+    expect(body.components.schemas.LoginDto.required).toEqual(['email', 'password']);
   });
 
   it('не публикует Swagger endpoints в production', async () => {

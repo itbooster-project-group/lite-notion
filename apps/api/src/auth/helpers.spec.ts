@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import { NodeEnvironment } from '../config/environment';
+import { REFRESH_COOKIE_PATH } from './constants';
 import {
   createClearRefreshCookieOptions,
   createRefreshCookieOptions,
-  REFRESH_COOKIE_PATH,
-} from './refresh-cookie';
+  exceedsPasswordByteLimit,
+  passwordByteLength,
+} from './helpers';
 
 describe('createRefreshCookieOptions', () => {
   it('в development использует SameSite=Lax без Secure', () => {
@@ -60,5 +62,31 @@ describe('createClearRefreshCookieOptions', () => {
     );
 
     expect(createClearRefreshCookieOptions(NodeEnvironment.Production)).toEqual(setOptions);
+  });
+});
+
+describe('passwordByteLength / exceedsPasswordByteLimit', () => {
+  it('считает длину в байтах UTF-8, а не в символах', () => {
+    expect(passwordByteLength('a'.repeat(40))).toBe(40);
+    expect(passwordByteLength('п'.repeat(40))).toBe(80);
+    expect('п'.repeat(40)).toHaveLength(40);
+  });
+
+  it.each([
+    ['72 ASCII-символа', 'a'.repeat(72), 72],
+    ['36 символов кириллицы', 'п'.repeat(36), 72],
+    ['18 emoji', '😀'.repeat(18), 72],
+  ])('укладывает %s в лимит', (_case, password, expectedBytes) => {
+    expect(passwordByteLength(password)).toBe(expectedBytes);
+    expect(exceedsPasswordByteLimit(password)).toBe(false);
+  });
+
+  it.each([
+    ['73 ASCII-символа', 'a'.repeat(73), 73],
+    ['40 символов кириллицы, проходящих проверку по символам', 'п'.repeat(40), 80],
+    ['36 emoji, проходящих проверку по символам', '😀'.repeat(36), 144],
+  ])('выводит %s за лимит', (_case, password, expectedBytes) => {
+    expect(passwordByteLength(password)).toBe(expectedBytes);
+    expect(exceedsPasswordByteLimit(password)).toBe(true);
   });
 });

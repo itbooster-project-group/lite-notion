@@ -8,14 +8,14 @@ import { applicationConfig } from '../config/application-config';
 import { DatabaseModule } from '../database/database.module';
 import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
+import { AuthRepository, PrismaAuthRepository } from './auth.repository';
 import { AuthService } from './auth.service';
+import { PasswordService } from './crypto/password.service';
+import { TokenService } from './crypto/token.service';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtStrategy } from './jwt.strategy';
-import { JwtAuthGuard } from './jwt-auth.guard';
-import { PasswordService } from './password.service';
-import { PrismaSessionRepository, SessionRepository } from './session.repository';
-import { SessionService } from './session.service';
-import { SessionCleanupService } from './session-cleanup.service';
-import { TokenService } from './token.service';
+import { SessionService } from './session/session.service';
+import { SessionCleanupService } from './session/session-cleanup.service';
 
 @Module({
   controllers: [AuthController],
@@ -36,7 +36,7 @@ import { TokenService } from './token.service';
     SessionCleanupService,
     SessionService,
     TokenService,
-    { provide: SessionRepository, useClass: PrismaSessionRepository },
+    { provide: AuthRepository, useClass: PrismaAuthRepository },
     // Закрывает все маршруты приложения; публичные помечаются через @Public().
     { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],

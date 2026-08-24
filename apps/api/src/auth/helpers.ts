@@ -1,13 +1,14 @@
-import { API_GLOBAL_PREFIX } from '../application';
 import { NodeEnvironment } from '../config/environment';
+import { Prisma } from '../generated/prisma/client';
+import { PASSWORD_MAX_BYTES, REFRESH_COOKIE_PATH } from './constants';
 
-export const REFRESH_COOKIE_NAME = 'refresh_token';
+export function passwordByteLength(password: string): number {
+  return Buffer.byteLength(password, 'utf8');
+}
 
-/**
- * Cookie ограничена путём эндпоинтов аутентификации: на остальные маршруты
- * refresh-токен не отправляется, потому что они авторизуются bearer-токеном.
- */
-export const REFRESH_COOKIE_PATH = `/${API_GLOBAL_PREFIX}/auth`;
+export function exceedsPasswordByteLimit(password: string): boolean {
+  return passwordByteLength(password) > PASSWORD_MAX_BYTES;
+}
 
 export interface RefreshCookieOptions {
   httpOnly: true;
@@ -50,4 +51,26 @@ export function createClearRefreshCookieOptions(
     path: REFRESH_COOKIE_PATH,
     ...resolveCrossSiteFlags(nodeEnvironment),
   };
+}
+
+/**
+ * P2002 — нарушение unique constraint. Проверяется именно колонка email: тот же
+ * код прилетает и на `Session.tokenHash`, и перевод его в `409 Email is already
+ * registered` был бы враньём.
+ *
+ * `meta.target` в разных версиях и драйверах бывает и массивом колонок, и строкой
+ * с именем индекса (`User_email_key`), поэтому разбираются оба варианта.
+ */
+export function isUniqueEmailViolation(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
+    return false;
+  }
+
+  const target = error.meta?.target;
+
+  if (Array.isArray(target)) {
+    return target.includes('email');
+  }
+
+  return typeof target === 'string' && target.includes('email');
 }

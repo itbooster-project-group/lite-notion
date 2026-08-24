@@ -19,7 +19,7 @@ export const getRegisterResponseMock = (
   user: {
     id: faker.string.uuid(),
     email: faker.internet.email(),
-    nickname: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    name: faker.string.alpha({ length: { min: 10, max: 20 } }),
     createdAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
   },
   ...overrideResponse,
@@ -33,7 +33,7 @@ export const getLoginResponseMock = (
   user: {
     id: faker.string.uuid(),
     email: faker.internet.email(),
-    nickname: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    name: faker.string.alpha({ length: { min: 10, max: 20 } }),
     createdAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
   },
   ...overrideResponse,
@@ -52,7 +52,7 @@ export const getGetCurrentUserResponseMock = (
 ): UserProfileDto => ({
   id: faker.string.uuid(),
   email: faker.internet.email(),
-  nickname: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  name: faker.string.alpha({ length: { min: 10, max: 20 } }),
   createdAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
   ...overrideResponse,
 });
