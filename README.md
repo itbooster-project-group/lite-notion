@@ -136,12 +136,24 @@ PORT=4000 pnpm dev:api
 
 ## Prisma и API-контракт
 
-Текущая Prisma schema пока не содержит продуктовых моделей. Основные команды:
+Текущая Prisma schema содержит модели `User` и `Session`. Основные команды:
 
 ```bash
 pnpm --filter @lite-notion/api prisma:generate
 pnpm --filter @lite-notion/api db:migrate:dev
 pnpm --filter @lite-notion/api db:studio
+```
+
+`db:migrate:dev` создаёт новую миграцию после изменения Prisma schema и применяет все неприменённые миграции к локальной базе. Если именованный PostgreSQL volume был создан до появления текущей истории миграций либо Prisma сообщает о schema drift или непустой схеме без migration history, пересоздайте локальную базу:
+
+```bash
+pnpm --filter @lite-notion/api exec prisma migrate reset
+```
+
+Команда `migrate reset` удаляет все данные из локальной базы, заново создаёт схему и применяет все миграции. Используйте её только для локальной разработки. В CI и production применяйте уже созданные миграции без сброса данных:
+
+```bash
+pnpm --filter @lite-notion/api db:migrate:deploy
 ```
 
 После изменения Swagger decorators или DTO обновите коммитируемый OpenAPI snapshot, TanStack Query hooks и MSW handlers:
