@@ -47,9 +47,11 @@ export function SessionProvider({ children }: SessionProviderProps) {
   const currentUserQuery = useGetCurrentUser({ query: { enabled: false, retry: false } });
   const [status, setStatus] = useState<SessionStatus>('loading');
   const [transportReady, setTransportReady] = useState(false);
+  const lifecycleGeneration = useRef(0);
   const restorePromise = useRef<Promise<void> | undefined>(undefined);
 
   const clearSession = useCallback(() => {
+    lifecycleGeneration.current += 1;
     clearAccessToken();
     queryClient.removeQueries({ queryKey: getGetCurrentUserQueryKey() });
     setStatus('unauthenticated');
@@ -67,6 +69,7 @@ export function SessionProvider({ children }: SessionProviderProps) {
     setTransportReady(true);
 
     return () => {
+      lifecycleGeneration.current += 1;
       removeConfiguration();
     };
   }, [clearSession]);
@@ -77,15 +80,30 @@ export function SessionProvider({ children }: SessionProviderProps) {
     }
 
     setStatus('loading');
+    const restoreGeneration = lifecycleGeneration.current;
 
     const pendingRestore = (async () => {
       try {
-        await refreshAccessToken();
+        const refreshOutcome = await refreshAccessToken();
+
+        if (refreshOutcome === 'superseded' || lifecycleGeneration.current !== restoreGeneration) {
+          return;
+        }
+
         await queryClient.fetchQuery(
           getGetCurrentUserQueryOptions({ query: { retry: false, staleTime: 60_000 } }),
         );
+
+        if (lifecycleGeneration.current !== restoreGeneration) {
+          return;
+        }
+
         setStatus('authenticated');
       } catch (error) {
+        if (lifecycleGeneration.current !== restoreGeneration) {
+          return;
+        }
+
         if (isUnauthorized(error)) {
           clearSession();
           return;
@@ -110,6 +128,7 @@ export function SessionProvider({ children }: SessionProviderProps) {
 
   const authenticate = useCallback(
     (response: AuthResponseDto) => {
+      lifecycleGeneration.current += 1;
       setAccessToken(response.accessToken);
       queryClient.setQueryData(getGetCurrentUserQueryKey(), response.user);
       setStatus('authenticated');

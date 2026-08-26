@@ -61,6 +61,15 @@ async function fillRegistration() {
 }
 
 describe('LoginForm', () => {
+  it('сохраняет безопасный next в ссылке регистрации', async () => {
+    renderWithSession(<LoginForm />);
+
+    expect(await screen.findByRole('link', { name: 'Зарегистрироваться' })).toHaveAttribute(
+      'href',
+      '/register?next=%2Fprofile',
+    );
+  });
+
   it('не отправляет невалидную форму', async () => {
     const loginRequest = vi.fn();
     server.use(
@@ -151,6 +160,15 @@ describe('LoginForm', () => {
 });
 
 describe('RegisterForm', () => {
+  it('сохраняет безопасный next в ссылке входа', async () => {
+    renderWithSession(<RegisterForm />);
+
+    expect(await screen.findByRole('link', { name: 'Войти' })).toHaveAttribute(
+      'href',
+      '/login?next=%2Fprofile',
+    );
+  });
+
   it('регистрирует через generated client без поля confirmation', async () => {
     let requestBody: unknown;
     server.use(

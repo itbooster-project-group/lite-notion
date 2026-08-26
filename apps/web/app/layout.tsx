@@ -2,9 +2,9 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import type { ReactNode } from 'react';
 
-import '@/_app/styles/globals.css';
+import '@/app/styles/globals.css';
 
-import { AppProviders } from '@/_app/providers';
+import { AppProviders } from '@/app/bootstrap';
 import { cn } from '@/shared/lib/cn';
 
 const inter = Inter({ subsets: ['latin', 'cyrillic'], variable: '--font-sans' });

@@ -1,3 +1,3 @@
-import { AuthLayout } from '@/_app/layouts';
+import { AuthLayout } from '@/app/layouts';
 
 export default AuthLayout;

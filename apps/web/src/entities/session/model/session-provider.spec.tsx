@@ -4,11 +4,15 @@ import { HttpResponse, http } from 'msw';
 import type { PropsWithChildren } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { clearAccessToken } from '@/shared/api';
 import { server } from '@/shared/api/mocks/server';
 
 import { SessionProvider, useSession } from './session-provider';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  clearAccessToken();
+});
 
 function createWrapper() {
   const queryClient = new QueryClient({
@@ -73,5 +77,26 @@ describe('SessionProvider', () => {
     await act(() => result.current.restoreSession());
 
     await waitFor(() => expect(result.current.status).toBe('authenticated'));
+  });
+
+  it('не восстанавливает UI state после очистки во время refresh', async () => {
+    let resolveRefresh: ((response: Response) => void) | undefined;
+    server.use(
+      http.post(
+        '*/api/v1/auth/refresh',
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveRefresh = resolve;
+          }),
+      ),
+    );
+    const { result } = renderHook(() => useSession(), { wrapper: createWrapper() });
+    await waitFor(() => expect(resolveRefresh).toBeTypeOf('function'));
+
+    act(() => result.current.clearSession());
+    resolveRefresh?.(HttpResponse.json({ accessToken: 'stale-token', expiresIn: 900 }));
+
+    await waitFor(() => expect(result.current.status).toBe('unauthenticated'));
+    expect(result.current.user).toBeUndefined();
   });
 });

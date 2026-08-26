@@ -34,7 +34,7 @@ describe('private shell navigation', () => {
     const profileLink = screen.getByRole('link', { name: 'Ada Lovelace' });
     expect(profileLink).toHaveAttribute('href', '/profile');
     expect(profileLink).toHaveAttribute('title', 'Ada Lovelace');
-    expect(profileLink).toHaveClass('max-w-user', 'truncate', 'sm:max-w-user-wide');
+    expect(profileLink).toHaveClass('max-w-24', 'truncate', 'sm:max-w-48');
     expect(profileLink).not.toHaveClass('hidden');
 
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument();

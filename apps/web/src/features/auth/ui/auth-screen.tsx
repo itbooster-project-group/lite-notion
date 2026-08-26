@@ -12,8 +12,8 @@ type AuthScreenProps = Readonly<{
 export function AuthScreen({ children, description, footer, title }: AuthScreenProps) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-muted/30 px-page-inline py-page-block">
-      <div className="w-full max-w-auth space-y-section rounded-2xl border bg-card p-surface shadow-sm">
-        <div className="space-y-field text-center">
+      <div className="w-full max-w-auth space-y-6 rounded-2xl border bg-card p-8 shadow-sm">
+        <div className="space-y-2 text-center">
           <p className="text-sm font-semibold text-primary">Lite Notion</p>
           <Heading as="h1" variant="page">
             {title}
@@ -40,7 +40,7 @@ export function FormField({ children, error, htmlFor, label }: FormFieldProps) {
   const errorId = `${htmlFor}-error`;
 
   return (
-    <div className="space-y-field">
+    <div className="space-y-2">
       <label className="text-sm font-medium" htmlFor={htmlFor}>
         {label}
       </label>

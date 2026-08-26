@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { apiFetch, type ErrorType } from './api-fetch';
-import { clearAccessToken, configureAuthTransport, setAccessToken } from './auth-session';
+import {
+  clearAccessToken,
+  configureAuthTransport,
+  getAccessToken,
+  setAccessToken,
+} from './auth-session';
 
 const cleanups: Array<() => void> = [];
 
@@ -51,6 +56,83 @@ describe('apiFetch auth transport', () => {
     expect(fetchMock).toHaveBeenCalledTimes(4);
     const retryOptions = fetchMock.mock.calls[2]?.[1] as RequestInit;
     expect(new Headers(retryOptions.headers).get('Authorization')).toBe('Bearer access-two');
+  });
+
+  it('не обновляет токен повторно для запоздалого 401 старого поколения', async () => {
+    let releaseSecondUnauthorized: (() => void) | undefined;
+    const fetchMock = vi.fn((input: URL | RequestInfo, options?: RequestInit) => {
+      const path = new URL(String(input)).pathname;
+      const authorization = new Headers(options?.headers).get('Authorization');
+
+      if (authorization === 'Bearer access-one' && path.endsWith('/private-a')) {
+        return Promise.resolve(Response.json({ message: 'Unauthorized' }, { status: 401 }));
+      }
+
+      if (authorization === 'Bearer access-one' && path.endsWith('/private-b')) {
+        return new Promise<Response>((resolve) => {
+          releaseSecondUnauthorized = () =>
+            resolve(Response.json({ message: 'Unauthorized' }, { status: 401 }));
+        });
+      }
+
+      return Promise.resolve(Response.json({ ok: true }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    setAccessToken('access-one');
+    const refresh = vi.fn().mockResolvedValue('access-two');
+    cleanups.push(
+      configureAuthTransport({ refreshAccessToken: refresh, onSessionExpired: vi.fn() }),
+    );
+
+    const firstRequest = apiFetch<{ ok: boolean }>('/api/v1/private-a', { method: 'GET' });
+    const secondRequest = apiFetch<{ ok: boolean }>('/api/v1/private-b', { method: 'GET' });
+
+    await expect(firstRequest).resolves.toEqual({ ok: true });
+    expect(refresh).toHaveBeenCalledTimes(1);
+    releaseSecondUnauthorized?.();
+    await expect(secondRequest).resolves.toEqual({ ok: true });
+
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    const lastOptions = fetchMock.mock.calls[3]?.[1] as RequestInit;
+    expect(new Headers(lastOptions.headers).get('Authorization')).toBe('Bearer access-two');
+  });
+
+  it('не завершает новую сессию по запоздалому 401 повторного запроса', async () => {
+    let releaseFirstUnauthorized: (() => void) | undefined;
+    let releaseRetryUnauthorized: (() => void) | undefined;
+    const fetchMock = vi.fn((_input: URL | RequestInfo, options?: RequestInit) => {
+      const authorization = new Headers(options?.headers).get('Authorization');
+
+      if (authorization === 'Bearer access-one') {
+        return new Promise<Response>((resolve) => {
+          releaseFirstUnauthorized = () =>
+            resolve(Response.json({ message: 'Unauthorized' }, { status: 401 }));
+        });
+      }
+
+      return new Promise<Response>((resolve) => {
+        releaseRetryUnauthorized = () =>
+          resolve(Response.json({ message: 'Unauthorized' }, { status: 401 }));
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    setAccessToken('access-one');
+    const onSessionExpired = vi.fn();
+    const refresh = vi.fn().mockResolvedValue('unused');
+    cleanups.push(configureAuthTransport({ refreshAccessToken: refresh, onSessionExpired }));
+
+    const request = apiFetch('/api/v1/private', { method: 'GET' });
+    setAccessToken('access-two');
+    releaseFirstUnauthorized?.();
+    await vi.waitFor(() => expect(releaseRetryUnauthorized).toBeTypeOf('function'));
+    setAccessToken('access-three');
+    releaseRetryUnauthorized?.();
+
+    await expect(request).rejects.toMatchObject({ status: 401 });
+    expect(refresh).not.toHaveBeenCalled();
+    expect(onSessionExpired).not.toHaveBeenCalled();
+    expect(getAccessToken()).toBe('access-three');
   });
 
   it('не запускает refresh повторно и завершает сессию после второго 401', async () => {

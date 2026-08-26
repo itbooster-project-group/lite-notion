@@ -1,7 +1,8 @@
 import {
   canRefreshAccessToken,
   expireSession,
-  getAccessToken,
+  getAuthStateSnapshot,
+  isAuthStateCurrent,
   refreshAccessToken,
 } from './auth-session';
 
@@ -23,21 +24,26 @@ export async function apiFetch<ResponseData>(
   options: ApiFetchOptions,
 ): Promise<ResponseData> {
   const { skipAuthRefresh = false, ...requestOptions } = options;
+  const requestState = getAuthStateSnapshot();
 
   try {
-    return await performRequest<ResponseData>(url, requestOptions);
+    return await performRequest<ResponseData>(url, requestOptions, requestState.accessToken);
   } catch (error) {
     if (!isUnauthorized(error) || skipAuthRefresh || !canRefreshAccessToken()) {
       throw error;
     }
 
-    await refreshAccessToken();
+    if (isAuthStateCurrent(requestState)) {
+      await refreshAccessToken();
+    }
+
+    const retryState = getAuthStateSnapshot();
 
     try {
-      return await performRequest<ResponseData>(url, requestOptions);
+      return await performRequest<ResponseData>(url, requestOptions, retryState.accessToken);
     } catch (retryError) {
       if (isUnauthorized(retryError)) {
-        expireSession();
+        expireSession(retryState);
       }
 
       throw retryError;
@@ -48,9 +54,9 @@ export async function apiFetch<ResponseData>(
 async function performRequest<ResponseData>(
   url: string,
   options: RequestInit,
+  accessToken: string | undefined,
 ): Promise<ResponseData> {
   const headers = new Headers(options.headers);
-  const accessToken = getAccessToken();
 
   if (accessToken !== undefined) {
     headers.set('Authorization', `Bearer ${accessToken}`);

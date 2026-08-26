@@ -35,7 +35,7 @@ export function LogoutButton() {
   }
 
   return (
-    <div className="flex flex-col items-end gap-detail">
+    <div className="flex flex-col items-end gap-1">
       <Button
         disabled={isPending}
         onClick={() => void handleLogout()}

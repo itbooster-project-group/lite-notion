@@ -11,7 +11,7 @@ import { type LoginDto, login } from '@/shared/api';
 import { Button, Input, Text } from '@/shared/ui';
 
 import { type LoginFormValues, loginSchema } from '../model/auth-schemas';
-import { getSafeReturnPath } from '../model/return-path';
+import { getAuthFormPath, getSafeReturnPath } from '../model/return-path';
 import { AuthScreen, FormField } from './auth-screen';
 
 export function LoginForm() {
@@ -37,7 +37,7 @@ export function LoginForm() {
       const response = await login(payload, { skipAuthRefresh: true });
       authenticate(response);
       reset();
-      router.replace(getSafeReturnPath(searchParams.get('next')));
+      router.replace(getSafeReturnPath(searchParams?.get('next')));
     } catch (error) {
       setSubmitError(
         getStatus(error) === 401
@@ -56,14 +56,14 @@ export function LoginForm() {
           Нет аккаунта?{' '}
           <Link
             className="font-medium text-foreground underline-offset-4 hover:underline"
-            href="/register"
+            href={getAuthFormPath('/register', searchParams?.get('next'))}
           >
             Зарегистрироваться
           </Link>
         </>
       }
     >
-      <form className="space-y-content" noValidate onSubmit={onSubmit}>
+      <form className="space-y-4" noValidate onSubmit={onSubmit}>
         <FormField error={errors.email?.message} htmlFor="login-email" label="Email">
           <Input
             {...registerField('email')}

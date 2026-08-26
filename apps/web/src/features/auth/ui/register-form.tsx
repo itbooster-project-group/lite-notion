@@ -11,7 +11,7 @@ import { type RegisterDto, register } from '@/shared/api';
 import { Button, Input, Text } from '@/shared/ui';
 
 import { type RegisterFormValues, registerSchema } from '../model/auth-schemas';
-import { getSafeReturnPath } from '../model/return-path';
+import { getAuthFormPath, getSafeReturnPath } from '../model/return-path';
 import { AuthScreen, FormField } from './auth-screen';
 
 export function RegisterForm() {
@@ -41,7 +41,7 @@ export function RegisterForm() {
       const response = await register(payload, { skipAuthRefresh: true });
       authenticate(response);
       reset();
-      router.replace(getSafeReturnPath(searchParams.get('next')));
+      router.replace(getSafeReturnPath(searchParams?.get('next')));
     } catch (error) {
       setSubmitError(
         getStatus(error) === 409
@@ -60,14 +60,14 @@ export function RegisterForm() {
           Уже есть аккаунт?{' '}
           <Link
             className="font-medium text-foreground underline-offset-4 hover:underline"
-            href="/login"
+            href={getAuthFormPath('/login', searchParams?.get('next'))}
           >
             Войти
           </Link>
         </>
       }
     >
-      <form className="space-y-content" noValidate onSubmit={onSubmit}>
+      <form className="space-y-4" noValidate onSubmit={onSubmit}>
         <FormField error={errors.name?.message} htmlFor="register-name" label="Имя">
           <Input
             {...registerField('name')}

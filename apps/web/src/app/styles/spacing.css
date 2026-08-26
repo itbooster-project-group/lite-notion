@@ -1,0 +1,6 @@
+@theme {
+  --spacing-page-inline: 1.5rem;
+  --spacing-page-block: 4rem;
+  --container-shell: 64rem;
+  --container-auth: 28rem;
+}
