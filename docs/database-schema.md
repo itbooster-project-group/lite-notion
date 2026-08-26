@@ -64,9 +64,16 @@ erDiagram
         timestamptz created_at
     }
 
+    PROJECTS {
+        uuid id PK
+        uuid owner_id FK
+        varchar name
+    }
+
     PAGES {
         uuid id PK
         uuid owner_id FK
+        uuid project_id FK
         uuid parent_page_id FK
         uuid created_by FK
         uuid updated_by FK
@@ -164,6 +171,9 @@ erDiagram
     USERS ||--o{ SESSIONS : opens
     SESSIONS ||--o{ REFRESH_TOKENS : rotates
 
+    USERS ||--o{ PROJECTS : owns
+
+    PROJECTS ||--o{ PAGES : contains
     USERS ||--o{ PAGES : owns
     USERS ||--o{ PAGES : creates
     PAGES ||--o{ PAGES : contains
@@ -243,6 +253,20 @@ Access token короткоживущий и в БД не хранится.
 
 ---
 
+## Projects
+
+`PROJECTS` — сущность проекта, принадлежащего пользователю:
+
+```text
+id
+owner_id
+name
+```
+
+`owner_id` — ссылка на `USERS.id`, владелец проекта.
+
+---
+
 ## Pages
 
 Верхнеуровневая заметка — обычная запись `PAGES`:
@@ -257,10 +281,13 @@ PAGES.parent_page_id = NULL
 
 ```text
 owner_id
+project_id
 parent_page_id
 created_by
 updated_by
 ```
+
+`project_id` — ссылка на `PROJECTS.id`, обязательное поле (`NOT NULL`): каждая страница принадлежит ровно одному проекту.
 
 `owner_id` — владелец всего дерева страниц, а не обязательно пользователь, создавший конкретную дочернюю страницу.
 
@@ -272,6 +299,8 @@ parent_page_id = NULL
 ```
 
 Для дочерней страницы `owner_id` должен совпадать с `owner_id` родителя.
+
+Аналогично, `project_id` дочерней страницы должен совпадать с `project_id` родителя: всё дерево страниц принадлежит одному проекту.
 
 `created_by` и `updated_by` отражают фактических авторов операций и могут отличаться от `owner_id`, поскольку страница может редактироваться совместно.
 
@@ -1175,6 +1204,11 @@ UNIQUE (PAGES.id, PAGES.owner_id)
 (parent_page_id, owner_id)
     → (id, owner_id)
 
+UNIQUE (PAGES.id, PAGES.project_id)
+
+(parent_page_id, project_id)
+    → (id, project_id)
+
 UNIQUE (PAGE_PERMISSIONS.page_id, PAGE_PERMISSIONS.user_id)
 
 PAGE_DOCUMENTS.storage_revision >= 0
@@ -1245,6 +1279,7 @@ PAGES(parent_page_id, position)
 PAGES(owner_id, updated_at)
 PAGES(deleted_at)
 PAGES(created_by)
+PAGES(project_id)
 
 PAGE_PERMISSIONS(user_id, page_id)
 

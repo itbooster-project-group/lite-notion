@@ -13,7 +13,7 @@ export interface SessionRecord {
   tokenHash: string;
   expiresAt: Date;
   revokedAt: Date | null;
-  replacedById: string | null;
+  replacedById: string | null /* TODO: Забыта self-reference в миграции */;
 }
 
 export interface CreateSessionInput {
