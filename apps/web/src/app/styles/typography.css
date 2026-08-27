@@ -1,0 +1,35 @@
+:root {
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
+    "Noto Color Emoji";
+  --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
+}
+
+@theme inline {
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-serif: var(--font-serif);
+}
+
+@theme {
+  --text-heading-hero: 2.25rem;
+  --text-heading-hero--line-height: 2.5rem;
+  --text-heading-page: 1.875rem;
+  --text-heading-page--line-height: 2.25rem;
+  --text-heading-section: 1.25rem;
+  --text-heading-section--line-height: 1.75rem;
+  --text-copy-body: 1rem;
+  --text-copy-body--line-height: 1.5rem;
+  --text-copy-small: 0.875rem;
+  --text-copy-small--line-height: 1.25rem;
+}
+
+@layer base {
+  html {
+    @apply font-sans;
+  }
+}

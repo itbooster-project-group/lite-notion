@@ -70,3 +70,4 @@ jobs:
       - run: pnpm --filter @lite-notion/api run typecheck
       - run: pnpm --filter @lite-notion/api run test
       - run: pnpm --filter @lite-notion/api run build
+      
