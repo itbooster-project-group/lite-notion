@@ -7,6 +7,9 @@ import { AuthModule } from './auth/auth.module';
 import { applicationConfig } from './config/application-config';
 import { HealthModule } from './health/health.module';
 import { HttpExceptionFilter } from './http-exception.filter';
+import { PageDocumentModule } from './pages/page-document/page-document.module';
+import { PagesModule } from './pages/pages.module';
+import { ProjectsModule } from './projects/projects.module';
 
 @Module({
   imports: [
@@ -19,6 +22,9 @@ import { HttpExceptionFilter } from './http-exception.filter';
     ScheduleModule.forRoot(),
     AuthModule,
     HealthModule,
+    PagesModule,
+    PageDocumentModule,
+    ProjectsModule,
   ],
   providers: [
     {
