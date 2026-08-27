@@ -189,6 +189,13 @@ pnpm db:down
 └── tsconfig.base.json
 ```
 
+## Документация
+
+- [План на MVP](docs/mvp-plan.md) — актуальный объём MVP, этапы и зависимости нового backlog.
+- [Схемы экранов MVP](docs/mvp-screens.md) — схематичные интерфейсы продуктовых этапов.
+- [Схема базы данных](docs/database-schema.md) — ER-диаграмма, модель Yjs-документов и ключевые архитектурные решения.
+- [Гайд по OpenSpec workflow](docs/openspec-workflow.md) — процесс планирования, реализации и review изменений.
+
 ## OpenSpec
 
 OpenSpec уже инициализирован в каталоге `openspec`. Участникам, которые планируют разработку с coding agents, нужна совместимая версия CLI:
