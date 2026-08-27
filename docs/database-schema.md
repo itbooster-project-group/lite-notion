@@ -24,12 +24,11 @@ PostgreSQL хранит бинарное состояние Yjs. TipTap/ProseMir
 erDiagram
     USERS {
         uuid id PK
-        varchar email UK
-        varchar password_hash
-        timestamptz email_verified_at
-        timestamptz created_at
-        timestamptz updated_at
-        timestamptz deleted_at
+        text email UK
+        text name
+        text passwordHash
+        timestamp createdAt
+        timestamp updatedAt
     }
 
     USER_PROFILES {
@@ -46,22 +45,15 @@ erDiagram
 
     SESSIONS {
         uuid id PK
-        uuid user_id FK
-        timestamptz expires_at
-        timestamptz last_used_at
-        timestamptz revoked_at
-        timestamptz created_at
-    }
-
-    REFRESH_TOKENS {
-        uuid id PK
-        uuid session_id FK
-        varchar token_hash UK
-        uuid replaced_by_token_id FK
-        timestamptz expires_at
-        timestamptz used_at
-        timestamptz revoked_at
-        timestamptz created_at
+        uuid userId FK
+        uuid familyId
+        text tokenHash UK
+        timestamp expiresAt
+        timestamp revokedAt
+        uuid replacedById
+        text userAgent
+        text ip
+        timestamp createdAt
     }
 
     PROJECTS {
@@ -172,7 +164,7 @@ erDiagram
 
     USERS ||--|| USER_PROFILES : has
     USERS ||--o{ SESSIONS : opens
-    SESSIONS ||--o{ REFRESH_TOKENS : rotates
+    SESSIONS ||--o| SESSIONS : rotates_into
 
     USERS ||--o{ PROJECTS : owns
 
@@ -201,28 +193,34 @@ erDiagram
     PAGES ||--o| PAGE_SEARCH_DOCUMENTS : indexed_as
 ```
 
+> В диаграмме `USERS` и `SESSIONS` — это уже созданные таблицы `"User"` и `"Session"`: их поля приведены в фактическом виде (Prisma без `@map`, то есть camelCase-колонки и типы `text` / `timestamp(3)`). Остальные сущности пока спроектированы, но не мигрированы, и записаны в проектной нотации (snake_case, `varchar` / `timestamptz`).
+
 ## Users and profiles
 
-`USERS` хранит только данные идентификации, авторизации и жизненного цикла записи:
+Таблица реализована (Prisma model `User`, таблица `"User"`) и хранит данные идентификации и авторизации:
 
 ```text
-email
-password_hash
+id            uuid, PK
+email         text, unique
+name          text
+passwordHash  text
+createdAt     timestamp, default now()
+updatedAt     timestamp, @updatedAt
+```
+
+Email нормализуется на application layer (`normalizeEmail` в DTO) перед сохранением и поиском; в БД это обычный unique index по `email`.
+
+Спроектированные, но ещё не созданные поля и сущности:
+
+```text
 email_verified_at
-created_at
-updated_at
-deleted_at
+deleted_at        (soft delete: deleted_at IS NOT NULL)
+USER_PROFILES
 ```
 
-Логическое удаление:
+Пока `USER_PROFILES` не создана, отображаемое имя пользователя хранится в `USERS.name`. При введении профилей `name` и `display_name` нужно будет развести или объединить отдельной миграцией.
 
-```text
-deleted_at IS NOT NULL
-```
-
-Email должен нормализоваться перед сохранением. Уникальность email и username должна быть регистронезависимой.
-
-`USER_PROFILES` содержит пользовательские настройки и публичные данные:
+`USER_PROFILES` (ещё не создана) содержит пользовательские настройки и публичные данные:
 
 ```text
 display_name
@@ -233,26 +231,39 @@ timezone
 locale
 ```
 
-## Sessions and refresh tokens
+Уникальность `username` должна быть регистронезависимой.
 
-`SESSIONS` представляет пользовательское устройство или логическую авторизованную сессию.
+## Sessions
 
-Сессия может быть завершена через:
+Таблица реализована (Prisma model `Session`, таблица `"Session"`). Отдельной таблицы refresh-токенов нет: одна строка `SESSIONS` — это одна выданная пара токенов.
 
 ```text
-SESSIONS.revoked_at
+id            uuid, PK
+userId        uuid, FK -> USERS.id, ON DELETE CASCADE
+familyId      uuid
+tokenHash     text, unique
+expiresAt     timestamp
+revokedAt     timestamp, nullable
+replacedById  uuid, nullable
+userAgent     text, nullable
+ip            text, nullable
+createdAt     timestamp, default now()
 ```
 
-Refresh-токены хранятся отдельно в `REFRESH_TOKENS`. В базе сохраняется только hash.
+Refresh-токен хранится только как SHA-256 hash в `tokenHash`. Access token короткоживущий и в БД не хранится.
+
+`familyId` связывает цепочку ротаций одного входа, то есть играет роль логической сессии устройства. Инвариант: в одной цепочке не более одной строки с `revokedAt = NULL`.
 
 При ротации:
 
-1. использованный refresh token получает `used_at`;
-2. создаётся новый refresh token;
-3. старый token связывается с новым через `replaced_by_token_id`;
-4. повторное использование старого token может приводить к отзыву всей session.
+1. текущая строка получает `revokedAt`;
+2. создаётся новая строка с тем же `familyId` и новым `tokenHash`;
+3. старая строка связывается с новой через `replacedById`;
+4. предъявление уже отозванного token позже grace-периода трактуется как reuse и отзывает всю family.
 
-Access token короткоживущий и в БД не хранится.
+Сессия завершается через `revokedAt`; отдельного `lastUsedAt` в таблице нет — вместо него ротация создаёт новую строку с новым `createdAt`. Logout удаляет цепочку целиком (`DELETE ... WHERE "familyId" = ...`), а не проставляет `revokedAt`.
+
+`replacedById` в текущей миграции объявлен как обычная nullable-колонка без self-FK на `SESSIONS.id` (см. TODO в [auth.repository.ts](apps/api/src/auth/auth.repository.ts)), поэтому в диаграмме связь `rotates_into` отражает логику приложения, а не constraint в БД.
 
 ---
 
@@ -1270,7 +1281,13 @@ snapshot_reason
 Необходимые constraints:
 
 ```text
-unique normalized USERS.email
+UNIQUE USERS.email
+    (нормализация email — на application layer)
+
+UNIQUE SESSIONS.tokenHash
+
+SESSIONS.userId
+    → USERS.id  ON DELETE CASCADE
 
 unique normalized USER_PROFILES.username
 
@@ -1352,9 +1369,9 @@ DOCUMENT_RENDERINGS(snapshot_id)
 Минимальный набор:
 
 ```text
-SESSIONS(user_id, revoked_at)
-
-REFRESH_TOKENS(session_id)
+SESSIONS(userId)
+SESSIONS(familyId)
+SESSIONS(expiresAt)
 
 PAGES(project_id, parent_page_id, position, id)
     WHERE deleted_at IS NULL
