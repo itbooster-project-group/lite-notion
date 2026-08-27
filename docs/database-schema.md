@@ -2,7 +2,7 @@
 
 ## Общая структура
 
-Основная единица организации данных — `PAGE`.
+Проект задаёт границу ownership, lifecycle и дерева страниц. Каждая `PAGE` принадлежит ровно одному `PROJECT`.
 
 Верхнеуровневая страница является корнем дерева и определяется как:
 
@@ -10,7 +10,7 @@
 parent_page_id = NULL
 ```
 
-Все дочерние страницы принадлежат тому же владельцу дерева, что и их родитель.
+Все parent и child в одном дереве имеют одинаковый `project_id`, а владелец каждой страницы всегда равен владельцу проекта.
 
 Содержимое страницы редактируется через **TipTap поверх ProseMirror**. Совместное редактирование, CRDT-состояние, синхронизация и presence построены на **Yjs + Hocuspocus**.
 
@@ -64,16 +64,26 @@ erDiagram
         timestamptz created_at
     }
 
+    PROJECTS {
+        uuid id PK
+        uuid owner_id FK
+        varchar name
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz deleted_at
+    }
+
     PAGES {
         uuid id PK
         uuid owner_id FK
+        uuid project_id FK
         uuid parent_page_id FK
         uuid created_by FK
         uuid updated_by FK
         uuid cover_asset_id FK
         varchar title
         varchar icon
-        varchar position
+        text position
         varchar access_mode
         timestamptz created_at
         timestamptz updated_at
@@ -164,6 +174,9 @@ erDiagram
     USERS ||--o{ SESSIONS : opens
     SESSIONS ||--o{ REFRESH_TOKENS : rotates
 
+    USERS ||--o{ PROJECTS : owns
+
+    PROJECTS ||--o{ PAGES : contains
     USERS ||--o{ PAGES : owns
     USERS ||--o{ PAGES : creates
     PAGES ||--o{ PAGES : contains
@@ -243,35 +256,60 @@ Access token короткоживущий и в БД не хранится.
 
 ---
 
-## Pages
+## Projects
 
-Верхнеуровневая заметка — обычная запись `PAGES`:
+`PROJECTS` — граница ownership, lifecycle и root ordering для страниц. Каждый проект принадлежит ровно одному пользователю и содержит:
 
 ```text
-PAGES.parent_page_id = NULL
+id
+owner_id
+name
+created_at
+updated_at
+deleted_at
 ```
 
-Она является корнем дерева страниц.
+`owner_id` — mandatory-ссылка на `USERS.id`. Смена владельца проекта не поддерживается: application layer не должен публиковать операцию его изменения.
 
-Каждая страница содержит:
+`created_at` и `updated_at` фиксируют lifecycle записи. `deleted_at IS NOT NULL` означает soft-deleted проект.
+
+---
+
+## Pages
+
+Каждая страница принадлежит ровно одному проекту. Ключевые ссылки и авторские поля:
 
 ```text
-owner_id
+project_id NOT NULL
+owner_id NOT NULL
 parent_page_id
 created_by
 updated_by
 ```
 
-`owner_id` — владелец всего дерева страниц, а не обязательно пользователь, создавший конкретную дочернюю страницу.
-
-Для root page:
+`project_id` — mandatory-ссылка на проект. `owner_id` остаётся денормализованным полем для authorization queries, permission checks и owner-based выборок. База должна гарантировать инвариант:
 
 ```text
-owner_id = владелец дерева
-parent_page_id = NULL
+PAGES.owner_id = PROJECTS.owner_id
 ```
 
-Для дочерней страницы `owner_id` должен совпадать с `owner_id` родителя.
+Для этого нужны:
+
+```text
+PROJECTS: UNIQUE (id, owner_id)
+
+PAGES: FOREIGN KEY (project_id, owner_id)
+       REFERENCES PROJECTS(id, owner_id)
+```
+
+`owner_id` страницы не изменяется независимо от проекта. Попытка сохранить в проекте Alice страницу с `owner_id = Bob` должна отклоняться composite FK.
+
+Верхнеуровневая страница — обычная запись `PAGES`:
+
+```text
+project_id = проект дерева
+parent_page_id = NULL
+```
 
 `created_by` и `updated_by` отражают фактических авторов операций и могут отличаться от `owner_id`, поскольку страница может редактироваться совместно.
 
@@ -287,52 +325,94 @@ PAGES.parent_page_id
 PAGES.id
 ```
 
-Для проверки принадлежности одному дереву рекомендуется составной FK:
+Принадлежность parent и child одному проекту защищает composite FK:
 
 ```text
-(parent_page_id, owner_id)
-    ↓
-(id, owner_id)
+PAGES: UNIQUE (id, project_id)
+
+FOREIGN KEY (parent_page_id, project_id)
+    REFERENCES PAGES(id, project_id)
+    DEFERRABLE INITIALLY DEFERRED
 ```
 
-Для этого на `PAGES` необходим:
+Стандартное `MATCH SIMPLE` разрешает root-строки с `parent_page_id = NULL`. Deferred-проверка выполняется на commit и позволяет атомарно обновлять `project_id` subtree и parent его корня.
+
+Отдельные `UNIQUE (id, owner_id)` и FK `(parent_page_id, owner_id) → (id, owner_id)` не нужны: равенство владельцев parent и child следует из общего `project_id` и ownership-инварианта проекта.
+
+Перед изменением `parent_page_id` application layer должен проверить:
 
 ```text
-UNIQUE (id, owner_id)
+newParent != page
+newParent не является descendant страницы
 ```
 
-Приложение дополнительно должно запрещать циклы:
-
-```text
-A → B → C → A
-```
-
-Перемещение subtree к странице другого `owner_id` в первой версии запрещено.
-
-Transfer дерева другому владельцу является отдельной транзакционной операцией.
+Эти проверки исключают self-reference и циклы вида `A → B → C → A`, которые нельзя выразить обычным FK.
 
 ---
 
 ## Page ordering
 
-`PAGES.position` хранит fractional rank.
+`PAGES.position` хранит fractional rank как bytewise-сравниваемый текст:
 
-Для дочерних страниц порядок определяется внутри одного родителя:
+```sql
+position TEXT COLLATE "C"
+```
+
+Граница любого sibling ordering:
+
+```text
+project_id
+parent_page_id
+position
+```
+
+Для root-страниц:
+
+```text
+project_id
+parent_page_id = NULL
+position
+```
+
+Два проекта одного владельца имеют независимый порядок root-страниц. Все sibling-выборки используют стабильный tie-breaker:
+
+```sql
+ORDER BY position, id
+```
+
+Это даёт детерминированный порядок, даже если две страницы временно получили одинаковый fractional rank.
+
+---
+
+## Page moves
+
+Обычный move внутри одного проекта атомарно меняет только поля корня перемещаемого subtree:
 
 ```text
 parent_page_id
 position
 ```
 
-Для root pages пользователя:
+`project_id` и `owner_id` корня и descendants не изменяются. Перед update application layer проверяет доступ к перемещаемой странице, её текущему parent и new parent, принадлежность new parent тому же активному проекту и отсутствие цикла.
+
+Move между проектами — отдельная транзакционная операция. Она разрешена только если:
 
 ```text
-owner_id
-parent_page_id = NULL
-position
+sourceProject.owner_id = targetProject.owner_id
 ```
 
-Перемещение страницы и изменение порядка выполняются транзакционно.
+Смена `owner_id` при таком move не происходит. Cross-project move выполняется в следующем порядке:
+
+1. Начать транзакцию и заблокировать source root, target project, optional new parent и строки subtree, которые будут изменены.
+2. Проверить доступ к source page, исходному parent, target project и new parent.
+3. Убедиться, что source и target projects активны и имеют одинаковый `owner_id`.
+4. Проверить, что new parent принадлежит target project, не равен source page и не входит в её subtree.
+5. Получить весь subtree рекурсивным запросом.
+6. Обновить `project_id` корня и всех descendants.
+7. Обновить `parent_page_id` и `position` корня, не изменяя `owner_id`.
+8. Зафиксировать транзакцию; deferred parent/project FK проверит целостность на commit.
+
+Любая ошибка откатывает move целиком: часть subtree не может остаться в source project, а часть — в target project. Попытка переноса между проектами разных владельцев отклоняется до любых updates.
 
 ---
 
@@ -352,6 +432,8 @@ position
 * `inherit` — если прямого разрешения нет, доступ ищется у родительской страницы;
 * `restricted` — наследование останавливается на текущей странице.
 
+До вычисления effective access проверяется, что `PROJECTS.deleted_at IS NULL` и `PAGES.deleted_at IS NULL`. Страница удалённого проекта или soft-deleted страница недоступна даже владельцу.
+
 Эффективный доступ определяется следующим образом:
 
 1. если `user_id = PAGES.owner_id`, предоставляется полный доступ;
@@ -361,7 +443,7 @@ position
 5. root page без подходящего разрешения недоступна;
 6. публичная публикация не предоставляет доступ к рабочему редактору.
 
-При перемещении страницы проверяются права на саму страницу, текущего родителя, нового родителя и принадлежность одному `owner_id`.
+После move direct permissions остаются у тех же страниц. Effective inherited permissions корня и всего subtree могут измениться из-за новой parent chain. Это нормальное ожидаемое поведение, а не перенос или копирование permissions.
 
 ---
 
@@ -1121,7 +1203,7 @@ search index отстаёт.
 
 Для `search_vector` используется PostgreSQL GIN index.
 
-Перед возвратом поисковых результатов API проверяет effective page permissions.
+Перед возвратом поисковых результатов API проверяет, что проект и страница активны, а затем вычисляет effective page permissions.
 
 ---
 
@@ -1131,6 +1213,7 @@ Soft delete используется для:
 
 ```text
 users
+projects
 pages
 assets
 ```
@@ -1143,9 +1226,30 @@ deleted_at IS NOT NULL
 
 не возвращаются обычными запросами.
 
-Удаление root page должно обрабатывать subtree через application service.
+## Project lifecycle
 
-Soft delete дерева не должен полагаться исключительно на SQL cascade, если требуется восстановление.
+Soft delete проекта меняет только:
+
+```text
+PROJECTS.deleted_at
+```
+
+`PAGES.deleted_at` при этом не изменяется. Пока проект удалён, все его страницы недоступны для обычных reads, editing, search, editor connections и move.
+
+Restore проекта очищает только `PROJECTS.deleted_at`. После restore вновь доступны страницы с `PAGES.deleted_at IS NULL`; subtree, удалённый до удаления проекта, автоматически не восстанавливается.
+
+## Page subtree lifecycle
+
+Удаление любой страницы рекурсивно получает весь subtree и в одной application transaction устанавливает `PAGES.deleted_at` для корня и всех descendants. Обычное состояние:
+
+```text
+parent.deleted_at IS NOT NULL
+child.deleted_at IS NULL
+```
+
+запрещено. Транзакция не должна полагаться на SQL cascade, поскольку строки нужны для restore.
+
+Restore корня удалённого subtree в одной транзакции очищает `PAGES.deleted_at` у корня и всех descendants. Для MVP это full-subtree restore, включая descendants, удалённых до удаления текущего корня. Точное восстановление по deletion operation требует отдельного design. Отдельный restore child под удалённым parent запрещён.
 
 Physical deletion выполняется позже после retention period.
 
@@ -1170,10 +1274,22 @@ unique normalized USERS.email
 
 unique normalized USER_PROFILES.username
 
-UNIQUE (PAGES.id, PAGES.owner_id)
+PROJECTS.owner_id IS NOT NULL
+PROJECTS.created_at IS NOT NULL
+PROJECTS.updated_at IS NOT NULL
+UNIQUE (PROJECTS.id, PROJECTS.owner_id)
 
-(parent_page_id, owner_id)
-    → (id, owner_id)
+PAGES.project_id IS NOT NULL
+PAGES.owner_id IS NOT NULL
+
+(PAGES.project_id, PAGES.owner_id)
+    → (PROJECTS.id, PROJECTS.owner_id)
+
+UNIQUE (PAGES.id, PAGES.project_id)
+
+(PAGES.parent_page_id, PAGES.project_id)
+    → (PAGES.id, PAGES.project_id)
+    DEFERRABLE INITIALLY DEFERRED
 
 UNIQUE (PAGE_PERMISSIONS.page_id, PAGE_PERMISSIONS.user_id)
 
@@ -1227,7 +1343,7 @@ DOCUMENT_RENDERINGS(snapshot_id)
 
 Последнее может гарантироваться application-level transaction при Publish.
 
-Приложение также запрещает циклы дерева и transfer subtree между разными `owner_id` без отдельной операции.
+Приложение дополнительно запрещает циклы, смену владельца проекта, cross-project move между разными владельцами и активного child под soft-deleted parent.
 
 ---
 
@@ -1240,9 +1356,10 @@ SESSIONS(user_id, revoked_at)
 
 REFRESH_TOKENS(session_id)
 
-PAGES(owner_id, parent_page_id, position)
-PAGES(parent_page_id, position)
-PAGES(owner_id, updated_at)
+PAGES(project_id, parent_page_id, position, id)
+    WHERE deleted_at IS NULL
+PAGES(project_id, updated_at)
+    WHERE deleted_at IS NULL
 PAGES(deleted_at)
 PAGES(created_by)
 
@@ -1261,6 +1378,8 @@ PAGE_SEARCH_DOCUMENTS USING GIN(search_vector)
 
 PostgreSQL не создаёт индексы для foreign keys автоматически, поэтому необходимые FK indexes должны объявляться явно в migrations.
 
+Отдельный `PAGES(project_id)` не нужен в required-наборе, поскольку `project_id` уже является ведущим полем обоих project-scoped partial indexes.
+
 ---
 
 # Application architecture
@@ -1275,6 +1394,7 @@ Next.js
 │  NestJS
 │  ├── auth
 │  ├── users
+│  ├── projects
 │  ├── pages
 │  ├── hierarchy
 │  ├── permissions
@@ -1297,6 +1417,8 @@ Next.js
 Socket.IO для editor collaboration не используется.
 
 PostgreSQL является общим persistent storage.
+
+Будущий `projects` application layer владеет project lifecycle, а `pages` и `hierarchy` — page subtree lifecycle и двумя видами move. Контроллеры и transport handlers не должны реализовывать эти транзакционные правила.
 
 ---
 
