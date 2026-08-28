@@ -55,8 +55,6 @@ export async function createHttpTestContext(): Promise<HttpTestContext> {
   });
   await app.init();
 
-  await app.listen(0);
-
   const tokens = moduleRef.get(TokenService);
 
   return {
