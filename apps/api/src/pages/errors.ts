@@ -43,3 +43,15 @@ export class PageProjectMismatchError extends Error {
     this.name = 'PageProjectMismatchError';
   }
 }
+
+/**
+ * Соседи заданы противоречиво: один и тот же идентификатор с обеих сторон либо
+ * «предыдущий» лежит не раньше «следующего». Обе страницы вызывающему видны,
+ * поэтому это `400`, а не раскрытие чужих данных.
+ */
+export class SiblingOrderError extends Error {
+  constructor() {
+    super('previousSiblingId must precede nextSiblingId among the target siblings');
+    this.name = 'SiblingOrderError';
+  }
+}

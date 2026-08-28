@@ -8,6 +8,7 @@ import {
   PageCycleError,
   PageNotFoundError,
   PageProjectMismatchError,
+  SiblingOrderError,
   SiblingParentMismatchError,
 } from './errors';
 import { PagesController } from './pages.controller';
@@ -146,6 +147,12 @@ describe('PagesController', () => {
 
     it('SiblingParentMismatchError → 400', async () => {
       pages.move.mockRejectedValue(new SiblingParentMismatchError());
+
+      await expect(controller.move(user, pageId, {})).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('SiblingOrderError → 400', async () => {
+      pages.move.mockRejectedValue(new SiblingOrderError());
 
       await expect(controller.move(user, pageId, {})).rejects.toBeInstanceOf(BadRequestException);
     });

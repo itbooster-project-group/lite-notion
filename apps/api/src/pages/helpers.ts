@@ -6,6 +6,7 @@ import {
   PageCycleError,
   PageNotFoundError,
   PageProjectMismatchError,
+  SiblingOrderError,
   SiblingParentMismatchError,
 } from './errors';
 
@@ -76,6 +77,16 @@ export function positionBetween(previous: string | null, next: string | null): s
   return guardLength(midpoint(previous ?? '', next));
 }
 
+/**
+ * Ключ advisory-блокировки уровня: страницы одного проекта под одним родителем.
+ * Его берут все операции, читающие «последнего брата», — создание и перемещение
+ * в конец, — иначе две транзакции под READ COMMITTED прочитают один и тот же
+ * последний ранг и запишут дубликат.
+ */
+export function siblingLevelLockKey(projectId: string, parentPageId: string | null): string {
+  return `projectId:${projectId}parentPageId:${parentPageId}`;
+}
+
 /** Порядок братьев. Ранги не уникальны, поэтому `id` — детерминированный тай-брейк. */
 export function compareSiblings(
   left: { id: string; position: string },
@@ -111,7 +122,11 @@ export async function toHttpException<T>(operation: () => Promise<T>): Promise<T
       throw new ConflictException(error.message);
     }
 
-    if (error instanceof SiblingParentMismatchError || error instanceof PageProjectMismatchError) {
+    if (
+      error instanceof SiblingParentMismatchError ||
+      error instanceof PageProjectMismatchError ||
+      error instanceof SiblingOrderError
+    ) {
       throw new BadRequestException(error.message);
     }
 

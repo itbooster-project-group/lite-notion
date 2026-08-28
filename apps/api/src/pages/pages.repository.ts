@@ -6,9 +6,10 @@ import {
   PageCycleError,
   PageNotFoundError,
   PageProjectMismatchError,
+  SiblingOrderError,
   SiblingParentMismatchError,
 } from './errors';
-import { positionBetween } from './helpers';
+import { positionBetween, siblingLevelLockKey } from './helpers';
 
 /** Клиент внутри `$transaction`: те же модели, но без вложенных транзакций. */
 type TransactionClient = Prisma.TransactionClient;
@@ -110,6 +111,11 @@ export class PrismaPagesRepository extends PagesRepository {
 
   async create(input: CreatePageInput): Promise<PageRecord> {
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`
+        SELECT pg_advisory_xact_lock(
+          hashtext(${siblingLevelLockKey(input.projectId, input.parentPageId)})
+        )`;
+
       const last = await tx.page.findFirst({
         orderBy: [{ position: 'desc' }, { id: 'desc' }],
         select: { position: true },
@@ -161,7 +167,9 @@ export class PrismaPagesRepository extends PagesRepository {
       // Первой операцией и до любого чтения: две транзакции, взявшие строчные
       // блокировки до advisory lock, получили бы deadlock. Блокировка снимается
       // вместе с транзакцией и берётся только на перемещение.
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${input.pageId}))`;
+      // $executeRaw, а не $queryRaw: функция возвращает void, и Prisma не умеет
+      // десериализовать такую колонку — запрос упал бы на живой базе.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.ownerId}))`;
 
       const page = await tx.page.findFirst({
         select: PAGE_FIELDS,
@@ -171,6 +179,16 @@ export class PrismaPagesRepository extends PagesRepository {
       if (page === null) {
         throw new PageNotFoundError();
       }
+
+      // Вторая блокировка — на уровень назначения, тем же ключом, что берёт
+      // `create`: перемещение в конец уровня читает того же «последнего брата».
+      // Порядок «владелец → уровень» соблюдается везде, поэтому взаимной
+      // блокировки не возникает: `create` берёт только уровень и никогда не
+      // ждёт владельца.
+      await tx.$executeRaw`
+        SELECT pg_advisory_xact_lock(
+          hashtext(${siblingLevelLockKey(page.projectId, input.parentPageId)})
+        )`;
 
       if (input.parentPageId !== null) {
         await this.assertParentAccepts(tx, page, input.parentPageId);
@@ -237,8 +255,18 @@ export class PrismaPagesRepository extends PagesRepository {
     page: PageRecord,
     input: MovePageInput,
   ): Promise<string> {
+    if (input.previousSiblingId !== null && input.previousSiblingId === input.nextSiblingId) {
+      throw new SiblingOrderError();
+    }
+
     const previous = await this.readSibling(tx, page, input.parentPageId, input.previousSiblingId);
     const next = await this.readSibling(tx, page, input.parentPageId, input.nextSiblingId);
+
+    // Щель должна существовать: перевёрнутая пара соседей и пара с одинаковым
+    // рангом иначе дошли бы до генератора и упали внутренней ошибкой.
+    if (previous !== null && next !== null && previous.position >= next.position) {
+      throw new SiblingOrderError();
+    }
 
     if (previous === null && next === null) {
       const last = await tx.page.findFirst({
@@ -271,7 +299,7 @@ export class PrismaPagesRepository extends PagesRepository {
 
     const sibling = await tx.page.findFirst({
       select: { parentPageId: true, position: true },
-      where: { deletedAt: null, id: siblingId, ownerId: page.ownerId },
+      where: { deletedAt: null, id: siblingId, projectId: page.projectId, ownerId: page.ownerId },
     });
 
     if (sibling === null) {

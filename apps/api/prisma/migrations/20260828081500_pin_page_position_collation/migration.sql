@@ -1,0 +1,17 @@
+-- Fractional rank в "Page"."position" сравнивается приложением по code units.
+-- Без явной collation колонка наследует locale базы, и, например, в en_US.UTF-8
+-- буквы сравниваются алфавитно ('l' < 'V'), тогда как по кодам 'V' < 'l'.
+--
+-- Расхождение ломает запрос «последний брат» (ORDER BY "position" DESC LIMIT 1),
+-- которым пользуются создание страницы и перемещение в конец уровня: он вернул бы
+-- не максимальный ранг, и новая страница встала бы не последней, а её ранг мог бы
+-- совпасть с уже занятым.
+--
+-- "C" сравнивает побайтно, что для ASCII-алфавита base62 совпадает с порядком
+-- кодов. Prisma не умеет выражать collation в schema.prisma, поэтому миграция
+-- написана вручную; порядок закреплён интеграционным тестом
+-- src/pages/position-collation.integration-spec.ts.
+--
+-- ALTER COLUMN ... TYPE перестраивает индексы, где участвует колонка, поэтому
+-- "Page_ownerId_parentPageId_position_idx" получает ту же collation.
+ALTER TABLE "Page" ALTER COLUMN "position" TYPE VARCHAR(255) COLLATE "C";

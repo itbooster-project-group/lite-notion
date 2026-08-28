@@ -4,6 +4,7 @@ import {
   PageCycleError,
   PageNotFoundError,
   PageProjectMismatchError,
+  SiblingOrderError,
   SiblingParentMismatchError,
 } from './errors';
 import { positionBetween } from './helpers';
@@ -162,8 +163,16 @@ export class InMemoryPagesRepository extends PagesRepository {
   }
 
   private resolvePosition(page: PageRecord, input: MovePageInput): string {
+    if (input.previousSiblingId !== null && input.previousSiblingId === input.nextSiblingId) {
+      throw new SiblingOrderError();
+    }
+
     const previous = this.readSibling(page, input.parentPageId, input.previousSiblingId);
     const next = this.readSibling(page, input.parentPageId, input.nextSiblingId);
+
+    if (previous !== null && next !== null && previous.position >= next.position) {
+      throw new SiblingOrderError();
+    }
 
     if (previous === null && next === null) {
       const last = this.siblingsOf(page.ownerId, page.projectId, input.parentPageId)

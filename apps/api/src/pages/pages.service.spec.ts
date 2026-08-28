@@ -10,6 +10,7 @@ import {
   PageCycleError,
   PageNotFoundError,
   PageProjectMismatchError,
+  SiblingOrderError,
   SiblingParentMismatchError,
 } from './errors';
 import { PagesRepository } from './pages.repository';
@@ -417,6 +418,60 @@ describe('PagesService', () => {
         parentPageId: null,
         projectId: here.projectId,
       });
+    });
+
+    it('отклоняет одинаковые previousSiblingId и nextSiblingId', async () => {
+      const first = await createPage({ title: 'first' });
+      const second = await createPage({ title: 'second' });
+
+      await expect(
+        service.move({
+          nextSiblingId: first.id,
+          ownerId: owner,
+          pageId: second.id,
+          parentPageId: null,
+          previousSiblingId: first.id,
+        }),
+      ).rejects.toBeInstanceOf(SiblingOrderError);
+    });
+
+    it('отклоняет перевёрнутую пару соседей', async () => {
+      const first = await createPage({ title: 'first' });
+      const second = await createPage({ title: 'second' });
+      const third = await createPage({ title: 'third' });
+
+      // Соседи названы в обратном порядке: щели между ними не существует.
+      await expect(
+        service.move({
+          nextSiblingId: first.id,
+          ownerId: owner,
+          pageId: third.id,
+          parentPageId: null,
+          previousSiblingId: second.id,
+        }),
+      ).rejects.toBeInstanceOf(SiblingOrderError);
+    });
+
+    it('отклоняет соседей с совпавшими рангами, а не падает внутренней ошибкой', async () => {
+      const first = await createPage({ title: 'first' });
+      const second = await createPage({ title: 'second' });
+      const third = await createPage({ title: 'third' });
+
+      // Дубликат ранга: то, что раньше доходило до генератора и роняло 500.
+      const stored = pages.pages.get(second.id);
+      if (stored !== undefined) {
+        stored.position = first.position;
+      }
+
+      await expect(
+        service.move({
+          nextSiblingId: second.id,
+          ownerId: owner,
+          pageId: third.id,
+          parentPageId: null,
+          previousSiblingId: first.id,
+        }),
+      ).rejects.toBeInstanceOf(SiblingOrderError);
     });
 
     it('отклоняет соседа под другим родителем', async () => {
