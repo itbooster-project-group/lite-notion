@@ -231,6 +231,589 @@
         "summary": "Check API and database availability",
         "tags": ["health"]
       }
+    },
+    "/api/v1/pages": {
+      "post": {
+        "operationId": "createPage",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePageDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Page created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Page or project does not exist, or belongs to another user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a root or child page",
+        "tags": ["pages"]
+      },
+      "get": {
+        "operationId": "getPageTree",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Page tree of the current user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PageTreeNodeDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Page or project does not exist, or belongs to another user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get the page tree of the current user",
+        "tags": ["pages"]
+      }
+    },
+    "/api/v1/pages/{pageId}": {
+      "get": {
+        "operationId": "getPage",
+        "parameters": [
+          {
+            "name": "pageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Requested page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Page or project does not exist, or belongs to another user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get a single page",
+        "tags": ["pages"]
+      },
+      "patch": {
+        "operationId": "renamePage",
+        "parameters": [
+          {
+            "name": "pageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenamePageDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Page renamed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Page or project does not exist, or belongs to another user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Rename a page",
+        "tags": ["pages"]
+      }
+    },
+    "/api/v1/pages/{pageId}/move": {
+      "post": {
+        "operationId": "movePage",
+        "parameters": [
+          {
+            "name": "pageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MovePageDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Page moved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Page or project does not exist, or belongs to another user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The move would create a cycle in the tree",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Move a page subtree and reorder siblings",
+        "tags": ["pages"]
+      }
+    },
+    "/api/v1/projects": {
+      "post": {
+        "operationId": "createProject",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProjectDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Project created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a project",
+        "tags": ["projects"]
+      },
+      "get": {
+        "operationId": "listProjects",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Projects of the current user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProjectDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List projects owned by the current user",
+        "tags": ["projects"]
+      }
+    },
+    "/api/v1/pages/{pageId}/document": {
+      "get": {
+        "operationId": "getPageDocument",
+        "parameters": [
+          {
+            "name": "pageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Document content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageDocumentDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Page does not exist or belongs to another user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Read the content of a page",
+        "tags": ["pages"]
+      },
+      "put": {
+        "operationId": "updatePageDocument",
+        "parameters": [
+          {
+            "name": "pageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePageDocumentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Document replaced",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageDocumentDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Page does not exist or belongs to another user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Replace the content of a page",
+        "tags": ["pages"]
+      }
     }
   },
   "info": {
@@ -393,6 +976,260 @@
           }
         },
         "required": ["status", "database"]
+      },
+      "CreatePageDto": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "example": "4c8f1b1a-0f6d-4a5e-9f6d-0f6d4a5e9f6d",
+            "format": "uuid"
+          },
+          "parentPageId": {
+            "type": "string",
+            "description": "Parent page. Omit or send null to create a root page.",
+            "format": "uuid",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "default": "",
+            "maxLength": 255
+          }
+        },
+        "required": ["projectId"]
+      },
+      "PageDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "4c8f1b1a-0f6d-4a5e-9f6d-0f6d4a5e9f6d",
+            "format": "uuid"
+          },
+          "ownerId": {
+            "type": "string",
+            "example": "9f6d4a5e-0f6d-4a5e-9f6d-0f6d4a5e9f6d",
+            "format": "uuid"
+          },
+          "projectId": {
+            "type": "string",
+            "example": "1b1a4c8f-0f6d-4a5e-9f6d-0f6d4a5e9f6d",
+            "format": "uuid"
+          },
+          "parentPageId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "createdById": {
+            "type": "string",
+            "example": "9f6d4a5e-0f6d-4a5e-9f6d-0f6d4a5e9f6d",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "example": "Release notes"
+          },
+          "position": {
+            "type": "string",
+            "description": "Fractional rank among siblings. Server-generated, ordered lexicographically.",
+            "example": "V"
+          },
+          "createdAt": {
+            "type": "string",
+            "example": "2026-08-27T12:00:00.000Z",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "example": "2026-08-27T12:00:00.000Z",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "ownerId",
+          "projectId",
+          "parentPageId",
+          "createdById",
+          "title",
+          "position",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "PageTreeNodeDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "4c8f1b1a-0f6d-4a5e-9f6d-0f6d4a5e9f6d",
+            "format": "uuid"
+          },
+          "ownerId": {
+            "type": "string",
+            "example": "9f6d4a5e-0f6d-4a5e-9f6d-0f6d4a5e9f6d",
+            "format": "uuid"
+          },
+          "projectId": {
+            "type": "string",
+            "example": "1b1a4c8f-0f6d-4a5e-9f6d-0f6d4a5e9f6d",
+            "format": "uuid"
+          },
+          "parentPageId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "createdById": {
+            "type": "string",
+            "example": "9f6d4a5e-0f6d-4a5e-9f6d-0f6d4a5e9f6d",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "example": "Release notes"
+          },
+          "position": {
+            "type": "string",
+            "description": "Fractional rank among siblings. Server-generated, ordered lexicographically.",
+            "example": "V"
+          },
+          "createdAt": {
+            "type": "string",
+            "example": "2026-08-27T12:00:00.000Z",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "example": "2026-08-27T12:00:00.000Z",
+            "format": "date-time"
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PageTreeNodeDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "ownerId",
+          "projectId",
+          "parentPageId",
+          "createdById",
+          "title",
+          "position",
+          "createdAt",
+          "updatedAt",
+          "children"
+        ]
+      },
+      "RenamePageDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "example": "Release notes",
+            "maxLength": 255
+          }
+        },
+        "required": ["title"]
+      },
+      "MovePageDto": {
+        "type": "object",
+        "properties": {
+          "parentPageId": {
+            "type": "string",
+            "description": "New parent. Omit or send null to move the page to the tree root.",
+            "format": "uuid",
+            "nullable": true
+          },
+          "previousSiblingId": {
+            "type": "string",
+            "description": "Page the moved page must follow among its new siblings.",
+            "format": "uuid",
+            "nullable": true
+          },
+          "nextSiblingId": {
+            "type": "string",
+            "description": "Page the moved page must precede among its new siblings.",
+            "format": "uuid",
+            "nullable": true
+          }
+        }
+      },
+      "CreateProjectDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Workspace",
+            "maxLength": 255,
+            "minLength": 1
+          }
+        },
+        "required": ["name"]
+      },
+      "ProjectDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "4c8f1b1a-0f6d-4a5e-9f6d-0f6d4a5e9f6d",
+            "format": "uuid"
+          },
+          "ownerId": {
+            "type": "string",
+            "example": "9f6d4a5e-0f6d-4a5e-9f6d-0f6d4a5e9f6d",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "example": "Workspace"
+          }
+        },
+        "required": ["id", "ownerId", "name"]
+      },
+      "PageDocumentDto": {
+        "type": "object",
+        "properties": {
+          "pageId": {
+            "type": "string",
+            "example": "4c8f1b1a-0f6d-4a5e-9f6d-0f6d4a5e9f6d",
+            "format": "uuid"
+          },
+          "tiptapSchemaVersion": {
+            "type": "number",
+            "example": 1
+          },
+          "yjsState": {
+            "type": "string",
+            "description": "Yjs document state, base64-encoded.",
+            "example": "",
+            "format": "byte"
+          }
+        },
+        "required": ["pageId", "tiptapSchemaVersion", "yjsState"]
+      },
+      "UpdatePageDocumentDto": {
+        "type": "object",
+        "properties": {
+          "tiptapSchemaVersion": {
+            "type": "number",
+            "description": "Tiptap schema version the content conforms to.",
+            "example": 1
+          },
+          "yjsState": {
+            "type": "string",
+            "description": "Yjs document state, base64-encoded. Opaque to the API. Up to 1048576 bytes.",
+            "example": "",
+            "format": "byte",
+            "maxLength": 1398104
+          }
+        },
+        "required": ["tiptapSchemaVersion", "yjsState"]
       }
     }
   }
