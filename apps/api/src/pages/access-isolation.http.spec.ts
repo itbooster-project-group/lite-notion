@@ -11,6 +11,19 @@ const owner = '11111111-1111-1111-1111-111111111111';
 const stranger = '22222222-2222-2222-2222-222222222222';
 const missingId = '33333333-3333-4333-8333-333333333333';
 
+/** Одновременных запросов не больше, чем здесь: см. комментарий у чанков ниже. */
+const parallelRequestLimit = 4;
+
+function chunk<T>(items: readonly T[], size: number): T[][] {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+
+  return chunks;
+}
+
 describe('изоляция по владельцу и защита маршрутов', () => {
   let context: HttpTestContext;
   let authorization: string;
@@ -115,19 +128,27 @@ describe('изоляция по владельцу и защита маршру�
   });
 
   it('ни одна операция над чужой записью не отвечает 403', async () => {
-    const responses = await Promise.all([
-      ...pageOperations.map((operation) =>
-        call(operation, foreignPageId, { Authorization: authorization }),
+    const requests: (() => ReturnType<typeof call>)[] = [
+      ...pageOperations.map(
+        (operation) => () => call(operation, foreignPageId, { Authorization: authorization }),
       ),
-      request(context.app.getHttpServer())
-        .post('/api/v1/pages')
-        .set('Authorization', authorization)
-        .send({ projectId: foreignProjectId }),
-      request(context.app.getHttpServer())
-        .post('/api/v1/pages')
-        .set('Authorization', authorization)
-        .send({ parentPageId: foreignPageId, projectId: foreignProjectId }),
-    ]);
+      () =>
+        request(context.app.getHttpServer())
+          .post('/api/v1/pages')
+          .set('Authorization', authorization)
+          .send({ projectId: foreignProjectId }),
+      () =>
+        request(context.app.getHttpServer())
+          .post('/api/v1/pages')
+          .set('Authorization', authorization)
+          .send({ parentPageId: foreignPageId, projectId: foreignProjectId }),
+    ];
+
+    const responses = [];
+
+    for (const batch of chunk(requests, parallelRequestLimit)) {
+      responses.push(...(await Promise.all(batch.map((send) => send()))));
+    }
 
     for (const response of responses) {
       expect(response.status).not.toBe(403);
