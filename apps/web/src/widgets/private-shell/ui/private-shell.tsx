@@ -14,7 +14,7 @@ export function PrivateShell({ children }: PrivateShellProps) {
   const { user } = useSession();
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="grid min-h-dvh grid-rows-[auto_minmax(0,1fr)] bg-background">
       <header className="border-b bg-card">
         <div className="flex items-center justify-between gap-4 px-page-inline py-4">
           <Link className="shrink-0 font-semibold tracking-tight" href="/">

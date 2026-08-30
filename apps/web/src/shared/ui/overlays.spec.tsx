@@ -1,7 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { Button } from './button';
 import {
   Dialog,
   DialogClose,
@@ -19,6 +18,7 @@ import {
   MenuPopup,
   MenuTrigger,
 } from './index';
+import { Button } from './shadcn/button';
 
 afterEach(cleanup);
 

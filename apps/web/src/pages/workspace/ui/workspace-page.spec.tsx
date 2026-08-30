@@ -92,7 +92,7 @@ describe('workspace page', () => {
     expect(await screen.findByRole('heading', { name: 'Проекты', level: 1 })).toBeInTheDocument();
     const projectList = screen.getByRole('list', { name: 'Список проектов' });
     expect(projectList).toBeInTheDocument();
-    expect(within(projectList).getByRole('button', { name: 'Project Alpha' })).toBeInTheDocument();
+    expect(within(projectList).getByRole('link', { name: 'Project Alpha' })).toBeInTheDocument();
     expect(screen.queryByText('Рабочая область')).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Название нового проекта'), {
       target: { value: '  Новый проект  ' },
@@ -113,10 +113,12 @@ describe('workspace page', () => {
     expect(screen.getAllByRole('treeitem', { name: 'Alpha page' })).not.toHaveLength(0);
     expect(screen.getByText('Other project page')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Project Beta' }));
+    fireEvent.click(screen.getByRole('treeitem', { name: 'Project Beta' }));
     expect(navigation.push).toHaveBeenCalledWith('/projects/project-b');
 
-    fireEvent.click(screen.getAllByRole('treeitem', { name: 'Beta page' }).at(0)!);
+    const betaPage = screen.getAllByRole('treeitem', { name: 'Beta page' }).at(0);
+    if (!betaPage) throw new Error('Beta page is unavailable');
+    fireEvent.click(betaPage);
     expect(navigation.push).toHaveBeenCalledWith('/pages/beta');
   });
 
@@ -210,7 +212,9 @@ describe('workspace page', () => {
     renderWorkspace({ projectId: 'project-a', type: 'project' });
     await screen.findByRole('heading', { name: 'Project Alpha' });
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Создать страницу' }).at(-1)!);
+    const createPageButton = screen.getAllByRole('button', { name: 'Создать страницу' }).at(-1);
+    if (!createPageButton) throw new Error('Create page action is unavailable');
+    fireEvent.click(createPageButton);
     const input = screen.getByRole('textbox', { name: 'Название новой страницы' });
     fireEvent.change(input, { target: { value: '  Created page  ' } });
     fireEvent.keyDown(input, { key: 'Enter' });

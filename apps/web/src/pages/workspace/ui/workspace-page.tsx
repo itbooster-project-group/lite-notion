@@ -1,49 +1,19 @@
 'use client';
 
-import { Cancel01Icon, SidebarLeftIcon } from '@hugeicons/core-free-icons';
-import { HugeiconsIcon } from '@hugeicons/react';
-import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { type ComponentProps, type FormEvent, useMemo, useState } from 'react';
+import { type FormEvent, useMemo, useState } from 'react';
+import { buildProjectPageTree, normalizePageTree, selectPage } from '@/entities/page';
+import { usePageManagement, useProjectCreation } from '@/features/workspace-management';
 import {
-  type CreatePageDto,
-  type CreateProjectDto,
-  getGetPageTreeQueryKey,
-  getListProjectsQueryKey,
   type PageTreeNodeDto,
   type ProjectDto,
-  useCreatePage,
-  useCreateProject,
   useGetPageTree,
   useListProjects,
-  useMovePage,
-  useRenamePage,
 } from '@/shared/api';
-import {
-  Button,
-  Drawer,
-  DrawerClose,
-  DrawerContent,
-  DrawerTitle,
-  DrawerTrigger,
-  Heading,
-  Input,
-  Text,
-} from '@/shared/ui';
-import {
-  buildProjectTree,
-  insertPageIntoTree,
-  type MoveIntent,
-  mapMoveIntentToDto,
-  movePageInTree,
-  normalizePageTree,
-  renamePageInTree,
-  selectPage,
-} from '../model/page-tree';
+import { Button, Heading, Input, Text } from '@/shared/ui';
+import { WorkspaceNavigation } from '@/widgets/workspace-navigation';
 
 import { WorkspaceMain } from './workspace-main';
-import { WorkspaceSidebar } from './workspace-sidebar';
 
 export type WorkspaceRouteContext =
   | Readonly<{ type: 'root' }>
@@ -55,15 +25,10 @@ type WorkspacePageProps = Readonly<{
 }>;
 
 export function WorkspacePage({ route }: WorkspacePageProps) {
-  const router = useRouter();
-  const queryClient = useQueryClient();
   const projectsQuery = useListProjects<ProjectDto[]>();
   const pageTreeQuery = useGetPageTree<PageTreeNodeDto[]>();
-  const createPageMutation = useCreatePage();
-  const createProjectMutation = useCreateProject();
-  const renamePageMutation = useRenamePage();
-  const movePageMutation = useMovePage();
-  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const pageManagement = usePageManagement();
+  const projectCreation = useProjectCreation();
 
   const pageTree = pageTreeQuery.data ?? [];
   const normalizedTree = useMemo(() => normalizePageTree(pageTree), [pageTree]);
@@ -72,7 +37,7 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
   const projects = projectsQuery.data ?? [];
   const project = projectId ? projects.find((item) => item.id === projectId) : undefined;
   const projectTree = useMemo(
-    () => buildProjectTree(normalizedTree, projectId ?? 'unavailable'),
+    () => buildProjectPageTree(normalizedTree, projectId ?? 'unavailable'),
     [normalizedTree, projectId],
   );
 
@@ -99,146 +64,37 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
     return <WorkspaceUnavailable />;
   }
 
-  const sidebarProps = {
-    activePageId: activePage?.id,
-    normalizedTree,
-    onCreatePage: createPageForProject,
-    onMovePage: movePage,
-    onRenamePage: renamePage,
-    onSelectPage: selectPageRoute,
-    onSelectProject: selectProjectRoute,
-    projects,
-  } satisfies ComponentProps<typeof WorkspaceSidebar>;
-
-  async function createPageForProject(
-    targetProjectId: string,
-    parentPageId: string | null,
-    title: string,
-  ) {
-    if (createPageMutation.isPending) throw new Error('Create unavailable');
-    const payload = { parentPageId, projectId: targetProjectId, title } satisfies CreatePageDto;
-    const page = await createPageMutation.mutateAsync({ data: payload });
-    queryClient.setQueryData<PageTreeNodeDto[]>(getGetPageTreeQueryKey(), (current) =>
-      insertPageIntoTree(current ?? [], page),
-    );
-    router.push(`/pages/${page.id}`);
-  }
-
-  async function createProject(name: string) {
-    if (createProjectMutation.isPending) throw new Error('Create unavailable');
-    const project = await createProjectMutation.mutateAsync({
-      data: { name } satisfies CreateProjectDto,
-    });
-    queryClient.setQueryData<ProjectDto[]>(getListProjectsQueryKey(), (current) => [
-      ...(current ?? []),
-      project,
-    ]);
-    router.push(`/projects/${project.id}`);
-  }
-
   async function createPage(parentPageId: string | null, title: string) {
     if (!projectId) throw new Error('Create unavailable');
-    await createPageForProject(projectId, parentPageId, title);
-  }
-
-  async function renamePage(pageId: string, title: string) {
-    if (renamePageMutation.isPending) throw new Error('Rename pending');
-    const queryKey = getGetPageTreeQueryKey();
-    await queryClient.cancelQueries({ queryKey });
-    const snapshot = queryClient.getQueryData<PageTreeNodeDto[]>(queryKey);
-    queryClient.setQueryData<PageTreeNodeDto[]>(queryKey, (current) =>
-      renamePageInTree(current ?? [], pageId, title),
-    );
-
-    try {
-      await renamePageMutation.mutateAsync({ data: { title }, pageId });
-    } catch (error) {
-      queryClient.setQueryData(queryKey, snapshot);
-      throw error;
-    } finally {
-      await queryClient.invalidateQueries({ queryKey });
-    }
-  }
-
-  async function movePage(intent: MoveIntent) {
-    if (movePageMutation.isPending) throw new Error('Move pending');
-    const payload = mapMoveIntentToDto(normalizedTree, intent);
-    if (!payload) throw new Error('Invalid move');
-
-    const queryKey = getGetPageTreeQueryKey();
-    await queryClient.cancelQueries({ queryKey });
-    const snapshot = queryClient.getQueryData<PageTreeNodeDto[]>(queryKey);
-    queryClient.setQueryData<PageTreeNodeDto[]>(queryKey, (current) =>
-      movePageInTree(current ?? [], intent),
-    );
-
-    try {
-      await movePageMutation.mutateAsync({ data: payload, pageId: intent.pageId });
-    } catch (error) {
-      queryClient.setQueryData(queryKey, snapshot);
-      throw error;
-    } finally {
-      await queryClient.invalidateQueries({ queryKey });
-    }
-  }
-
-  function selectProjectRoute(nextProjectId: string) {
-    setMobileNavigationOpen(false);
-    router.push(`/projects/${nextProjectId}`);
-  }
-
-  function selectPageRoute(pageId: string) {
-    setMobileNavigationOpen(false);
-    router.push(`/pages/${pageId}`);
+    await pageManagement.createPage(projectId, parentPageId, title);
   }
 
   return (
-    <div className="min-h-[calc(100vh-73px)] md:grid md:grid-cols-[20rem_minmax(0,1fr)]">
-      <aside className="hidden border-r bg-card p-5 md:block" aria-label="Навигация по проекту">
-        <WorkspaceSidebar {...sidebarProps} />
-      </aside>
+    <div className="relative min-h-0 md:grid md:grid-cols-[20rem_minmax(0,1fr)]">
+      <WorkspaceNavigation
+        activePageId={activePage?.id}
+        activeProjectId={project?.id}
+        normalizedTree={normalizedTree}
+        projects={projects}
+        onCreatePage={pageManagement.createPage}
+        onMovePage={pageManagement.movePage}
+        onRenamePage={pageManagement.renamePage}
+      />
 
-      <div className="relative min-w-0">
-        <div className="absolute top-3 right-3 z-10 md:hidden">
-          <Drawer open={mobileNavigationOpen} onOpenChange={setMobileNavigationOpen}>
-            <DrawerTrigger
-              aria-label="Открыть навигацию"
-              render={<Button size="icon" type="button" variant="ghost" />}
-            >
-              <HugeiconsIcon aria-hidden="true" icon={SidebarLeftIcon} strokeWidth={2} />
-            </DrawerTrigger>
-            <DrawerContent>
-              <DrawerTitle className="sr-only">Навигация</DrawerTitle>
-              <div className="flex justify-end p-3">
-                <DrawerClose
-                  aria-label="Закрыть навигацию"
-                  render={<Button size="icon-sm" type="button" variant="ghost" />}
-                >
-                  <HugeiconsIcon aria-hidden="true" icon={Cancel01Icon} strokeWidth={2} />
-                </DrawerClose>
-              </div>
-              <div className="overflow-y-auto px-5 pb-5">
-                <WorkspaceSidebar {...sidebarProps} />
-              </div>
-            </DrawerContent>
-          </Drawer>
-        </div>
-
+      <div className="relative min-h-0 min-w-0 overflow-y-auto">
         {route.type === 'root' ? (
           <WorkspaceRoot
-            isCreating={createProjectMutation.isPending}
+            isCreating={projectCreation.isCreatingProject}
             projects={projects}
-            onCreateProject={createProject}
-            onSelectProject={selectProjectRoute}
+            onCreateProject={projectCreation.createProject}
           />
         ) : (
           <WorkspaceMain
             activePageId={activePage?.id}
             normalizedTree={normalizedTree}
             onCreatePage={createPage}
-            onMovePage={movePage}
-            onRenamePage={renamePage}
-            onSelectPage={selectPageRoute}
+            onMovePage={pageManagement.movePage}
+            onRenamePage={pageManagement.renamePage}
             projectTree={projectTree}
             projectName={project?.name ?? ''}
           />
@@ -251,12 +107,10 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
 function WorkspaceRoot({
   isCreating,
   onCreateProject,
-  onSelectProject,
   projects,
 }: Readonly<{
   isCreating: boolean;
   onCreateProject: (name: string) => Promise<void>;
-  onSelectProject: (projectId: string) => void;
   projects: readonly ProjectDto[];
 }>) {
   const [error, setError] = useState<string>();
@@ -309,13 +163,12 @@ function WorkspaceRoot({
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="Список проектов">
           {projects.map((project) => (
             <li key={project.id}>
-              <button
+              <Link
                 className="block w-full rounded-xl border bg-card p-5 text-left font-medium shadow-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                type="button"
-                onClick={() => onSelectProject(project.id)}
+                href={`/projects/${project.id}`}
               >
                 {project.name}
-              </button>
+              </Link>
             </li>
           ))}
         </ul>

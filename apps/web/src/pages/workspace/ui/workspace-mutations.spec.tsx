@@ -6,41 +6,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PageDto, PageTreeNodeDto } from '@/shared/api';
 import { server } from '@/shared/api/mocks/server';
 
-import type { PageTreeProps } from './page-tree';
 import { WorkspacePage } from './workspace-page';
 
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: navigation.push }),
-}));
-
-vi.mock('./page-tree', () => ({
-  PageTree: (props: PageTreeProps) => (
-    <div>
-      {Object.values(props.projectTree.items)
-        .filter((item) => !item.synthetic)
-        .map((item) => (
-          <span key={item.id}>{item.title}</span>
-        ))}
-      <button
-        type="button"
-        onClick={() => void props.onCreatePage('alpha', 'Created child').catch(() => undefined)}
-      >
-        Test create child
-      </button>
-      <button
-        type="button"
-        onClick={() =>
-          void props
-            .onMovePage({ index: 1, pageId: 'child', parentPageId: null })
-            .catch(() => undefined)
-        }
-      >
-        Test move
-      </button>
-    </div>
-  ),
 }));
 
 function page(
@@ -111,7 +82,11 @@ describe('workspace mutation orchestration', () => {
     renderPage();
     await screen.findByRole('heading', { name: 'Child page' });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Test create child' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Действия для Alpha page' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Добавить дочернюю' }));
+    const input = screen.getByRole('textbox', { name: 'Название новой страницы' });
+    fireEvent.change(input, { target: { value: 'Created child' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
 
     await waitFor(() =>
       expect(requestBody).toHaveBeenCalledWith({
@@ -144,11 +119,15 @@ describe('workspace mutation orchestration', () => {
     renderPage();
     await screen.findByRole('heading', { name: 'Child page' });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Test move' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Действия для Child page' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Переместить…' }));
+    await screen.findByRole('dialog', { name: 'Переместить страницу' });
+    fireEvent.change(screen.getByLabelText('Позиция'), { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Переместить' }));
 
-    expect(screen.getByRole('navigation', { name: 'Хлебные крошки' })).toHaveTextContent(
-      'Child page',
-    );
+    expect(
+      screen.getByRole('navigation', { hidden: true, name: 'Хлебные крошки' }),
+    ).toHaveTextContent('Child page');
     await waitFor(() =>
       expect(requestBody).toHaveBeenCalledWith({
         nextSiblingId: 'beta',
@@ -157,9 +136,14 @@ describe('workspace mutation orchestration', () => {
       }),
     );
     await waitFor(() =>
-      expect(screen.getByRole('navigation', { name: 'Хлебные крошки' })).not.toHaveTextContent(
-        'Alpha page',
-      ),
+      expect(
+        screen.getByRole('navigation', { hidden: true, name: 'Хлебные крошки' }),
+      ).not.toHaveTextContent('Alpha page'),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', { name: 'Переместить страницу' }),
+      ).not.toBeInTheDocument(),
     );
     expect(screen.getByRole('heading', { name: 'Child page' })).toBeInTheDocument();
     expect(navigation.push).not.toHaveBeenCalled();
@@ -175,15 +159,19 @@ describe('workspace mutation orchestration', () => {
     renderPage();
     await screen.findByRole('heading', { name: 'Child page' });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Test move' }));
-    expect(screen.getByRole('navigation', { name: 'Хлебные крошки' })).toHaveTextContent(
-      'Child page',
-    );
+    fireEvent.click(screen.getByRole('button', { name: 'Действия для Child page' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Переместить…' }));
+    await screen.findByRole('dialog', { name: 'Переместить страницу' });
+    fireEvent.change(screen.getByLabelText('Позиция'), { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Переместить' }));
+    expect(
+      screen.getByRole('navigation', { hidden: true, name: 'Хлебные крошки' }),
+    ).toHaveTextContent('Child page');
 
     await waitFor(() =>
-      expect(screen.getByRole('navigation', { name: 'Хлебные крошки' })).toHaveTextContent(
-        'Alpha page/Child page',
-      ),
+      expect(
+        screen.getByRole('navigation', { hidden: true, name: 'Хлебные крошки' }),
+      ).toHaveTextContent('Alpha page/Child page'),
     );
     expect(screen.queryByText('Raw move detail')).not.toBeInTheDocument();
   });

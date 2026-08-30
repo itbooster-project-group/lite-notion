@@ -12,18 +12,21 @@ export type NormalizedPageTree = Readonly<{
   rootIdsByProjectId: Readonly<Record<string, readonly string[]>>;
 }>;
 
-export type ProjectTreeItem = Readonly<{
+export type PageTreeItemData = Readonly<{
   id: string;
   title: string;
   projectId: string;
   parentPageId: string | null;
   childrenIds: readonly string[];
+  canHaveChildren: boolean;
+  hasChildren: boolean;
   synthetic: boolean;
 }>;
 
-export type ProjectTree = Readonly<{
+export type ProjectPageTree = Readonly<{
+  projectId: string;
   rootItemId: string;
-  items: Readonly<Record<string, ProjectTreeItem>>;
+  items: Readonly<Record<string, PageTreeItemData>>;
 }>;
 
 export type PageBreadcrumb = Readonly<{
@@ -33,9 +36,24 @@ export type PageBreadcrumb = Readonly<{
 
 export type MoveIntent = Readonly<{
   pageId: string;
+  projectId: string;
   parentPageId: string | null;
   index: number;
 }>;
+
+export type PageDropTarget =
+  | Readonly<{
+      type: 'item';
+      parentPageId: string | null;
+      projectId: string;
+      childCount: number;
+    }>
+  | Readonly<{
+      type: 'insertion';
+      parentPageId: string | null;
+      projectId: string;
+      index: number;
+    }>;
 
 export function normalizePageTree(nodes: readonly PageTreeNodeDto[]): NormalizedPageTree {
   const nodesById: Record<string, NormalizedPage> = {};
@@ -61,32 +79,38 @@ export function normalizePageTree(nodes: readonly PageTreeNodeDto[]): Normalized
   return { nodesById, parentIdById, childIdsByParentId, rootIdsByProjectId };
 }
 
-export function buildProjectTree(tree: NormalizedPageTree, projectId: string): ProjectTree {
+export function buildProjectPageTree(tree: NormalizedPageTree, projectId: string): ProjectPageTree {
   const rootItemId = `${SYNTHETIC_ROOT_PREFIX}${projectId}`;
-  const items: Record<string, ProjectTreeItem> = {
+  const rootChildren = tree.rootIdsByProjectId[projectId] ?? [];
+  const items: Record<string, PageTreeItemData> = {
     [rootItemId]: {
       id: rootItemId,
       title: '',
       projectId,
       parentPageId: null,
-      childrenIds: tree.rootIdsByProjectId[projectId] ?? [],
+      childrenIds: rootChildren,
+      canHaveChildren: true,
+      hasChildren: rootChildren.length > 0,
       synthetic: true,
     },
   };
 
   for (const [id, page] of Object.entries(tree.nodesById)) {
     if (page.projectId !== projectId) continue;
+    const childrenIds = tree.childIdsByParentId[id] ?? [];
     items[id] = {
       id,
       title: getPageDisplayTitle(page.title),
       projectId,
       parentPageId: page.parentPageId,
-      childrenIds: tree.childIdsByParentId[id] ?? [],
+      childrenIds,
+      canHaveChildren: true,
+      hasChildren: childrenIds.length > 0,
       synthetic: false,
     };
   }
 
-  return { rootItemId, items };
+  return { projectId, rootItemId, items };
 }
 
 export function selectPage(
@@ -147,15 +171,40 @@ export function renamePageInTree(
   return renamePageNodes(tree, pageId, title).nodes;
 }
 
+export function toMoveIntent(pageId: string, target: PageDropTarget): MoveIntent {
+  if (target.type === 'insertion') {
+    return {
+      pageId,
+      projectId: target.projectId,
+      parentPageId: target.parentPageId,
+      index: target.index,
+    };
+  }
+
+  return {
+    pageId,
+    projectId: target.projectId,
+    parentPageId: target.parentPageId,
+    index: target.childCount,
+  };
+}
+
 export function isMoveIntentValid(tree: NormalizedPageTree, intent: MoveIntent): boolean {
   const page = tree.nodesById[intent.pageId];
-  if (!page || !Number.isInteger(intent.index) || intent.index < 0) return false;
+  if (
+    !page ||
+    page.projectId !== intent.projectId ||
+    !Number.isInteger(intent.index) ||
+    intent.index < 0
+  ) {
+    return false;
+  }
 
   if (intent.parentPageId === intent.pageId) return false;
 
   if (intent.parentPageId) {
     const parent = tree.nodesById[intent.parentPageId];
-    if (!parent || parent.projectId !== page.projectId) return false;
+    if (!parent || parent.projectId !== intent.projectId) return false;
     if (isDescendant(tree, intent.pageId, parent.id)) return false;
   }
 
@@ -190,7 +239,14 @@ export function movePageInTree(
   const movedPage = { ...removed.page, parentPageId: intent.parentPageId };
   if (intent.parentPageId === null) {
     const roots = [...removed.nodes];
-    roots.splice(intent.index, 0, movedPage);
+    const projectRootIndexes = roots
+      .map((node, index) => ({ index, node }))
+      .filter(({ node }) => node.projectId === intent.projectId);
+    const lastProjectRootIndex = projectRootIndexes.at(-1)?.index;
+    const insertionIndex =
+      projectRootIndexes[intent.index]?.index ??
+      (lastProjectRootIndex === undefined ? roots.length : lastProjectRootIndex + 1);
+    roots.splice(insertionIndex, 0, movedPage);
     return roots;
   }
 
@@ -204,12 +260,9 @@ export function movePageInTree(
 }
 
 function getMoveTargetSiblings(tree: NormalizedPageTree, intent: MoveIntent): string[] {
-  const page = tree.nodesById[intent.pageId];
-  if (!page) return [];
-
   const siblings = intent.parentPageId
     ? (tree.childIdsByParentId[intent.parentPageId] ?? [])
-    : (tree.rootIdsByProjectId[page.projectId] ?? []);
+    : (tree.rootIdsByProjectId[intent.projectId] ?? []);
   return siblings.filter((id) => id !== intent.pageId);
 }
 
@@ -287,9 +340,7 @@ function removePage(
     return { nodes: next, page };
   }
 
-  for (let index = 0; index < nodes.length; index += 1) {
-    const node = nodes[index];
-    if (!node) continue;
+  for (const [index, node] of nodes.entries()) {
     const childResult = removePage(node.children, pageId);
     if (childResult.page) {
       const next = [...nodes];

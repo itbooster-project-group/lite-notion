@@ -44,3 +44,26 @@
 
 - [x] 9.1 Убрать пояснение над деревом проекта и заменить текстовую кнопку выхода доступной иконкой.
 - [x] 9.2 Обновить тесты и повторно выполнить проверки web и OpenSpec.
+
+## 10. FSD и управление состоянием
+
+- [x] 10.1 Перенести доменную модель Page Tree из `pages/workspace/model` в `entities/page` и покрыть чистые преобразования и validation тестами.
+- [x] 10.2 Вынести orchestration создания/переименования/перемещения страниц и создания проекта в небольшое число features с optimistic update и rollback.
+- [x] 10.3 Оставить `pages/workspace` композицией маршрута и экрана, исправить найденные Steiger dependency violations без отключения правил.
+
+## 11. Единое дерево и DnD
+
+- [x] 11.1 Заменить независимые sidebar trees одним Headless Tree с synthetic root, project/page treeitem, общей клавиатурной навигацией и сохраняемым раскрытием проектов.
+- [x] 11.2 Разделить `canHaveChildren` и `hasChildren`, разрешить drop внутрь пустой страницы и использовать общую validation для DnD и Move Page dialog.
+- [x] 11.3 Разбить PageTree минимум на `PageTree`, `PageTreeItem` и `MovePageDialog`, сохранив доступность, навигацию и действия.
+
+## 12. Общие UI и инфраструктура
+
+- [x] 12.1 Унифицировать Button на реализации shadcn, убрать дублирование indent и сохранить semantic Tailwind tokens.
+- [x] 12.2 Перевести private shell на grid/flex без вычисления высоты header и добавить Steiger в web CI.
+- [x] 12.3 Добавить корневые команды `web:typecheck`, `web:test` и `web:build` для обязательной итоговой проверки.
+
+## 13. Регрессии и проверка
+
+- [x] 13.1 Добавить тесты общего tree, DnD/validation, optimistic mutations/rollback, навигации и active item после cache update.
+- [x] 13.2 Запустить lint, Steiger, web typecheck/test/build и строгую валидацию OpenSpec, не игнорируя ошибки и не отключая правила.

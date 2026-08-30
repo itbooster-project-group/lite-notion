@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 
 import { PrivateRoute } from '@/app/routing';
 import { PrivateShell } from '@/widgets/private-shell';
+import { WorkspaceTreeExpansionProvider } from '@/widgets/workspace-navigation';
 
 type PrivateLayoutProps = Readonly<{
   children: ReactNode;
@@ -10,7 +11,9 @@ type PrivateLayoutProps = Readonly<{
 export function PrivateLayout({ children }: PrivateLayoutProps) {
   return (
     <PrivateRoute>
-      <PrivateShell>{children}</PrivateShell>
+      <WorkspaceTreeExpansionProvider>
+        <PrivateShell>{children}</PrivateShell>
+      </WorkspaceTreeExpansionProvider>
     </PrivateRoute>
   );
 }

@@ -10,5 +10,5 @@ export function parsePageTitle(value: string): { error?: string; title?: string 
   const result = pageTitleSchema.safeParse(value);
   return result.success
     ? { title: result.data }
-    : { error: result.error.issues[0]?.message ?? 'Введите допустимое название страницы' };
+    : { error: result.error.issues[0]?.message ?? 'Некорректное название' };
 }

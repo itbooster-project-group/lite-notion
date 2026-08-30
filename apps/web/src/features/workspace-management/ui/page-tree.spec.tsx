@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { buildProjectPageTree, normalizePageTree } from '@/entities/page';
 import type { PageTreeNodeDto } from '@/shared/api';
-import { buildProjectTree, normalizePageTree } from '../model/page-tree';
 
 import { PageTree } from './page-tree';
 
@@ -45,7 +45,7 @@ function renderTree(activePageId: string | undefined = undefined) {
     <PageTree
       activePageId={activePageId}
       normalizedTree={normalizedTree}
-      projectTree={buildProjectTree(normalizedTree, 'project-a')}
+      projectTree={buildProjectPageTree(normalizedTree, 'project-a')}
       {...callbacks}
     />,
   );
@@ -131,7 +131,7 @@ describe('workspace page tree', () => {
       <PageTree
         activePageId={undefined}
         normalizedTree={normalizedTree}
-        projectTree={buildProjectTree(normalizedTree, 'project-a')}
+        projectTree={buildProjectPageTree(normalizedTree, 'project-a')}
         onCreatePage={vi.fn().mockRejectedValue(new Error('Raw create detail'))}
         onMovePage={vi.fn().mockResolvedValue(undefined)}
         onRenamePage={vi.fn().mockResolvedValue(undefined)}
@@ -171,7 +171,7 @@ describe('workspace page tree', () => {
       <PageTree
         activePageId="a"
         normalizedTree={normalizedTree}
-        projectTree={buildProjectTree(normalizedTree, 'project-a')}
+        projectTree={buildProjectPageTree(normalizedTree, 'project-a')}
         onCreatePage={vi.fn().mockResolvedValue(undefined)}
         onMovePage={vi.fn().mockResolvedValue(undefined)}
         onRenamePage={onRenamePage}
@@ -203,10 +203,36 @@ describe('workspace page tree', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Переместить' }));
 
     await waitFor(() =>
-      expect(onMovePage).toHaveBeenCalledWith({ index: 0, pageId: 'a', parentPageId: 'b' }),
+      expect(onMovePage).toHaveBeenCalledWith({
+        index: 0,
+        pageId: 'a',
+        parentPageId: 'b',
+        projectId: 'project-a',
+      }),
     );
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(trigger).toHaveFocus();
+  });
+
+  it('перемещает Page A внутрь пустой Page B через pointer DnD', async () => {
+    const { onMovePage } = renderTree('a');
+    const dragHandle = screen.getByRole('button', { name: 'Перетащить Alpha' });
+    const emptyTarget = screen.getByRole('treeitem', { name: 'Beta' });
+
+    expect(emptyTarget).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('button', { name: 'Раскрыть Beta' })).toBeNull();
+    fireEvent.dragStart(dragHandle);
+    fireEvent.dragOver(emptyTarget, { clientX: 8, clientY: 8 });
+    fireEvent.drop(emptyTarget, { clientX: 8, clientY: 8 });
+
+    await waitFor(() =>
+      expect(onMovePage).toHaveBeenCalledWith({
+        index: 0,
+        pageId: 'a',
+        parentPageId: 'b',
+        projectId: 'project-a',
+      }),
+    );
   });
 
   it('поддерживает запуск и отмену keyboard DnD с сохранением фокуса', async () => {

@@ -1,9 +1,17 @@
-import Link from 'next/link';
-import { Heading, Text } from '@/shared/ui';
-import type { MoveIntent, NormalizedPageTree, ProjectTree } from '../model/page-tree';
-import { getBreadcrumbs, getPageDisplayTitle, selectPage } from '../model/page-tree';
+'use client';
 
-import { PageTree } from './page-tree';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import {
+  getBreadcrumbs,
+  getPageDisplayTitle,
+  type MoveIntent,
+  type NormalizedPageTree,
+  type ProjectPageTree,
+  selectPage,
+} from '@/entities/page';
+import { PageTree } from '@/features/workspace-management';
+import { Heading, Text } from '@/shared/ui';
 
 type WorkspaceMainProps = Readonly<{
   activePageId: string | undefined;
@@ -11,8 +19,7 @@ type WorkspaceMainProps = Readonly<{
   onCreatePage: (parentPageId: string | null, title: string) => Promise<void>;
   onMovePage: (intent: MoveIntent) => Promise<void>;
   onRenamePage: (pageId: string, title: string) => Promise<void>;
-  onSelectPage: (pageId: string) => void;
-  projectTree: ProjectTree;
+  projectTree: ProjectPageTree;
   projectName: string;
 }>;
 
@@ -22,10 +29,10 @@ export function WorkspaceMain({
   onCreatePage,
   onMovePage,
   onRenamePage,
-  onSelectPage,
   projectName,
   projectTree,
 }: WorkspaceMainProps) {
+  const router = useRouter();
   const page = selectPage(normalizedTree, activePageId);
 
   if (!page) {
@@ -43,7 +50,7 @@ export function WorkspaceMain({
           onCreatePage={onCreatePage}
           onMovePage={onMovePage}
           onRenamePage={onRenamePage}
-          onSelectPage={onSelectPage}
+          onSelectPage={(pageId) => router.push(`/pages/${pageId}`)}
         />
       </main>
     );

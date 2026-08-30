@@ -1,6 +1,6 @@
-export { Button, type ButtonProps } from './button';
 export { Heading, type HeadingProps } from './heading';
 export { Input, type InputProps } from './input';
+export { Button, type ButtonProps } from './shadcn/button';
 export {
   Dialog,
   DialogClose,
@@ -25,3 +25,4 @@ export {
   DropdownMenuTrigger as MenuTrigger,
 } from './shadcn/dropdown-menu';
 export { Text, type TextProps } from './text';
+export { TREE_INDENT_PX } from './tree';
