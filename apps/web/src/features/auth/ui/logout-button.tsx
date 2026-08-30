@@ -1,5 +1,7 @@
 'use client';
 
+import { Logout01Icon } from '@hugeicons/core-free-icons';
+import { HugeiconsIcon } from '@hugeicons/react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
@@ -37,12 +39,14 @@ export function LogoutButton() {
   return (
     <div className="flex flex-col items-end gap-1">
       <Button
+        aria-label={isPending ? 'Выходим…' : 'Выйти'}
         disabled={isPending}
         onClick={() => void handleLogout()}
+        size="icon"
         type="button"
-        variant="outline"
+        variant="ghost"
       >
-        {isPending ? 'Выходим…' : 'Выйти'}
+        <HugeiconsIcon aria-hidden="true" icon={Logout01Icon} strokeWidth={2} />
       </Button>
       {error ? (
         <Text variant="error" className="text-xs" role="alert">

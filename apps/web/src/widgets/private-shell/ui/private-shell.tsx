@@ -16,7 +16,7 @@ export function PrivateShell({ children }: PrivateShellProps) {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card">
-        <div className="mx-auto flex max-w-shell items-center justify-between gap-4 px-page-inline py-4">
+        <div className="flex items-center justify-between gap-4 px-page-inline py-4">
           <Link className="shrink-0 font-semibold tracking-tight" href="/">
             Lite Notion
           </Link>

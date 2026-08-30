@@ -7,11 +7,4 @@ export default defineConfig([
   {
     ignores: ['./apps/web/src/shared/api/generated/**', '**/*.spec.ts', '**/*.spec.tsx'],
   },
-  // The private shell remains a stable screen-level boundary despite having one visible consumer.
-  {
-    files: ['./apps/web/src/widgets/private-shell/**'],
-    rules: {
-      'fsd/insignificant-slice': 'off',
-    },
-  },
 ]);
