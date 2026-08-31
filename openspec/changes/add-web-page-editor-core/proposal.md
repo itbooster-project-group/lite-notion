@@ -1,30 +1,36 @@
 ## Why
 
-Активная страница в web workspace пока показывает только заглушку, хотя backend уже хранит полный Yjs state документа и публикует защищённые операции чтения и замены. Нужно перенести готовое ядро TipTap/Yjs-редактора на актуальный `main` и дать одному клиенту безопасное временное сохранение до появления Hocuspocus, permissions и realtime lifecycle из issue #46.
+До реализации редактора необходимо зафиксировать устойчивые границы document model, editor UI и transport lifecycle. Иначе временный REST bridge проникнет в widget, TipTap-конфигурация станет неявным persisted contract, а последующий переход на Hocuspocus потребует переписывать editor core и создаст риск потери данных.
 
 ## What Changes
 
-- Добавить самостоятельный TipTap/Yjs editor widget со schema version 1, базовым форматированием, ссылками, slash menu, BubbleMenu, локальной историей и перетаскиванием верхнеуровневых блоков.
-- Добавить URL-only image, YouTube и direct MP4/WebM nodes с безопасной валидацией, metadata, выравниванием и resize без загрузки assets или binary content в Yjs.
-- Загружать и временно сохранять полный Yjs state через существующие `GET`/`PUT /api/v1/pages/{pageId}/document`, не создавая block CRUD или authoritative TipTap JSON.
-- Выполнять autosave с debounce 750 мс, последовательными PUT, сохранением последнего dirty snapshot, доступными статусами и retry.
-- Заменить заглушку активной страницы в workspace редактором, сохранив breadcrumbs и heading.
-- Оставить Hocuspocus transport, realtime collaboration, presence и вывод `canEdit` из effective permissions в issue #46; при их внедрении временный REST lifecycle должен быть удалён.
+- Спроектировать schema version 1 как долгоживущий persisted contract страницы: единственным редактируемым источником истины остаётся `Y.Doc`, а каждый custom node/mark получает стабильный JSON contract, валидацию и детерминированное представление вне React NodeView.
+- Разделить FSD-ответственности между document entity, page-editing feature и композиционным `PageEditor` widget; transport/session lifecycle не должен принадлежать TipTap surface.
+- Ввести transport-neutral document session abstraction, чтобы временный REST adapter и будущий Hocuspocus adapter предоставляли editor surface один и тот же `Y.Doc`, статусы, editable-state и typed errors.
+- Спроектировать временный REST session с single-flight autosave, защитой от stale callbacks, явным cleanup lifecycle, проверкой payload до PUT и блокирующим состоянием `document-too-large`.
+- Зафиксировать честные гарантии сохранения: flush при SPA navigation является best effort, а закрытие вкладки защищается `beforeunload` warning и не считается гарантированным persistence mechanism.
+- Не выпускать REST editing lifecycle пользователям: до Hocuspocus активная страница сохраняет существующий placeholder. REST adapter проверяется изолированно и не импортируется production workspace.
+- Добавить keyboard alternative для перестановки блоков и security contract для ссылок, внешних изображений, direct video и YouTube embeds.
+- Подготовить schema v1 к будущему publication pipeline `Y.Doc → derived TipTap JSON → static renderer → deterministic output`; public page и создание immutable snapshots остаются вне этого change.
+- Оставить realtime collaboration, presence, effective permissions и production Hocuspocus integration в issue #46. При их реализации REST autosave editable document должен быть удалён, а schema и editor surface сохранены.
+
+Этот PR изменяет только OpenSpec planning artifacts. Dependencies, editor, API adapters, workspace integration и иные production-файлы в нём не изменяются.
 
 ## Capabilities
 
 ### New Capabilities
 
-- `web-page-editor`: Наблюдаемое поведение автономного TipTap/Yjs-редактора страницы, URL-only media и временного REST autosave.
+- `web-page-editor`: Контракт schema v1, transport-neutral editor session, доступное редактирование, безопасные external media и ограниченный временный REST lifecycle без production-подключения.
 
 ### Modified Capabilities
 
-- `web-page-workspace`: Активная страница вместо заглушки загружает и показывает редактор своего PageDocument.
+Нет. Поведение `web-page-workspace` в этом change не меняется: placeholder остаётся до отдельного reviewed Hocuspocus change.
 
 ## Impact
 
-- Frontend: новый `widgets/page-editor`, интеграция в page composition workspace и публичные экспорты существующего generated document API.
-- Dependencies: TipTap 3 extensions, Yjs и локальный набор Lucide icons добавляются только в `@lite-notion/web`; существующие Hugeicons и shadcn configuration сохраняются.
-- Backend/API: endpoints, DTO, database schema и generated API не меняются; web использует существующий full-state document contract.
-- Infrastructure: изменений нет; WebSocket URL и collaboration service остаются вне scope.
-- Ограничение этапа: несколько вкладок не поддерживают сходимость и используют last-write-wins до замены REST bridge в issue #46.
+- Frontend после отдельного implementation review: `entities/page-document` владеет persisted schema и Yjs helpers; `features/page-editing` — session lifecycle и editor surface; `widgets/page-editor` — композицией и статусами.
+- Dependencies после отдельного implementation review: согласованный набор TipTap 3/Yjs extensions только в `@lite-notion/web`; Hocuspocus packages не добавляются этим change.
+- Backend/API: endpoints, DTO, database schema и generated API не меняются. Существующий document API рассматривается только как ограниченный bridge для изолированного adapter.
+- Publication: будущие immutable snapshots используют derived TipTap JSON для static rendering; editable document не получает authoritative JSON-копию.
+- Infrastructure/deployment: REST editor не подключается ни к одному production route. Для его будущего пользовательского выпуска потребуется новое reviewed решение с single-writer protection либо Hocuspocus.
+- Текущий PR: только `proposal.md`, `design.md`, delta spec и `tasks.md`; production changes запрещены.

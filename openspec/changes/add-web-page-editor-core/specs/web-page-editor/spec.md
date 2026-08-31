@@ -1,84 +1,140 @@
 ## Purpose
 
-Определяет наблюдаемое поведение автономного редактора страницы: поддерживаемое форматирование и media nodes, доступное управление и временное сохранение полного Yjs state через document API.
+Определяет versioned contract содержимого страницы, transport-neutral editor session, доступные editing flows и безопасное представление документа в интерактивном и будущем статическом renderer.
 
 ## ADDED Requirements
 
+### Requirement: Yjs является единственным источником истины рабочего документа
+
+Система MUST использовать `Y.Doc` как единственный authoritative mutable state редактируемого документа. Система MUST NOT создавать authoritative TipTap JSON, block CRUD или вторую mutable-копию содержимого в TanStack Query. При работе TipTap Collaboration/Yjs стандартный history extension MUST быть отключён как competing undo stack.
+
+#### Scenario: Пользователь изменяет документ
+- **WHEN** editor command изменяет содержимое страницы
+- **THEN** изменение записывается в текущий `Y.Doc`, а отдельная authoritative JSON- или Query-копия не создаётся
+
+#### Scenario: Пользователь отменяет локальное изменение
+- **WHEN** для текущего клиента доступно undo или redo
+- **THEN** операция выполняется history mechanism, совместимым с Yjs collaboration model, без параллельного стандартного history stack
+
+### Requirement: Schema version 1 является persisted contract
+
+Система SHALL определять одну versioned schema для document, text, paragraph, headings 1–3, bullet/ordered lists, task list/task item, hard break, bold, italic, strike, inline code, link, image, YouTube и direct video. Names, attrs, defaults и validation rules schema v1 MUST быть стабильными для persisted Yjs state и derived publication JSON.
+
+#### Scenario: Документ использует поддерживаемую schema
+- **WHEN** session получает state со schema version 1
+- **THEN** editor и schema-aware conversion используют один и тот же contract nodes, marks, attrs и defaults
+
+#### Scenario: Документ использует неизвестную schema
+- **WHEN** session получает state с неподдерживаемой schema version
+- **THEN** система показывает блокирующее состояние несовместимости, не создаёт editable surface и не сохраняет документ поверх неизвестного state
+
+#### Scenario: Encoded state повреждён
+- **WHEN** schema version поддерживается, но Yjs state нельзя безопасно декодировать
+- **THEN** система показывает блокирующую безопасную ошибку и не заменяет state пустым документом
+
+### Requirement: Schema v1 поддерживает детерминированный static rendering
+
+Каждый custom node и mark schema v1 MUST иметь стабильный JSON contract, validation и детерминированное non-editor representation. React NodeView MUST NOT быть единственным способом представить node. Pipeline `Y.Doc → TipTap/ProseMirror JSON → static renderer` MUST выдавать deterministic output для одной schema version без монтирования interactive editor.
+
+#### Scenario: Publication pipeline получает поддерживаемый документ
+- **WHEN** schema-aware conversion создаёт derived JSON из `Y.Doc` version 1
+- **THEN** static renderer может представить все nodes/marks без React NodeView и с теми же validated attrs
+
+#### Scenario: Одинаковый snapshot рендерится повторно
+- **WHEN** static renderer дважды получает одинаковый versioned derived JSON
+- **THEN** структурный HTML/React output совпадает и не зависит от состояния interactive editor
+
+#### Scenario: Public page использует immutable snapshot
+- **WHEN** будущая public Next.js page отображает опубликованную версию документа
+- **THEN** она читает заранее derived TipTap JSON и не декодирует mutable Yjs state при каждом request
+
 ### Requirement: Базовое редактирование документа
 
-Система SHALL предоставлять редактор страницы с paragraph, headings уровней 1–3, bullet list, ordered list, task list/task item и marks bold, italic, strike, inline code и link.
+Система SHALL предоставлять editor surface с paragraph, headings уровней 1–3, bullet list, ordered list, task list/task item и marks bold, italic, strike, inline code и link. Поверхность SHALL быть плоской, без отдельной card surface.
 
 #### Scenario: Пользователь форматирует документ
 - **WHEN** пользователь вводит текст и применяет поддерживаемый block type или mark
-- **THEN** редактор отображает новое форматирование и записывает изменение в текущий Yjs document
+- **THEN** editor отображает форматирование и записывает изменение в текущий `Y.Doc`
 
-#### Scenario: Пользователь работает с клавиатуры
-- **WHEN** пользователь редактирует документ без указательного устройства
-- **THEN** основные команды ввода, форматирования и навигации остаются доступны с клавиатуры
+#### Scenario: История пуста
+- **WHEN** для текущего клиента нет доступного undo или redo
+- **THEN** history actions не отображаются как доступные
 
-### Requirement: Контекстное форматирование и ссылки
+#### Scenario: История доступна
+- **WHEN** локальное изменение можно отменить или повторить
+- **THEN** поверхность показывает только доступные undo и redo actions
 
-Система SHALL показывать BubbleMenu только для непустого текстового выделения и SHALL разрешать создавать, изменять и удалять безопасные HTTP, HTTPS и mailto ссылки. Адрес без scheme SHALL нормализоваться в HTTPS, а запрещённая или некорректная scheme MUST NOT изменять документ.
+### Requirement: Контекстное форматирование и безопасные ссылки
+
+Система SHALL показывать BubbleMenu только для непустого текстового выделения и SHALL позволять создавать, изменять и удалять normalized HTTP, HTTPS и mailto links. Адрес без scheme SHALL нормализоваться в HTTPS; запрещённая или некорректная scheme MUST NOT изменять документ. Внешняя ссылка с `target="_blank"` MUST получать `rel="noopener noreferrer"` при rendering.
 
 #### Scenario: Пользователь выделяет текст
 - **WHEN** пользователь создаёт непустое текстовое выделение
-- **THEN** над выделением появляется контекстная панель с bold, italic, strike, inline code и link
+- **THEN** появляется контекстная панель с bold, italic, strike, inline code и link
 
 #### Scenario: Пользователь редактирует ссылку
-- **WHEN** курсор находится внутри link mark и пользователь открывает link form кнопкой или сочетанием Mod-K
-- **THEN** форма содержит текущий адрес и позволяет обновить либо удалить ссылку с восстановлением focus в редакторе
+- **WHEN** курсор находится внутри link mark и пользователь открывает link form кнопкой или `Mod-K`
+- **THEN** форма содержит текущий адрес и позволяет обновить либо удалить ссылку с восстановлением focus в editor
 
 #### Scenario: Пользователь вводит небезопасный адрес
 - **WHEN** пользователь пытается применить запрещённую или некорректную URI scheme
 - **THEN** документ не изменяется, а форма показывает доступное сообщение об ошибке
 
-### Requirement: URL-only media blocks
+#### Scenario: Renderer выводит внешнюю ссылку
+- **WHEN** static или interactive renderer представляет validated HTTP(S) link в новой вкладке
+- **THEN** output содержит безопасный `rel` и не доверяет произвольным persisted HTML attrs
 
-Система SHALL разрешать добавлять image, YouTube и direct video blocks по безопасному HTTPS URL без помещения файлов или base64 media в Yjs document. Image SHALL хранить alt, необязательную подпись, выравнивание и процентную ширину; YouTube и direct video SHALL хранить URL, подпись, выравнивание и ширину.
+### Requirement: URL-only external media имеют безопасный JSON contract
+
+Система SHALL добавлять image, YouTube и direct video только по validated external URL без сохранения файлов, base64 media или arbitrary iframe HTML в `Y.Doc`. Image SHALL хранить normalized HTTPS `src`, `alt`/`decorative`, optional `caption`, `alignment` и `width`; YouTube SHALL хранить только normalized `videoId`, optional `caption`, `alignment` и `width`; direct video SHALL хранить normalized HTTPS `src`, optional `caption`, `alignment` и `width`.
 
 #### Scenario: Пользователь добавляет изображение
-- **WHEN** пользователь подтверждает HTTPS URL, описание либо признак декоративного изображения и необязательную подпись
-- **THEN** редактор вставляет адаптивный image block и записывает его attributes в текущий Yjs document
+- **WHEN** пользователь подтверждает HTTPS URL без credentials, непустой alt либо явный decorative flag и допустимые presentation attrs
+- **THEN** editor вставляет image node со стабильными attrs, а renderer может вывести `figure`/`img`/optional `figcaption` без NodeView
 
-#### Scenario: Пользователь добавляет YouTube
-- **WHEN** пользователь подтверждает поддерживаемую YouTube или YouTube Music ссылку
-- **THEN** редактор вставляет responsive privacy-enhanced embed без autoplay
+#### Scenario: Пользователь добавляет YouTube video
+- **WHEN** пользователь подтверждает URL allowlisted YouTube host с корректным video ID
+- **THEN** документ сохраняет только video ID, а renderer самостоятельно создаёт privacy-enhanced embed `youtube-nocookie.com` без autoplay
 
-#### Scenario: Пользователь добавляет прямое видео
-- **WHEN** пользователь подтверждает HTTPS URL с путём MP4 или WebM
-- **THEN** редактор вставляет native video block с controls, `preload="metadata"` и без autoplay
+#### Scenario: Пользователь добавляет direct video
+- **WHEN** пользователь подтверждает HTTPS URL без credentials, pathname которого оканчивается на MP4 или WebM
+- **THEN** editor вставляет video node, а renderer создаёт native video с controls, `preload="metadata"` и без autoplay
 
 #### Scenario: Пользователь вводит небезопасный media URL
-- **WHEN** URL использует запрещённую scheme, неподдерживаемый host или формат
+- **WHEN** URL использует запрещённый protocol, credentials, неподдерживаемый host, некорректный YouTube ID или неподдерживаемый video format
 - **THEN** документ не изменяется, а форма показывает доступное сообщение об ошибке
 
 #### Scenario: Внешний media URL недоступен
-- **WHEN** browser не может загрузить сохранённый внешний media URL
-- **THEN** редактор сохраняет node и показывает доступное fallback-состояние вместо удаления содержимого
+- **WHEN** browser не может загрузить сохранённый validated media URL
+- **THEN** node сохраняется, а renderer показывает доступный deterministic fallback вместо удаления содержимого
 
-### Requirement: Перетаскивание верхнеуровневых блоков
+### Requirement: Rendering external media ограничен security policy
 
-Система SHALL предоставлять редактирующему пользователю ручку для изменения порядка верхнеуровневых paragraph, heading, list и media blocks средствами одной document transaction. Вложенные элементы списка MUST NOT получать самостоятельную drag handle.
+Interactive и static rendering SHALL быть совместимы с CSP, ограничивающей `img-src` и `media-src` значениями `'self' https:`, `frame-src` значением `https://www.youtube-nocookie.com` и `object-src` значением `'none'`. Image/iframe SHALL применять установленную referrer policy, а YouTube iframe SHALL получать фиксированные безопасные attrs от renderer.
 
-#### Scenario: Пользователь меняет порядок блоков
-- **WHEN** пользователь перетаскивает ручку поддерживаемого верхнеуровневого блока в другую позицию
-- **THEN** соответствующий блок целиком перемещается в текущем Yjs document
+#### Scenario: Renderer представляет сохранённый YouTube node
+- **WHEN** node содержит validated video ID
+- **THEN** iframe создаётся только для privacy-enhanced allowlisted origin и не использует пользовательский iframe HTML или произвольные attrs
 
-### Requirement: Плоская поверхность и локальная история
+#### Scenario: Renderer представляет external image или video
+- **WHEN** node содержит validated HTTPS source
+- **THEN** output совместим с заданными `img-src`/`media-src` и referrer-policy constraints
 
-Система SHALL отображать содержимое страницы без отдельной card surface и SHALL показывать локальные undo и redo actions только когда соответствующее действие доступно.
+### Requirement: Перестановка верхнеуровневых блоков доступна без pointer
 
-#### Scenario: История пуста
-- **WHEN** для текущего клиента отсутствует доступное undo или redo действие
-- **THEN** над содержимым не отображается панель истории
+Система SHALL позволять менять порядок поддерживаемых верхнеуровневых paragraph, heading, list и media blocks одной document transaction. Наряду с drag handle система MUST предоставлять keyboard-reachable actions `Move up` и `Move down`; вложенные list items MUST NOT получать самостоятельную top-level handle.
 
-#### Scenario: Пользователь изменяет документ
-- **WHEN** после локальной transaction становится доступна отмена или повтор
-- **THEN** справа над редактором отображаются только доступные undo и redo actions
+#### Scenario: Пользователь перетаскивает блок
+- **WHEN** пользователь переносит поддерживаемый верхнеуровневый block drag handle в другую позицию
+- **THEN** блок целиком перемещается в текущем `Y.Doc` одной transaction
 
-### Requirement: Доступный slash menu
+#### Scenario: Пользователь перемещает блок с клавиатуры
+- **WHEN** пользователь активирует доступное действие `Move up` или `Move down` без pointer
+- **THEN** блок перемещается одной transaction, focus остаётся на перемещённом block, а недоступное направление отключено на границе документа
 
-Система SHALL предоставлять slash menu с поиском и управлением через ArrowUp, ArrowDown, Enter и Escape. После выполнения немедийной команды focus SHALL возвращаться в редактор; при выборе media command focus SHALL переходить в первое поле media form.
+### Requirement: Slash menu имеет доступное keyboard-управление
+
+Система SHALL предоставлять slash menu с поиском и управлением через ArrowUp, ArrowDown, Enter и Escape. После выполнения немедийной команды focus SHALL возвращаться в editor; при выборе media command focus SHALL переходить в первое поле media form.
 
 #### Scenario: Открытие и выбор команды
 - **WHEN** пользователь вводит `/` в допустимой позиции
@@ -90,68 +146,104 @@
 
 #### Scenario: Открытие media form
 - **WHEN** пользователь выбирает media command с клавиатуры
-- **THEN** slash query удаляется, media form открывается, а focus находится в поле HTTPS URL
+- **THEN** slash query удаляется, media form открывается, а focus находится в первом поле
 
-### Requirement: Yjs является источником истины
+### Requirement: Editor surface не зависит от transport
 
-Система MUST использовать Yjs document как единственный редактируемый state и MUST NOT читать или записывать отдельные blocks либо TipTap JSON через REST. До подключения realtime transport система SHALL загружать и заменять только полный закодированный Yjs state и его schema version через document API.
+Система SHALL предоставлять editor surface готовый `Y.Doc` и presentation-состояние editable через document session. Surface MUST NOT определять источник документа, выполнять persistence или зависеть от REST/WebSocket lifecycle. Замена session adapter MUST сохранять schema, commands и surface behavior.
 
-#### Scenario: Открытие сохранённого документа
-- **WHEN** document API возвращает поддерживаемую schema version и непустой base64 Yjs state
-- **THEN** редактор восстанавливает содержимое из полного Yjs state до начала локального редактирования
+#### Scenario: Surface работает с fake session
+- **WHEN** transport-neutral test session предоставляет готовый `Y.Doc`
+- **THEN** editor поддерживает schema и editing flows без document API или WebSocket
 
-#### Scenario: Открытие пустого документа
-- **WHEN** document API возвращает пустой state с поддерживаемой schema version
-- **THEN** редактор показывает пустой редактируемый документ без ошибочной initial transaction
+#### Scenario: Transport меняется на Hocuspocus
+- **WHEN** future composition заменяет REST session на Hocuspocus session с тем же contract
+- **THEN** schema и editor surface не переписываются, а editable document не получает параллельный REST persistence lifecycle
 
-#### Scenario: Изменение содержимого
-- **WHEN** пользователь изменяет документ
-- **THEN** система сохраняет полный Yjs state без отдельных block requests или authoritative JSON-копии
+### Requirement: Временный REST session не является production editing lifecycle
 
-### Requirement: Последовательный autosave
+Временный REST session SHALL использовать полный Yjs state только для изолированного bootstrap/save contract и MUST NOT подключаться к production workspace, route или public widget entry point. Пока Hocuspocus не реализован, текущий workspace SHALL сохранять placeholder и MUST NOT выполнять document GET/PUT для editor. Silent last-write-wins между пользовательскими вкладками MUST NOT быть доступным production behavior.
 
-Система SHALL планировать сохранение через 750 мс после последнего изменения, MUST NOT выполнять параллельные PUT одного документа и SHALL сохранять более новый dirty snapshot после завершения текущего запроса. Временный REST lifecycle использует last-write-wins и MUST NOT заявлять поддержку одновременного редактирования несколькими вкладками.
+#### Scenario: Пользователь открывает текущую production page route
+- **WHEN** workspace отображает активную страницу до Hocuspocus integration
+- **THEN** остаётся существующий placeholder, а REST document editing lifecycle не запускается
+
+#### Scenario: REST session проверяется изолированно
+- **WHEN** test harness создаёт REST session с generated API adapter
+- **THEN** bootstrap/save contract проверяется без production import или route mounting
+
+#### Scenario: Возникает запрос выпустить REST editor
+- **WHEN** команда рассматривает production mounting до Hocuspocus
+- **THEN** требуется новый reviewed single-writer design, а silent full-PUT overwrite не принимается как штатное поведение
+
+### Requirement: Временный REST autosave последователен и ограничен payload limit
+
+Изолированный REST session SHALL планировать save через 750 мс после последнего изменения, MUST NOT выполнять параллельные PUT одной session и SHALL отправлять последний dirty snapshot после завершения текущего request. Перед PUT session MUST проверять размер binary `Y.encodeStateAsUpdate` против API limit 1 MiB.
 
 #### Scenario: Быстрая серия изменений
-- **WHEN** пользователь выполняет несколько изменений в пределах debounce interval
-- **THEN** система объединяет их в один последний полный snapshot
+- **WHEN** документ получает несколько updates в пределах debounce interval
+- **THEN** session формирует один последний полный snapshot
 
 #### Scenario: Изменение во время сохранения
-- **WHEN** пользователь изменяет документ до завершения текущего PUT
-- **THEN** текущий запрос не дублируется, а после него отправляется новый snapshot с последним изменением
+- **WHEN** update происходит до завершения текущего PUT
+- **THEN** параллельный request не создаётся, а после текущего отправляется последний queued snapshot
 
 #### Scenario: Ошибка сохранения
 - **WHEN** PUT завершается ошибкой
-- **THEN** редактор сохраняет последний dirty snapshot, показывает безопасную ошибку и предоставляет retry
+- **THEN** session сохраняет dirty state, показывает безопасную typed error и допускает explicit retry
 
-#### Scenario: Уход с несохранённым состоянием
-- **WHEN** пользователь меняет страницу либо закрывает вкладку при dirty или saving состоянии
-- **THEN** система запускает финальное сохранение и предупреждает browser unload, пока подтверждение отсутствует
+#### Scenario: Encoded document превышает API limit
+- **WHEN** binary update больше 1 MiB до base64 conversion и PUT
+- **THEN** PUT не выполняется, session переходит в persistent blocking state `document-too-large` и не повторяет бессмысленный autosave для того же oversized state
 
-### Requirement: Безопасные состояния загрузки и schema
+#### Scenario: Binary state преобразуется chunk-ами
+- **WHEN** допустимый по размеру `Uint8Array` кодируется в base64
+- **THEN** chunked conversion не переполняет argument stack и не трактуется как способ обойти API payload limit
 
-Система SHALL различать loading, saving, saved, load error, save error и unsupported schema states доступным текстом без сырых backend details. Редактирование MUST NOT начинаться до успешной загрузки и MUST оставаться заблокированным при несовместимой schema version или некорректном encoded state.
+### Requirement: Гарантии сохранения при уходе описаны честно
 
-#### Scenario: Ошибка загрузки
-- **WHEN** document API недоступен или отклоняет запрос
-- **THEN** пользователь видит безопасную ошибку и retry, а редактируемая поверхность не создаётся
+При SPA navigation или смене page session система SHALL выполнять только best-effort flush до destruction. При закрытии tab/browser система SHALL предупреждать через `beforeunload` при несохранённом или блокирующем state, но MUST NOT обещать завершение обычного async PUT и MUST NOT использовать keepalive полного Yjs payload как основную persistence guarantee.
 
-#### Scenario: Несовместимая schema
-- **WHEN** document API возвращает schema version, отличную от поддерживаемой
-- **THEN** система показывает безопасное состояние несовместимости и не отправляет PUT
+#### Scenario: Пользователь переключает страницу в SPA
+- **WHEN** текущий документ dirty и начинается page switch
+- **THEN** session пытается выполнить best-effort flush перед cleanup без заявления durable guarantee
 
-#### Scenario: Неавторизованный запрос
-- **WHEN** сессия не может быть восстановлена и document API отвечает `401`
-- **THEN** существующий auth lifecycle обрабатывает завершение сессии, а editor не раскрывает document content или backend details
+#### Scenario: Пользователь закрывает вкладку с dirty document
+- **WHEN** browser допускает `beforeunload` warning
+- **THEN** пользователь получает предупреждение о возможной потере данных, а warning не считается подтверждением сохранения
 
-### Requirement: Presentation-only read-only seam
+#### Scenario: Browser не завершает request при закрытии
+- **WHEN** tab закрывается до завершения persistence request
+- **THEN** система не сообщает документ как гарантированно сохранённый
 
-Редактор SHALL принимать явное presentation-состояние возможности редактирования. При запрете ввода изменяющие controls MUST отсутствовать, но этот клиентский seam MUST NOT считаться authorization boundary до подключения effective permissions и server-enforced read-only в issue #46.
+### Requirement: Session cleanup предотвращает stale lifecycle
 
-#### Scenario: Редактирование разрешено текущему владельцу
-- **WHEN** owner-only workspace открывает документ текущего пользователя
-- **THEN** поле и изменяющие controls доступны для редактирования
+Система MUST очищать document session при смене `pageId`, unmount, aborted load и создании replacement session. Cleanup MUST отсоединять Y.Doc/editor listeners, timers, AbortController requests, pending lifecycle state, TipTap editor и временный `Y.Doc`; future Hocuspocus adapter MUST также очищать provider. Завершившиеся callbacks старой session MUST быть no-op для новой страницы.
+
+#### Scenario: PageId меняется во время GET
+- **WHEN** load предыдущей страницы завершается после создания новой session
+- **THEN** старый response не применяется к новому `Y.Doc` и не изменяет её status/error
+
+#### Scenario: PageId меняется во время PUT
+- **WHEN** save предыдущей страницы завершается после page switch
+- **THEN** callback не помечает новую страницу saved и не очищает её dirty state
+
+#### Scenario: Surface и session уничтожаются
+- **WHEN** editor unmount или replacement session запускает cleanup
+- **THEN** listeners, timers, requests, lifecycle state, TipTap editor и принадлежащий session `Y.Doc` освобождаются идемпотентно, а отложенные callbacks не выполняют новых saves
+
+### Requirement: Статусы и presentation read-only доступны пользователю
+
+Система SHALL различать loading, ready, dirty, saving, saved, load error, save error, unsupported schema, document-too-large и read-only доступным текстом без raw backend details. Surface MUST NOT создаваться до успешной загрузки. При `editable=false` изменяющие controls MUST отсутствовать, но presentation flag MUST NOT считаться authorization boundary.
+
+#### Scenario: Документ загружается
+- **WHEN** session ещё не предоставила готовый `Y.Doc`
+- **THEN** editor surface не рендерится, а loading state сообщает `aria-busy`
+
+#### Scenario: Session сообщает сохранение или ошибку
+- **WHEN** status меняется на saving/saved либо typed error
+- **THEN** пользователь получает соответствующий live status или безопасный alert с допустимым retry
 
 #### Scenario: Presentation read-only включён
-- **WHEN** вызывающая композиция явно запрещает редактирование
-- **THEN** ввод, slash menu, history, link и media controls недоступны, а содержимое остаётся читаемым
+- **WHEN** session или composition устанавливает `editable=false`
+- **THEN** ввод, slash, history, reorder, link и media controls недоступны, содержимое читаемо, а server authorization по-прежнему обязателен в future integration
