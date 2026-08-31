@@ -18,7 +18,9 @@ export {
   type PageDocumentYoutubeAttributes,
 } from './lib/media-validation';
 export {
+  claimUniquePageDocumentNodeId,
   collectPageDocumentNodeIds,
+  isPageDocumentMediaNodeType,
   preparePageDocumentContentForInsertion,
 } from './lib/node-id-lifecycle';
 export { renderPageDocumentToHTML } from './lib/static-rendering';

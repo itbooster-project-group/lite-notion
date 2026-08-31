@@ -8,7 +8,11 @@ const MAX_NODE_ID_GENERATION_ATTEMPTS = 100;
 type NodeIdFactory = () => string;
 
 function isMediaNode(content: JSONContent): boolean {
-  return Boolean(content.type && PAGE_DOCUMENT_MEDIA_NODE_TYPES.has(content.type));
+  return Boolean(content.type && isPageDocumentMediaNodeType(content.type));
+}
+
+export function isPageDocumentMediaNodeType(nodeType: string): boolean {
+  return PAGE_DOCUMENT_MEDIA_NODE_TYPES.has(nodeType);
 }
 
 function createUniqueNodeId(usedNodeIds: Set<string>, nodeIdFactory: NodeIdFactory): string {
@@ -22,6 +26,19 @@ function createUniqueNodeId(usedNodeIds: Set<string>, nodeIdFactory: NodeIdFacto
   }
 
   throw new Error('Unable to generate a unique page document node ID.');
+}
+
+export function claimUniquePageDocumentNodeId(
+  candidate: unknown,
+  usedNodeIds: Set<string>,
+  nodeIdFactory: NodeIdFactory = createPageDocumentNodeId,
+): string {
+  if (isPageDocumentNodeId(candidate) && !usedNodeIds.has(candidate)) {
+    usedNodeIds.add(candidate);
+    return candidate;
+  }
+
+  return createUniqueNodeId(usedNodeIds, nodeIdFactory);
 }
 
 function prepareNodeForInsertion(
@@ -40,11 +57,7 @@ function prepareNodeForInsertion(
   const attrs = { ...content.attrs };
   const currentNodeId = attrs.nodeId;
 
-  if (!isPageDocumentNodeId(currentNodeId) || usedNodeIds.has(currentNodeId)) {
-    attrs.nodeId = createUniqueNodeId(usedNodeIds, nodeIdFactory);
-  } else {
-    usedNodeIds.add(currentNodeId);
-  }
+  attrs.nodeId = claimUniquePageDocumentNodeId(currentNodeId, usedNodeIds, nodeIdFactory);
 
   return preparedContent ? { ...content, attrs, content: preparedContent } : { ...content, attrs };
 }

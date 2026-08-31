@@ -34,7 +34,11 @@ export function BlockReorderControls({ editor }: BlockReorderControlsProps) {
           <GripVertical aria-hidden="true" />
         </button>
       </DragHandle>
-      <div className="sr-only">
+      <fieldset
+        aria-label="Перемещение блока с клавиатуры"
+        className="sr-only rounded-md border bg-background p-1 shadow-sm focus-within:not-sr-only focus-within:fixed focus-within:top-4 focus-within:right-4 focus-within:z-50 focus-within:flex focus-within:gap-1"
+        data-keyboard-reorder-controls=""
+      >
         <Button
           aria-label="Move up"
           disabled={!canMovePageDocumentBlock(editor, 'up')}
@@ -55,7 +59,7 @@ export function BlockReorderControls({ editor }: BlockReorderControlsProps) {
         >
           <ArrowDown aria-hidden="true" />
         </Button>
-      </div>
+      </fieldset>
     </>
   );
 }

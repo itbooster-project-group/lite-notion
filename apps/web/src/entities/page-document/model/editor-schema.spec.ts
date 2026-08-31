@@ -173,8 +173,12 @@ describe('page document schema version 1', () => {
     expect(second).toBe(first);
     expect(first).toContain(`data-node-id="${NODE_ID}"`);
     expect(first).toContain('style="width:60%"');
+    expect(first).toContain('alt="Горы"');
     expect(first).toContain('referrerpolicy="no-referrer"');
     expect(first).toContain('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ');
+    expect(first).toContain('title="YouTube video"');
+    expect(first).toContain('src="https://example.com/demo.webm"');
+    expect(first).toContain('<figcaption>Демо</figcaption>');
     expect(first).toContain('controls');
     expect(first).not.toContain('<script');
   });

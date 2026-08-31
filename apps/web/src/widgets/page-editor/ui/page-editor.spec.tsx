@@ -1,5 +1,6 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { Editor } from '@tiptap/core';
+import { StrictMode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
 import {
@@ -69,6 +70,7 @@ describe('page editor composition', () => {
     expect(screen.queryByRole('button', { name: 'Повторить' })).toBeNull();
 
     view.unmount();
+    session.destroy();
   });
 
   it('показывает content без изменяющего режима при editable=false', async () => {
@@ -89,6 +91,7 @@ describe('page editor composition', () => {
     expect(screen.queryByRole('toolbar', { name: 'История изменений' })).toBeNull();
 
     view.unmount();
+    session.destroy();
   });
 
   it('располагает checkbox и текст task item в одной строке', async () => {
@@ -129,6 +132,7 @@ describe('page editor composition', () => {
     expect(taskItem).toHaveTextContent('Задача');
 
     view.unmount();
+    session.destroy();
   });
 
   it('открывает link form по Mod-K только в editable editor', async () => {
@@ -144,10 +148,10 @@ describe('page editor composition', () => {
     expect(await screen.findByRole('dialog', { name: 'Добавить ссылку' })).toBeInTheDocument();
     expect(screen.getByText(/автоматически откроем по HTTPS/)).toBeInTheDocument();
     view.unmount();
+    session.destroy();
   });
 
-  it('заменяет transport-neutral session и очищает предыдущую', async () => {
-    const editorDestroy = vi.spyOn(Editor.prototype, 'destroy');
+  it('не присваивает PageEditor ownership переданной transport-neutral session', async () => {
     const firstDoc = new Y.Doc();
     const secondDoc = new Y.Doc();
     const firstDestroyed = vi.fn();
@@ -167,12 +171,53 @@ describe('page editor composition', () => {
 
     view.rerender(<PageEditor session={secondSession} />);
 
-    await waitFor(() => expect(firstDestroyed).toHaveBeenCalledOnce());
-    expect(editorDestroy).toHaveBeenCalled();
+    await screen.findByRole('textbox', { name: 'Содержимое страницы' });
+    expect(firstDestroyed).not.toHaveBeenCalled();
     expect(secondDestroyed).not.toHaveBeenCalled();
 
     view.unmount();
+    expect(firstDestroyed).not.toHaveBeenCalled();
+    expect(secondDestroyed).not.toHaveBeenCalled();
+
+    firstSession.destroy();
+    secondSession.destroy();
+    expect(firstDestroyed).toHaveBeenCalledOnce();
     expect(secondDestroyed).toHaveBeenCalledOnce();
+  });
+
+  it('остаётся работоспособным в StrictMode и оставляет destruction владельцу session', async () => {
+    const doc = new Y.Doc();
+    const docDestroyed = vi.fn();
+    doc.on('destroy', docDestroyed);
+    const destroy = vi.fn(() => doc.destroy());
+    const session = {
+      doc,
+      editable: true,
+      status: 'ready',
+      destroy,
+    } as const satisfies PageDocumentSession;
+
+    const view = render(
+      <StrictMode>
+        <PageEditor session={session} />
+      </StrictMode>,
+    );
+    const editor = await screen.findByRole('textbox', { name: 'Содержимое страницы' });
+
+    fireEvent.keyDown(editor, { ctrlKey: true, key: 'k' });
+
+    expect(await screen.findByRole('dialog', { name: 'Добавить ссылку' })).toBeInTheDocument();
+    expect(editor).toHaveAttribute('contenteditable', 'true');
+    expect(destroy).not.toHaveBeenCalled();
+    expect(docDestroyed).not.toHaveBeenCalled();
+
+    view.unmount();
+    expect(destroy).not.toHaveBeenCalled();
+    expect(docDestroyed).not.toHaveBeenCalled();
+
+    session.destroy();
+    expect(destroy).toHaveBeenCalledOnce();
+    expect(docDestroyed).toHaveBeenCalledOnce();
   });
 
   it('принимает fake future transport через тот же minimal contract', async () => {
@@ -192,6 +237,9 @@ describe('page editor composition', () => {
     expect(screen.queryByText('synced')).toBeNull();
 
     view.unmount();
+    expect(destroy).not.toHaveBeenCalled();
+
+    futureTransportSession.destroy();
     expect(destroy).toHaveBeenCalledOnce();
   });
 });

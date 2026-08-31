@@ -11,6 +11,7 @@ import {
   normalizePageDocumentLink,
   PAGE_DOCUMENT_MAX_WIDTH_PERCENT,
 } from '../lib/media-validation';
+import { PageDocumentNodeIdDeconflict } from './node-id-deconflict';
 import { PAGE_CONTENT_YJS_FIELD } from './schema-version';
 
 const sharedMediaAttributes = {
@@ -249,6 +250,7 @@ export function createPageDocumentSchemaExtensions(): Extensions {
 export function createPageDocumentEditorExtensions(document: YDoc): Extensions {
   return [
     ...createPageDocumentSchemaExtensions(),
+    PageDocumentNodeIdDeconflict,
     Collaboration.configure({
       document,
       field: PAGE_CONTENT_YJS_FIELD,

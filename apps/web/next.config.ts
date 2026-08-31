@@ -3,6 +3,7 @@ import type { NextConfig } from 'next';
 import {
   PAGE_DOCUMENT_CONTENT_SECURITY_POLICY,
   PAGE_DOCUMENT_REFERRER_POLICY,
+  PAGE_DOCUMENT_SECURITY_HEADER_SOURCE,
 } from './src/app/page-document-security-headers';
 
 const nextConfig: NextConfig = {
@@ -23,7 +24,7 @@ const nextConfig: NextConfig = {
             value: PAGE_DOCUMENT_REFERRER_POLICY,
           },
         ],
-        source: '/:path*',
+        source: PAGE_DOCUMENT_SECURITY_HEADER_SOURCE,
       },
     ];
   },

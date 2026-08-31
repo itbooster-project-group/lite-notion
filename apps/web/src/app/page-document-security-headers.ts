@@ -6,3 +6,5 @@ export const PAGE_DOCUMENT_CONTENT_SECURITY_POLICY = [
 ].join('; ');
 
 export const PAGE_DOCUMENT_REFERRER_POLICY = 'strict-origin-when-cross-origin';
+
+export const PAGE_DOCUMENT_SECURITY_HEADER_SOURCE = '/pages/:path*';

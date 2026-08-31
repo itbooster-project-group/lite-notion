@@ -44,8 +44,18 @@ describe('block reorder controls', () => {
       'false',
     );
     expect(screen.getByRole('button', { name: 'Move up' })).toBeDisabled();
+    const moveDown = screen.getByRole('button', { name: 'Move down' });
+    const keyboardControls = screen.getByRole('group', {
+      name: 'Перемещение блока с клавиатуры',
+    });
+    expect(keyboardControls.className).toContain('focus-within:not-sr-only');
+    expect(keyboardControls.className).toContain('focus-within:fixed');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Move down' }));
+    moveDown.focus();
+    expect(moveDown).toHaveFocus();
+    expect(moveDown.className).toContain('focus-visible:ring-2');
+
+    fireEvent.click(moveDown);
 
     expect(editor.getJSON().content?.map(({ type }) => type)).toEqual(['heading', 'paragraph']);
     expect(screen.getByRole('button', { name: 'Move down' })).toBeDisabled();

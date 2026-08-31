@@ -30,7 +30,7 @@
 - [x] 4.1 Определить transport-neutral `PageDocumentSession` только с `doc`, `editable`, status `loading|ready|error`, typed error и `destroy()`; `ready` означает validated schema metadata плюс successfully decoded Yjs state. Не добавлять в общий type dirty/save/retry/flush или Hocuspocus connection/sync states.
 - [x] 4.2 Реализовать `InMemoryPageDocumentSession` и fake test helper для unit tests, Storybook и isolated development без document API/WebSocket/persistence lifecycle; factory принимает schema metadata и не монтирует surface для unsupported version.
 - [x] 4.3 Реализовать `PageEditor`/`PageEditorSurface` boundary: surface получает только admitted ready Y.Doc и editable presentation props и не знает transport, persistence, connection diagnostics или database schema-version validation.
-- [x] 4.4 Реализовать идемпотентный cleanup при page identity change, unmount и replacement session: Y.Doc/editor listeners, local UI timers/pending callbacks, TipTap editor и временный Y.Doc.
+- [x] 4.4 Реализовать явный ownership cleanup при page identity change, unmount и replacement session: caller уничтожает созданную session и временный Y.Doc, а TipTap `useEditor` управляет editor/listener lifecycle без ручного cleanup из `PageEditor`/surface.
 - [x] 4.5 Добавить tests, подтверждающие, что callbacks уничтоженной session не меняют replacement session и не создают stale editor/listener/timer effects.
 - [x] 4.6 Добавить architecture contract test будущей replaceability: fake transport предоставляет тот же minimal ready-doc boundary без изменения schema или `PageEditorSurface`; не реализовывать Hocuspocus adapter.
 
@@ -38,9 +38,9 @@
 
 - [x] 5.1 Реализовать базовые formatting, Yjs-compatible local undo/redo и presentation-only read-only state; отсутствие client-side controls не объявлять authorization boundary.
 - [x] 5.2 Реализовать BubbleMenu, slash menu и link form с keyboard flows, безопасными errors и корректным focus return.
-- [x] 5.3 Реализовать URL-only image/YouTube/video insertion и deterministic fallback; не добавлять file upload, base64 media или arbitrary iframe content.
+- [x] 5.3 Реализовать URL-only image/YouTube/video insertion и deterministic markup с доступными metadata без network probing; не добавлять file upload, base64 media, arbitrary iframe content или обещание runtime network-error fallback в static renderer.
 - [x] 5.4 Применить renderer-compatible media security attrs: privacy-enhanced YouTube origin, fixed iframe attrs, image/iframe referrer policy, native video controls/preload и CSP target `img-src`, `media-src`, `frame-src`, `object-src` из design.
-- [x] 5.5 Реализовать top-level pointer drag handle и keyboard-reachable `Move up`/`Move down` через общий transaction path; исключить самостоятельные handles у вложенных list items.
+- [x] 5.5 Реализовать top-level pointer drag handle и keyboard-reachable, визуально доступные при focus `Move up`/`Move down` через общий transaction path; исключить самостоятельные handles у вложенных list items.
 - [x] 5.6 Добавить RTL/accessibility tests для keyboard slash menu, link/media errors, focus return, status live regions, read-only controls, keyboard move actions, disabled boundaries и pointer reorder parity.
 
 ## 6. Dependency, security и completion verification
@@ -48,10 +48,12 @@
 - [x] 6.1 Проверить pnpm dependency graph на единственную согласованную версию `yjs` и отсутствие конфликтующих версий/экземпляров `@tiptap/core`, `@tiptap/pm`, `@tiptap/react` и используемых TipTap extensions.
 - [x] 6.2 Добавить CI/checklist verification dependency consistency и runtime identity smoke test там, где duplicate ProseMirror/Yjs instance нарушает collaboration contract.
 - [x] 6.3 Проверить media URL validator, generated static mappings и target CSP/referrer policy against security fixtures; расширение host/protocol allowlist требует отдельного review.
-- [x] 6.4 После разрешённой реализации запустить детерминированные unit/RTL tests несколько раз, включая Yjs field round-trip, static-renderability fixtures, node ID lifecycle, cleanup и accessibility flows.
-- [x] 6.5 Запустить `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, Steiger и relevant web checks.
+- [x] 6.4 После разрешённой реализации запускать workspace test scripts последовательно и прогнать детерминированные unit/RTL tests несколько раз, включая Yjs field round-trip, static-renderability fixtures, node ID lifecycle, cleanup и accessibility flows.
+- [x] 6.5 Запустить `pnpm dedupe --check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, Steiger и relevant web checks на финальном состоянии ветки.
 - [x] 6.6 Временно заменить workspace placeholder на `PageEditor` с отдельной `InMemoryPageDocumentSession` на `pageId`, показать warning о сбросе content при reload/navigation и проверить mount вручную и тестом без API/persistence; после QA удалить mount, восстановить placeholder и зафиксировать отсутствие editor surface в workspace test.
-- [ ] 6.7 Запустить `openspec validate add-web-page-editor-core --strict`, получить human review implementation и архивировать change только после выполнения текущих tasks, CI и review.
+- [x] 6.7 Устранить review findings: caller-owned session и Strict Mode regression, native clipboard nodeId deconflict с общим helper, deterministic media markup contract, visible keyboard reorder controls, scoped page-document CSP и deduplicated lockfile.
+- [x] 6.8 Запустить `openspec validate add-web-page-editor-core --strict` после выполнения implementation и verification tasks.
+- [ ] 6.9 Получить human review implementation и архивировать change только после прохождения фактического CI и review.
 
 ## Follow-up work — не является задачами этого change
 

@@ -114,13 +114,6 @@ export function PageEditorSurface({ doc, editable }: PageEditorSurfaceProps) {
     if (!editable) setLinkFormOpen(false);
   }, [editable, editor]);
 
-  useEffect(
-    () => () => {
-      editor?.destroy();
-    },
-    [editor],
-  );
-
   useEffect(() => {
     if (!editor) return;
 

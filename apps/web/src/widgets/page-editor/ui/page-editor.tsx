@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect } from 'react';
 import { type PageDocumentSession, PageEditorSurface } from '@/features/page-editing';
 
 import { EditorStatus } from './editor-status';
@@ -10,13 +9,6 @@ export type PageEditorProps = Readonly<{
 }>;
 
 export function PageEditor({ session }: PageEditorProps) {
-  useEffect(
-    () => () => {
-      session.destroy();
-    },
-    [session],
-  );
-
   if (session.status === 'loading') return <EditorStatus status="loading" />;
 
   if (session.status === 'error') {

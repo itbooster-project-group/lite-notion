@@ -141,14 +141,16 @@ Custom JSON contracts:
 
 | Node/mark | Persisted attrs | Validation и стабильность | Детерминированное представление без NodeView |
 | --- | --- | --- | --- |
-| `image` | `nodeId`, `src`, `alt`, `decorative`, `caption`, `alignment`, `widthPercent` | `nodeId` — opaque UUID, созданный при вставке; HTTPS URL без credentials; `decorative=true` требует пустой `alt`, иначе `alt` непустой; `alignment ∈ start/center/end`; integer `widthPercent` 25–100 | `figure` с `data-node-id`, `img`, процентной шириной content area и optional `figcaption`; load failure даёт fallback, node не удаляется |
+| `image` | `nodeId`, `src`, `alt`, `decorative`, `caption`, `alignment`, `widthPercent` | `nodeId` — opaque UUID, созданный при вставке; HTTPS URL без credentials; `decorative=true` требует пустой `alt`, иначе `alt` непустой; `alignment ∈ start/center/end`; integer `widthPercent` 25–100 | deterministic `figure` с `data-node-id`, `img`, alt/decorative metadata, процентной шириной content area и optional `figcaption` |
 | `youtube` | `nodeId`, `videoId`, `caption`, `alignment`, `widthPercent` | `nodeId` как выше; только normalized ID `[A-Za-z0-9_-]{11}` из allowlisted input host; URL/iframe HTML не сохраняются; те же alignment/widthPercent rules | `figure` с `data-node-id` и iframe, который renderer строит на `https://www.youtube-nocookie.com/embed/{videoId}`, без autoplay, с title и optional `figcaption` |
-| `video` | `nodeId`, `src`, `caption`, `alignment`, `widthPercent` | `nodeId` как выше; HTTPS URL без credentials, pathname `.mp4`/`.webm`; те же alignment/widthPercent rules | `figure` с `data-node-id` и native `video controls preload='metadata'`, без autoplay, с optional `figcaption` и fallback |
+| `video` | `nodeId`, `src`, `caption`, `alignment`, `widthPercent` | `nodeId` как выше; HTTPS URL без credentials, pathname `.mp4`/`.webm`; те же alignment/widthPercent rules | deterministic `figure` с `data-node-id`, source metadata и native `video controls preload='metadata'`, без autoplay, с optional `figcaption`; child text относится только к браузерам без поддержки `video` |
 | `link` mark | `href` | normalized `https:`, `http:` или `mailto:`; прочие protocols отклоняются | `a`; внешние HTTP(S) links получают `target='_blank'` и `rel='noopener noreferrer'`; renderer не доверяет persisted HTML attrs |
 
 `caption` — string или `null`; `widthPercent` — нормализованное целое число, обозначающее процент ширины editor/content area, а не CSS string. Interactive и static renderer трактуют его одинаково; percentage и pixel CSS strings не являются допустимым persisted value.
 
-`nodeId` создаётся один раз при создании custom/media node, сохраняется в TipTap JSON и Yjs state, не меняется при edit, resize, alignment или move и доступен static renderer/publication pipeline. Явное clone/paste/import обязано deconflict-ить ID и выдать новый уникальный `nodeId`; это позволяет позднее связать node с `PAGE_ASSETS` без schema v1 migration.
+`nodeId` создаётся один раз при создании custom/media node, сохраняется в TipTap JSON и Yjs state, не меняется при edit, resize, alignment или move и доступен static renderer/publication pipeline. Явное clone/paste/import обязано deconflict-ить ID и выдать новый уникальный `nodeId`; это позволяет позднее связать node с `PAGE_ASSETS` без schema v1 migration. Программная insertion и ProseMirror `transformPasted` используют один низкоуровневый uniqueness helper. При обходе clipboard `Slice` ID проверяется одновременно относительно текущего document и уже обработанных media nodes того же slice.
+
+Static renderer гарантирует валидный deterministic markup, сохраняющий доступные persisted alt/title/caption/source metadata, но не проверяет доступность external URL и не обещает UI fallback при HTTP/network error. Такой runtime `onError` experience остаётся задачей будущего React/public renderer.
 
 React NodeView может улучшать interactive editing, но не является единственным renderer. Fixtures проверяют JSON defaults, node IDs, Yjs field и deterministic static output без монтирования React NodeViews. Schema mismatch или decode error создаёт safe error state и не заменяет state пустым document.
 
@@ -170,7 +172,7 @@ Public Next.js page в future change читает готовый snapshot и н�
 
 URL parser из document entity принимает только явно разрешённые protocols и не хранит arbitrary iframe HTML. YouTube input hosts: `youtube.com`, `www.youtube.com`, `m.youtube.com`, `music.youtube.com`, `youtu.be` и `www.youtube-nocookie.com`; сохраняется только video ID. Renderer сам создаёт privacy-enhanced embed.
 
-Целевой hosting contract для future editor/public renderer:
+Целевой hosting contract применяется только к routes, которые представляют page-document media, а не глобально ко всему приложению:
 
 - `img-src 'self' https:`;
 - `media-src 'self' https:`;
@@ -183,18 +185,20 @@ Image и iframe получают `referrerPolicy='no-referrer'`; для оста
 
 `InMemoryPageDocumentSession` создаёт/получает уже декодированный `Y.Doc` для tests, Storybook и isolated development без backend API. Его factory принимает document и schema metadata, например `createInMemoryPageDocumentSession({ doc, schemaVersion })`, и повторяет metadata admission rule: supported `schemaVersion` даёт `ready`; unsupported version даёт blocking `error`, а surface не монтируется. Fake session отдельно моделирует decode/admission error. Это позволяет проверять schema, commands, history и read-only presentation без внедрения disposable REST persistence code.
 
-При смене page identity, unmount или replacement session выполняется идемпотентный `destroy()`:
+Ownership lifecycle явный: caller/factory/hook, создавший `PageDocumentSession`, уничтожает её при смене page identity, unmount своей composition или replacement session. `PageEditor` получает session через props и не вызывает её `destroy()`. TipTap `useEditor` владеет созданным editor instance и использует собственный Strict Mode-safe lifecycle.
+
+При cleanup реального владельца выполняется идемпотентный `destroy()`:
 
 1. отписываются Y.Doc и editor listeners;
 2. очищаются local UI timers/pending callbacks;
-3. уничтожается TipTap editor в surface cleanup;
+3. TipTap editor уничтожается встроенным `useEditor` lifecycle без ручного surface cleanup;
 4. временный `Y.Doc` уничтожается после отсоединения surface.
 
 Callbacks destroyed session становятся no-op и не могут менять состояние replacement session. `AbortController`, network retries и provider disconnect не входят в in-memory core; future Hocuspocus adapter обязан очищать provider/awareness listeners в своём lifecycle.
 
 ### 8. Перестановка блоков имеет keyboard alternative
 
-Pointer drag handle доступна для поддерживаемых верхнеуровневых blocks, а тот же command path предоставляется через keyboard-reachable `Move up` и `Move down`. Действия используют одну ProseMirror transaction, отключаются на границах документа и возвращают focus к перемещённому block. Вложенные list items не получают top-level handle.
+Pointer drag handle доступна для поддерживаемых верхнеуровневых blocks, а тот же command path предоставляется через keyboard-reachable `Move up` и `Move down`. Визуально скрытая в покое keyboard group становится видимой через `focus-within`, кнопки имеют заметный focus indicator. Действия используют одну ProseMirror transaction, отключаются на границах документа и возвращают focus к перемещённому block. Вложенные list items не получают top-level handle.
 
 Tests проверяют accessible names, keyboard reachability, disabled boundaries, selection/focus и изменение порядка без pointer events. Этот contract не заявляет полную accessibility всего ProseMirror продукта.
 
@@ -209,7 +213,7 @@ Tests проверяют accessible names, keyboard reachability, disabled bound
 - [Нет frontend REST round-trip verification] → API integration при необходимости оформляется отдельным change; editor core проверяется через in-memory Yjs fixtures.
 - [Hocuspocus status не попадёт в общий status UI автоматически] → это намеренно: будущий adapter добавляет connection/sync diagnostics без ложной durability семантики.
 - [Schema v1 рано фиксирует attrs] → `nodeId`, `widthPercent` и collaboration field добавлены до массового persistence; последующие несовместимые изменения требуют version bump/migration.
-- [External media может исчезнуть или раскрыть IP host] → validation, explicit allowlist, CSP/referrer policy и deterministic fallback; uploads/private assets вне scope.
+- [External media может исчезнуть или раскрыть IP host] → validation, explicit allowlist, scoped CSP/referrer policy и deterministic markup с доступными metadata; runtime network-error UI и uploads/private assets вне scope.
 - [Static renderer может разойтись со schema] → общая schema/field constants и fixture tests; public integration остаётся отдельным review.
 
 ## Migration Notes / Future Changes

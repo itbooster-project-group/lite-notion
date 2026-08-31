@@ -46,7 +46,7 @@ Schema v1 MUST фиксировать nodes/marks document, text, paragraph, hea
 
 ### Requirement: Custom media nodes имеют stable IDs и нормализованную ширину
 
-Image, YouTube и direct video MUST хранить opaque `nodeId`, сгенерированный при создании node и сохранённый в TipTap/ProseMirror attrs и Yjs state. `nodeId` MUST сохраняться при обычном edit, resize, alignment и move, быть доступным static renderer/publication pipeline и deconflict-иться с новым ID при explicit clone, paste или import. Custom media nodes MUST хранить `widthPercent` как integer 25–100, означающий процент ширины content/editor area; CSS strings и pixel values MUST NOT сохраняться.
+Image, YouTube и direct video MUST хранить opaque `nodeId`, сгенерированный при создании node и сохранённый в TipTap/ProseMirror attrs и Yjs state. `nodeId` MUST сохраняться при обычном edit, resize, alignment и move, быть доступным static renderer/publication pipeline и deconflict-иться с новым ID при explicit clone, native clipboard paste или import. Clipboard deconflict MUST проверять uniqueness относительно текущего document и остальных media nodes вставляемого slice через тот же low-level contract, что и программная insertion. Custom media nodes MUST хранить `widthPercent` как integer 25–100, означающий процент ширины content/editor area; CSS strings и pixel values MUST NOT сохраняться.
 
 #### Scenario: Пользователь создаёт media node
 - **WHEN** пользователь вставляет image, YouTube или direct video
@@ -59,6 +59,10 @@ Image, YouTube и direct video MUST хранить opaque `nodeId`, сгенер
 #### Scenario: Пользователь клонирует или вставляет media node
 - **WHEN** операция создаёт второй экземпляр существующего custom media node
 - **THEN** новый экземпляр получает deconflicted `nodeId`, не совпадающий с исходным
+
+#### Scenario: Clipboard slice содержит повторяющиеся media IDs
+- **WHEN** пользователь вставляет через ProseMirror clipboard pipeline несколько media nodes с одинаковым `nodeId`
+- **THEN** каждый вставленный node получает ID, уникальный относительно текущего document и других nodes этого slice, сохраняя остальные attrs, content и marks
 
 #### Scenario: Renderer представляет ширину media node
 - **WHEN** interactive или static renderer получает valid `widthPercent`
@@ -120,13 +124,13 @@ Image, YouTube и direct video MUST хранить opaque `nodeId`, сгенер
 - **WHEN** URL использует запрещённый protocol, credentials, неподдерживаемый host, некорректный YouTube ID или неподдерживаемый video format
 - **THEN** document не изменяется, а форма показывает доступное сообщение об ошибке
 
-#### Scenario: Внешний media URL недоступен
-- **WHEN** browser не может загрузить сохранённый validated media URL
-- **THEN** node сохраняется, а renderer показывает доступный deterministic fallback вместо удаления content
+#### Scenario: Renderer не знает runtime availability external media
+- **WHEN** static renderer получает сохранённый validated media node без network probing
+- **THEN** он выдаёт deterministic valid markup с доступными alt/title/caption и source metadata, не обещая обнаружить HTTP/network error; runtime error UI остаётся будущему public renderer
 
 ### Requirement: Rendering external media ограничен security policy
 
-Interactive и static rendering SHALL быть совместимы с CSP, ограничивающей `img-src` и `media-src` значениями `'self' https:`, `frame-src` значением `https://www.youtube-nocookie.com` и `object-src` значением `'none'`. Image/iframe SHALL применять установленную referrer policy, а YouTube iframe SHALL получать фиксированные безопасные attrs от renderer.
+Interactive и static rendering SHALL быть совместимы с CSP, ограничивающей `img-src` и `media-src` значениями `'self' https:`, `frame-src` значением `https://www.youtube-nocookie.com` и `object-src` значением `'none'`. Эта page-document policy MUST применяться только к routes, представляющим editor/public document media, а не глобально ко всему приложению. Image/iframe SHALL применять установленную referrer policy, а YouTube iframe SHALL получать фиксированные безопасные attrs от renderer.
 
 #### Scenario: Renderer представляет сохранённый YouTube node
 - **WHEN** node содержит validated video ID
@@ -138,7 +142,7 @@ Interactive и static rendering SHALL быть совместимы с CSP, ог
 
 ### Requirement: Перестановка верхнеуровневых блоков доступна без pointer
 
-Система SHALL позволять менять порядок поддерживаемых верхнеуровневых paragraph, heading, list и media blocks одной document transaction. Наряду с drag handle система MUST предоставлять keyboard-reachable actions `Move up` и `Move down`; вложенные list items MUST NOT получать самостоятельную top-level handle.
+Система SHALL позволять менять порядок поддерживаемых верхнеуровневых paragraph, heading, list и media blocks одной document transaction. Наряду с drag handle система MUST предоставлять keyboard-reachable actions `Move up` и `Move down`, которые становятся визуально доступными при keyboard focus и имеют заметный focus indicator; вложенные list items MUST NOT получать самостоятельную top-level handle.
 
 #### Scenario: Пользователь перетаскивает блок
 - **WHEN** пользователь переносит поддерживаемый верхнеуровневый block drag handle в другую позицию
@@ -168,6 +172,8 @@ Interactive и static rendering SHALL быть совместимы с CSP, ог
 
 Система SHALL передавать editor surface только ready `Y.Doc` и presentation `editable` из `PageDocumentSession`. Базовая session MUST ограничиваться status `loading`, `ready` или `error`, error и lifecycle `destroy`; `ready` MUST означать, что metadata schema version валидирована, Yjs state успешно декодирован и document допущен к editing. Surface MUST NOT самостоятельно проверять database schema version либо определять transport, persistence, REST save state или Hocuspocus connection/sync state.
 
+Создавший `PageDocumentSession` caller/hook/factory MUST владеть её lifecycle и вызывать `destroy()`; `PageEditor`, получивший session через props, MUST NOT уничтожать внешний resource. Editor instance, созданный TipTap `useEditor`, MUST использовать встроенный Strict Mode-safe lifecycle без ручного `editor.destroy()` в surface effect.
+
 #### Scenario: Surface работает с in-memory session
 - **WHEN** InMemory/Fake session предоставляет ready `Y.Doc`
 - **THEN** editor поддерживает schema и editing flows без document API, WebSocket или persistence
@@ -176,9 +182,9 @@ Interactive и static rendering SHALL быть совместимы с CSP, ог
 - **WHEN** future Hocuspocus adapter предоставляет тот же ready doc/editable boundary
 - **THEN** schema и `PageEditorSurface` не требуют rewrite, а connection/sync diagnostics остаются contract будущего adapter
 
-#### Scenario: Session уничтожается или заменяется
-- **WHEN** page identity меняется, editor unmount или composition создаёт replacement session
-- **THEN** listeners, local UI timers, TipTap editor и принадлежащий session temporary `Y.Doc` очищаются, а callback уничтоженной session не меняет replacement session
+#### Scenario: Session уничтожается или заменяется владельцем
+- **WHEN** page identity меняется, owner unmount или composition создаёт replacement session
+- **THEN** owner вызывает идемпотентный session cleanup после отсоединения surface, а `PageEditor` не уничтожает переданный session во время React Strict Mode effect replay
 
 ### Requirement: Статусы и presentation read-only доступны пользователю
 
