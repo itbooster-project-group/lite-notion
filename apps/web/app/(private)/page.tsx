@@ -1,3 +1,5 @@
-import { HomePage } from '@/pages/home';
+import { WorkspacePage } from '@/pages/workspace';
 
-export default HomePage;
+export default function WorkspaceRootPage() {
+  return <WorkspacePage route={{ type: 'root' }} />;
+}
