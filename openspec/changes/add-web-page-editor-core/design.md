@@ -1,27 +1,28 @@
 ## Context
 
-См. `proposal.md` и delta spec `web-page-editor`. Backend уже хранит opaque binary state, полученный через `Y.encodeStateAsUpdate`, и ограничивает декодированный document payload значением `DOCUMENT_MAX_BYTES = 1 MiB`. В `docs/database-schema.md` зафиксированы две разные модели: mutable рабочий документ на Yjs и immutable publication snapshot с derived TipTap JSON для public static rendering.
+См. `proposal.md` и delta spec `web-page-editor`. Backend хранит opaque binary Yjs state, а `docs/database-schema.md` уже различает mutable рабочий документ и immutable publication snapshot с derived TipTap JSON. В текущем workspace editor отсутствует; issues #44 и #45 ещё не дают effective permissions или Hocuspocus room.
 
-Issues #44 и #45 ещё не предоставляют effective permissions и Hocuspocus room. Полный REST `GET`/`PUT` не имеет revision/locking contract, поэтому его нельзя безопасно выпускать как concurrent editor. Текущий PR #66 должен остаться planning-only: описанные ниже модули, dependencies и tests реализуются только после нового human review.
+PR #66 остаётся planning-only. Полный document REST API не имеет revision/locking semantics и после решения не выпускать REST editor не нужен editor core: сложный frontend bridge был бы disposable code без user flow. Следовательно, этот change проектирует и в будущем реализует только in-memory/fake core; ни dependencies, ни source code не меняются в текущем PR.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- Сделать persisted document schema самостоятельным долгоживущим contract, которым владеет document entity, а не widget.
-- Отделить session/transport lifecycle от TipTap UI так, чтобы migration REST → Hocuspocus заменяла adapter без переписывания schema и editor surface.
-- Оставить `Y.Doc` единственным authoritative mutable state и исключить competing TipTap JSON/Query stores и competing undo stacks.
-- Заранее определить static-renderable JSON contracts, security rules, lifecycle cleanup, race protection, payload limits и доступную перестановку блоков.
-- Ограничить REST bridge изолированной реализацией и тестами без production route integration.
+- Сделать schema v1 и Yjs collaboration field явным persisted contract вне widget.
+- Изолировать TipTap surface от любого transport, не выравнивая несопоставимые REST и Hocuspocus persistence semantics.
+- Оставить `Y.Doc` единственным authoritative mutable state без TipTap JSON или TanStack Query mutable store.
+- Зафиксировать static-renderability, stable media node IDs, normalized width semantics, security и keyboard reorder до появления persisted editor data.
+- Дать editor core проверяемую in-memory/fake session для unit tests, Storybook и development isolation.
 
 **Non-Goals:**
 
 - Любая production-реализация в PR #66.
-- Подключение редактора к `WorkspaceMain` или замена текущего placeholder.
-- Hocuspocus provider/server, WebSocket transport, awareness, presence, reconnect и effective permissions.
-- Публичная Next.js page, генерация publication snapshot и сам static renderer.
-- Backend endpoints, revision protocol, database migrations, uploads, private assets и durable offline queue.
-- Заявление полной keyboard accessibility редактора; этот change гарантирует конкретные keyboard flows, включая альтернативу drag-and-drop.
+- Frontend REST lifecycle: document GET/PUT, autosave, debounce, retries, `flush`, `beforeunload`, payload-size handling, AbortController и межвкладочная политика.
+- Подключение редактора к `WorkspaceMain` или замена placeholder.
+- Hocuspocus provider/server, WebSocket transport, awareness, presence, reconnect, effective permissions или PostgreSQL persistence guarantees.
+- Public Next.js route, фактическая генерация publication snapshot, production static renderer и `PAGE_ASSETS` integration.
+- Backend endpoints, migrations, uploads, private assets и durable offline queue.
+- Полная keyboard accessibility всего ProseMirror продукта; фиксируются конкретные keyboard flows, включая альтернативу drag-and-drop.
 
 ## Decisions
 
@@ -41,7 +42,7 @@ entities/page-document/
 features/page-editing/
   model/
     page-document-session.ts
-    rest-page-document-session.ts
+    in-memory-page-document-session.ts
   ui/
     page-editor-surface/
     bubble-menu/
@@ -53,166 +54,147 @@ widgets/page-editor/
     editor-status.tsx
 ```
 
-Названия файлов могут уточняться при implementation review, но ownership является обязательным:
+Названия файлов могут уточняться при implementation review, но ownership обязателен:
 
-- `entities/page-document` владеет schema version, TipTap/ProseMirror schema contract, Yjs serialization и media/link validation. Entity не импортирует feature, widget, REST или Hocuspocus.
-- `features/page-editing` владеет document session abstraction, transport adapters и TipTap interaction UI. Surface зависит только от готового `Y.Doc`, `editable` и editor callbacks.
-- `widgets/page-editor` только выбирает/получает session, компонует status и surface и не содержит persisted schema, binary conversion, autosave queue или transport details.
+- `entities/page-document` владеет schema version, collaboration field, TipTap/ProseMirror contract, Yjs conversion и media/link validation. Entity не импортирует feature, widget, transport или React UI.
+- `features/page-editing` владеет минимальной session abstraction, in-memory test adapter и TipTap interaction UI. Surface получает готовый `Y.Doc` и `editable`.
+- `widgets/page-editor` только компонует session status и surface; он не содержит persisted schema, binary conversion или transport lifecycle.
 
-Альтернатива — держать всё в `widgets/page-editor` — отклонена: widget превратился бы в доменный модуль, а publication и Hocuspocus начали бы зависеть от UI composition.
+Альтернатива — поместить document domain в `widgets/page-editor` — отклонена: publication и будущая collaboration начали бы зависеть от UI composition.
 
-### 2. Document session является границей transport lifecycle
+### 2. PageDocumentSession содержит только transport-neutral state
 
-Feature определяет transport-neutral contract примерно такого уровня:
+Общий contract намеренно минимален:
 
 ```ts
-type DocumentStatus =
-  | "loading"
-  | "ready"
-  | "dirty"
-  | "saving"
-  | "saved"
-  | "load-error"
-  | "save-error"
-  | "unsupported-schema"
-  | "document-too-large"
-  | "read-only";
+type PageDocumentSessionStatus = 'loading' | 'ready' | 'error';
 
 type PageDocumentSession = {
   doc: Y.Doc | null;
-  status: DocumentStatus;
   editable: boolean;
+  status: PageDocumentSessionStatus;
   error?: DocumentError;
-  retry(): void;
-  flush(reason: "navigation" | "explicit"): Promise<FlushResult>;
   destroy(): void;
 };
 ```
 
-Точный React binding может отличаться, но adapter владеет созданием/загрузкой `Y.Doc`, persistence, status transitions, retry и cleanup. `PageEditorSurface` получает только готовый `doc` и presentation props и не знает, использовались ли REST, WebSocket, IndexedDB или другой transport.
+`PageEditorSurface` зависит только от ready `doc` и presentation `editable`; он не знает, создан ли документ in-memory, восстановлен adapter или подключён collaboration provider. Retry после error создаётся replacement session на уровне composition, а не является persistence method общего type.
+
+REST-specific concepts (`dirty`, `saving`, `saved`, `retrySave`, `flush`, payload limit) не входят в этот contract. Их нельзя навязывать Hocuspocus: будущий `HocuspocusPageDocumentSession` будет иметь собственные connection/sync diagnostics (`connecting`, `connected`, `syncing`, `synced`, `disconnected`, `error`) вне базового editor session API.
+
+Критически, `synced` с collaboration server означает только client/server synchronization. Оно **не** равно подтверждённой записи в PostgreSQL: persistence выполняет Hocuspocus backend по отдельному lifecycle. Frontend не должен выводить Hocuspocus client state как durability guarantee.
 
 ```text
-Generated document API → RestPageDocumentSession ┐
-                                                  ├→ PageEditor → PageEditorSurface
-Hocuspocus provider    → HocuspocusPageDocumentSession ┘
+InMemory/Fake session ────────────────┐
+                                      ├→ PageEditor → PageEditorSurface
+future Hocuspocus session (separate) ┘
 ```
 
-REST adapter в этом change реализуется только как изолированный seam с unit/integration tests и не экспортируется через production workspace composition. В будущем change Hocuspocus adapter становится единственным production persistence lifecycle; REST autosave удаляется, а session contract, schema и surface сохраняются.
+Migration REST → Hocuspocus больше не является задачей этого change. Future Hocuspocus adapter заменит production composition и добавит свою diagnostics UI, не притворяясь REST persistence lifecycle и не переписывая schema/surface.
 
-Альтернатива — вызывать REST прямо из `PageEditor` — отклонена, потому что transport migration затронула бы composition и status UI. Хранить mutable `Y.Doc` или его snapshots в TanStack Query также запрещено: Query может обслуживать обычные server resources, но не становится вторым editor store.
+### 3. `Y.Doc` и collaboration field — единый editable persisted contract
 
-### 3. `Y.Doc` остаётся единственным editable source of truth
+Рабочий документ хранится как binary Yjs update; TipTap/ProseMirror — view/command layer над тем же `Y.Doc`. Authoritative TipTap JSON, block CRUD и mutable copy в TanStack Query не создаются. TipTap Collaboration/Yjs history — единственный undo/redo mechanism; стандартный history extension отключается.
 
-Рабочий документ хранится и передаётся как binary Yjs update. TipTap/ProseMirror работает как view/command layer над тем же `Y.Doc`. Authoritative TipTap JSON, block CRUD и зеркальная копия content в TanStack Query не создаются.
+Schema v1 фиксирует две публичные константы:
 
-TipTap Collaboration/Yjs history является единственным undo/redo mechanism. Стандартный history extension из StarterKit отключается, чтобы не создавать competing undo stack.
+```ts
+export const PAGE_DOCUMENT_SCHEMA_VERSION = 1;
+export const PAGE_CONTENT_YJS_FIELD = 'default';
+```
 
-Derived TipTap JSON допустим только как явно создаваемый immutable publication artifact. Public Next.js page должна читать готовый snapshot и не декодировать Yjs на каждый request:
+`PAGE_CONTENT_YJS_FIELD` — имя `Y.XmlFragment`, используемого TipTap Collaboration `field`. Его используют без неявного default одно и то же значение:
+
+- interactive TipTap editor;
+- `Y.Doc → TipTap/ProseMirror JSON` conversion и static-render preparation;
+- publication snapshot pipeline;
+- future Hocuspocus editor;
+- migration/import/conversion utilities.
+
+Изменение field визуально сделало бы существующий Y.Doc пустым для editor, поэтому field меняется только с новой schema version и явной migration. Round-trip test создаёт state в `PAGE_CONTENT_YJS_FIELD` и доказывает, что interactive/conversion code читает именно этот fragment.
+
+### 4. Schema v1 является static-renderable persisted contract
+
+Одна schema factory и `PAGE_DOCUMENT_SCHEMA_VERSION` используются editor, conversion tests и будущим publication renderer. Базовые nodes/marks: document, text, paragraph, headings 1–3, bullet/ordered lists, task list/task item, hard break, bold, italic, strike и inline code. Изменение names, attrs, defaults или semantics требует новой schema version либо явной migration.
+
+Custom JSON contracts:
+
+| Node/mark | Persisted attrs | Validation и стабильность | Детерминированное представление без NodeView |
+| --- | --- | --- | --- |
+| `image` | `nodeId`, `src`, `alt`, `decorative`, `caption`, `alignment`, `widthPercent` | `nodeId` — opaque UUID, созданный при вставке; HTTPS URL без credentials; `decorative=true` требует пустой `alt`, иначе `alt` непустой; `alignment ∈ start/center/end`; integer `widthPercent` 25–100 | `figure` с `data-node-id`, `img`, процентной шириной content area и optional `figcaption`; load failure даёт fallback, node не удаляется |
+| `youtube` | `nodeId`, `videoId`, `caption`, `alignment`, `widthPercent` | `nodeId` как выше; только normalized ID `[A-Za-z0-9_-]{11}` из allowlisted input host; URL/iframe HTML не сохраняются; те же alignment/widthPercent rules | `figure` с `data-node-id` и iframe, который renderer строит на `https://www.youtube-nocookie.com/embed/{videoId}`, без autoplay, с title и optional `figcaption` |
+| `video` | `nodeId`, `src`, `caption`, `alignment`, `widthPercent` | `nodeId` как выше; HTTPS URL без credentials, pathname `.mp4`/`.webm`; те же alignment/widthPercent rules | `figure` с `data-node-id` и native `video controls preload='metadata'`, без autoplay, с optional `figcaption` и fallback |
+| `link` mark | `href` | normalized `https:`, `http:` или `mailto:`; прочие protocols отклоняются | `a`; внешние HTTP(S) links получают `target='_blank'` и `rel='noopener noreferrer'`; renderer не доверяет persisted HTML attrs |
+
+`caption` — string или `null`; `widthPercent` — нормализованное целое число, обозначающее процент ширины editor/content area, а не CSS string. Interactive и static renderer трактуют его одинаково; percentage и pixel CSS strings не являются допустимым persisted value.
+
+`nodeId` создаётся один раз при создании custom/media node, сохраняется в TipTap JSON и Yjs state, не меняется при edit, resize, alignment или move и доступен static renderer/publication pipeline. Явное clone/paste/import обязано deconflict-ить ID и выдать новый уникальный `nodeId`; это позволяет позднее связать node с `PAGE_ASSETS` без schema v1 migration.
+
+React NodeView может улучшать interactive editing, но не является единственным renderer. Fixtures проверяют JSON defaults, node IDs, Yjs field и deterministic static output без монтирования React NodeViews. Schema mismatch или decode error создаёт safe error state и не заменяет state пустым document.
+
+### 5. Publication остаётся derived pipeline, а не editor store
+
+Derived TipTap JSON допустим только как явно создаваемый immutable publication artifact:
 
 ```text
-editable Y.Doc
+editable Y.Doc (PAGE_CONTENT_YJS_FIELD)
   → publication-time TipTap / ProseMirror JSON
   → immutable DOCUMENT_RENDERINGS.content_json
   → static renderer
   → deterministic React/HTML output
 ```
 
-Создание snapshot, public route и static renderer находятся вне scope, но schema v1 обязана поддерживать этот pipeline до начала editor implementation.
+Public Next.js page в future change читает готовый snapshot и не декодирует Yjs на каждый request. Данный change проверяет только schema static-renderability и не создаёт public route, snapshot writer или production renderer.
 
-### 4. Schema v1 является persisted и static-renderable contract
+### 6. External media проходит централизованную security validation
 
-Одна schema factory и одна публичная schema version используются editor, Yjs conversion tests и будущим publication renderer. Базовые nodes/marks фиксируются версией: document, text, paragraph, headings 1–3, bullet/ordered lists, task list/task item, hard break, bold, italic, strike и inline code. Изменение names, attrs, defaults или semantics требует новой schema version либо явной migration.
+URL parser из document entity принимает только явно разрешённые protocols и не хранит arbitrary iframe HTML. YouTube input hosts: `youtube.com`, `www.youtube.com`, `m.youtube.com`, `music.youtube.com`, `youtu.be` и `www.youtube-nocookie.com`; сохраняется только video ID. Renderer сам создаёт privacy-enhanced embed.
 
-Custom JSON contracts:
-
-| Node/mark | Persisted attrs | Validation | Детерминированное представление без NodeView |
-| --- | --- | --- | --- |
-| `image` | `src`, `alt`, `decorative`, `caption`, `alignment`, `width` | normalized HTTPS URL без credentials; `decorative=true` требует пустой `alt`, иначе непустой `alt`; `alignment ∈ start/center/end`; integer `width` 25–100 | `figure` с `img`, фиксированными data/style attrs и optional `figcaption`; ошибка загрузки даёт fallback, node не удаляется |
-| `youtube` | `videoId`, `caption`, `alignment`, `width` | только normalized ID `[A-Za-z0-9_-]{11}`, полученный из allowlisted input host; URL/iframe HTML не сохраняются; те же alignment/width rules | `figure` и iframe, который renderer сам строит на `https://www.youtube-nocookie.com/embed/{videoId}`, без autoplay, с title и optional `figcaption` |
-| `video` | `src`, `caption`, `alignment`, `width` | normalized HTTPS URL без credentials, pathname оканчивается на `.mp4` или `.webm`; те же alignment/width rules | `figure` и native `video controls preload="metadata"` без autoplay, с optional `figcaption` и fallback |
-| `link` mark | `href` | normalized `https:`, `http:` или `mailto:`; иные protocols отклоняются | `a`; внешние HTTP(S) links получают `target="_blank"` и `rel="noopener noreferrer"`, renderer не доверяет persisted HTML attrs |
-
-`caption` хранится как string либо `null`; defaults attrs фиксируются schema tests. React NodeView может улучшать interactive editing, но не является единственным renderer: у каждого custom node/mark обязаны быть deterministic HTML/static mappings. Fixture tests проверяют одинаковую нормализацию JSON и deterministic output без монтирования editor React NodeViews.
-
-При schema mismatch или ошибке Yjs decode session переходит в блокирующее typed state, не создаёт editable surface и не выполняет save. Неизвестный persisted state никогда не заменяется пустым документом.
-
-### 5. External media проходит централизованную security validation
-
-URL parser из document entity принимает только явно разрешённые protocols и никогда не хранит arbitrary iframe HTML. Для YouTube input разрешены `youtube.com`, `www.youtube.com`, `m.youtube.com`, `music.youtube.com`, `youtu.be` и `www.youtube-nocookie.com`; parser извлекает только video ID. Renderer всегда генерирует privacy-enhanced embed самостоятельно.
-
-Целевой hosting contract для editor/public renderer:
+Целевой hosting contract для future editor/public renderer:
 
 - `img-src 'self' https:`;
 - `media-src 'self' https:`;
 - `frame-src https://www.youtube-nocookie.com`;
 - `object-src 'none'`.
 
-Image и iframe получают `referrerPolicy="no-referrer"`; для элементов/переходов без собственного атрибута действует документный `Referrer-Policy: strict-origin-when-cross-origin`. YouTube iframe получает минимальный фиксированный `allow`, `allowFullScreen`, безопасный title и не принимает attrs из пользовательского HTML. Link renderer добавляет безопасный `rel` при `_blank`.
+Image и iframe получают `referrerPolicy='no-referrer'`; для остального действует document `Referrer-Policy: strict-origin-when-cross-origin`. YouTube iframe получает фиксированные safe `allow`, `allowFullScreen` и title. Строгость текущей policy сохраняется, а расширение host/protocol allowlist требует отдельного security review.
 
-CSP/referrer policy должны быть проверены при будущем подключении renderer к route. Если текущая application policy строже, она сохраняется; расширение allowlist требует отдельного security review.
+### 7. In-memory session покрывает editor core и lifecycle cleanup
 
-### 6. REST bridge ограничен и не выпускается пользователям
+`InMemoryPageDocumentSession` создаёт/получает `Y.Doc` для tests, Storybook и isolated development без backend API. Он реализует только базовый session contract и создаёт ready/error state, достаточный для surface. Это позволяет проверять schema, commands, history и read-only presentation без внедрения disposable REST persistence code.
 
-`RestPageDocumentSession` напрямую вызывает generated document API для bootstrap/save и не помещает state в Query cache. Load использует `AbortController` и session generation. State применяется к новому `Y.Doc` до регистрации update listener, чтобы bootstrap не помечал документ dirty.
+При смене page identity, unmount или replacement session выполняется идемпотентный `destroy()`:
 
-Autosave после implementation review работает как debounce 750 мс и single-flight latest-snapshot queue: параллельных PUT одной session нет, а update во время request формирует один следующий актуальный snapshot. Ошибка сохраняет dirty state и допускает explicit retry без показа raw backend body.
+1. отписываются Y.Doc и editor listeners;
+2. очищаются local UI timers/pending callbacks;
+3. уничтожается TipTap editor в surface cleanup;
+4. временный `Y.Doc` уничтожается после отсоединения surface.
 
-Перед каждым PUT adapter вычисляет `Y.encodeStateAsUpdate(doc)` и проверяет длину бинарного `Uint8Array` против `DOCUMENT_MAX_BYTES` (1 MiB). Превышение создаёт typed error `document-too-large`, отменяет enqueue/retry для неизменившегося oversized state и показывает persistent blocking indication. После уменьшения документа и нового валидного snapshot сохранение может быть явно возобновлено. Chunked base64 conversion предотвращает переполнение argument stack, но не меняет и не обходит API payload limit.
+Callbacks destroyed session становятся no-op и не могут менять состояние replacement session. `AbortController`, network retries и provider disconnect не входят в in-memory core; future Hocuspocus adapter обязан очищать provider/awareness listeners в своём lifecycle.
 
-REST API не имеет revision/locking semantics. Поэтому принято deployment constraint вместо неполной межвкладочной блокировки: adapter не импортируется production workspace, route или widget entry point, и пользователь не может запустить REST editing lifecycle. Architecture test проверяет этот import boundary и отсутствие document GET/PUT при открытии текущего workspace placeholder.
+### 8. Перестановка блоков имеет keyboard alternative
 
-Если до Hocuspocus потребуется выпустить REST editor пользователям, это будет новый reviewed change с single-writer mechanism (предпочтительно Web Locks с BroadcastChannel для понятного read-only/warning во второй вкладке). Silent last-write-wins не является допустимым production behavior.
+Pointer drag handle доступна для поддерживаемых верхнеуровневых blocks, а тот же command path предоставляется через keyboard-reachable `Move up` и `Move down`. Действия используют одну ProseMirror transaction, отключаются на границах документа и возвращают focus к перемещённому block. Вложенные list items не получают top-level handle.
 
-### 7. Сохранение при уходе имеет ограниченные гарантии
+Tests проверяют accessible names, keyboard reachability, disabled boundaries, selection/focus и изменение порядка без pointer events. Этот contract не заявляет полную accessibility всего ProseMirror продукта.
 
-При SPA navigation или смене `pageId` composition может вызвать `flush("navigation")` до destruction текущей session. Это best effort: navigation lifecycle не заявляет durable guarantee, а незавершённый request после истечения допустимого lifecycle отменяется cleanup.
+### 9. Dependency graph и Lucide
 
-При закрытии tab/browser обычный async PUT не считается надёжным. `beforeunload` устанавливается только для dirty/saving/save-error/document-too-large и предупреждает о возможной потере данных; это UX-защита, а не persistence mechanism. Основная гарантия не строится на `fetch(..., { keepalive: true })`, потому что полный Yjs state и base64/JSON overhead могут превышать browser keepalive body limits.
+Все импортируемые TipTap/Yjs packages явно объявляются в `@lite-notion/web`. CI проверяет согласованные версии `yjs`, `@tiptap/core`, `@tiptap/pm`, `@tiptap/react` и используемых extensions; runtime identity smoke tests добавляются там, где duplicate packages могут нарушить ProseMirror/Yjs identity.
 
-### 8. Session и editor имеют явный cleanup lifecycle
-
-Каждая session получает immutable generation id. Любой GET/PUT callback перед status mutation проверяет active generation и `pageId`; callback старой session не может изменить новый `Y.Doc`, status или error.
-
-При смене `pageId`, unmount, aborted load или создании replacement session выполняется идемпотентный `destroy()`:
-
-1. отписать Y.Doc update listeners;
-2. очистить debounce/autosave timers и queued lifecycle state;
-3. abort активных load/save requests после допустимого best-effort flush;
-4. удалить `beforeunload` и прочие browser listeners;
-5. уничтожить TipTap editor в surface cleanup;
-6. уничтожить временный/активный `Y.Doc` после отсоединения surface;
-7. в будущем — disconnect/destroy Hocuspocus provider и awareness listeners.
-
-Promise completion после destruction становится no-op. Tests с deferred requests и fake timers доказывают отсутствие stale callbacks, saves и listeners после page switch/unmount.
-
-### 9. Перестановка блоков имеет keyboard alternative
-
-Pointer drag handle остаётся удобным способом перемещения поддерживаемых верхнеуровневых blocks, но тот же command path доступен через именованные действия `Move up` и `Move down` в keyboard-reachable block controls. Действия используют одну ProseMirror transaction, отключены на границах документа и возвращают focus к перемещённому block.
-
-Вложенные list items не получают top-level handle. Tests проверяют Tab/keyboard reachability, accessible names, disabled boundaries, сохранение selection/focus и фактическое изменение порядка без pointer events. Остальные заявленные flows BubbleMenu, slash menu, link/media forms и status regions также покрываются keyboard/ARIA tests; полной accessibility всего ProseMirror продукта этот change не обещает.
-
-### 10. Dependency graph должен быть согласован
-
-Все импортируемые TipTap/Yjs packages явно объявляются в `@lite-notion/web`; Hocuspocus packages не добавляются. Lockfile/CI verification проверяет одну согласованную версию `yjs`, а также отсутствие конфликтующих экземпляров/версий `@tiptap/core`, `@tiptap/pm`, `@tiptap/react` и всех используемых TipTap extensions.
-
-Проверка выполняется через pnpm dependency graph/list и runtime identity smoke tests там, где duplicate packages могут нарушить ProseMirror/Yjs identity. Standard history остаётся отключённым при Collaboration/Yjs.
+`lucide-react` остаётся принятым локальным набором icons editor UI и не заменяется. Hocuspocus packages не добавляются этим change.
 
 ## Risks / Trade-offs
 
-- [REST adapter нельзя проверить через реальный workspace flow] → покрыть contract/integration tests с fake session/API и architecture test; production integration отложить до Hocuspocus.
-- [Изолированный REST code может устареть до realtime change] → держать adapter минимальным и удалить его, как только Hocuspocus session проходит общий contract suite.
-- [Schema v1 слишком рано закрепит attrs] → фиксировать только необходимые attrs/defaults и требовать version bump/migration для несовместимых изменений.
-- [Внешние media всё ещё раскрывают IP внешнему host и могут исчезнуть] → явный URL consent, CSP/referrer policy и deterministic fallback; upload/private assets вне scope.
-- [Full-state encoding создаёт allocations до проверки limit] → limit проверяется сразу после обязательного encode; chunked base64 применяется только после успешной binary-size validation.
-- [Best-effort navigation flush не гарантирует durable save] → честный status/warning contract; production durability появляется с Hocuspocus, а не маскируется keepalive.
-- [Derived JSON может разойтись со schema] → публикационный renderer использует ту же versioned schema и fixture contract tests; snapshot хранит schema version.
+- [Нет frontend REST round-trip verification] → API integration при необходимости оформляется отдельным change; editor core проверяется через in-memory Yjs fixtures.
+- [Hocuspocus status не попадёт в общий status UI автоматически] → это намеренно: будущий adapter добавляет connection/sync diagnostics без ложной durability семантики.
+- [Schema v1 рано фиксирует attrs] → `nodeId`, `widthPercent` и collaboration field добавлены до массового persistence; последующие несовместимые изменения требуют version bump/migration.
+- [External media может исчезнуть или раскрыть IP host] → validation, explicit allowlist, CSP/referrer policy и deterministic fallback; uploads/private assets вне scope.
+- [Static renderer может разойтись со schema] → общая schema/field constants и fixture tests; public integration остаётся отдельным review.
 
-## Migration Plan
+## Migration Notes / Future Changes
 
-1. В PR #66 обновить и получить human review только proposal, design, delta spec и tasks; production files не изменять.
-2. После отдельного разрешения реализовать schema/entity, surface и session contract по tasks, но оставить REST adapter вне production route и workspace.
-3. Проверить общий session contract через fake adapter и изолированный REST adapter, static-renderability fixtures, cleanup/race/security/accessibility и dependency graph.
-4. В отдельном Hocuspocus change реализовать `HocuspocusPageDocumentSession`, прогнать тот же contract suite и подключить его к `PageEditor`; не подключать REST autosave параллельно.
-5. После publication change создавать immutable derived TipTap JSON при publish и рендерить public Next.js page без per-request Yjs decode.
-
-Rollback до production integration сводится к удалению нового adapter/composition import: persisted Yjs contract и schema не требуют обратной миграции. До Hocuspocus production behavior не меняется, потому что workspace placeholder сохраняется.
+- Future Hocuspocus change реализует provider и собственные connection/sync semantics, подключит adapter к production composition и не введёт REST editable persistence. `synced` не будет сообщаться как PostgreSQL durability.
+- Future publication change создаст immutable derived JSON при publish и public Next.js renderer без per-request Yjs decode.
+- Future asset change сможет связать `PAGE_ASSETS` с уже сохранённым media `nodeId`; uploads и asset lifecycle не являются задачами этого change.
+- Если снова понадобится REST bridge, это отдельный reviewed change с собственными REST-specific state/capabilities и single-writer design; он не изменяет базовый `PageDocumentSession`.
