@@ -170,7 +170,7 @@ Interactive и static rendering SHALL быть совместимы с CSP, ог
 
 #### Scenario: Surface работает с in-memory session
 - **WHEN** InMemory/Fake session предоставляет ready `Y.Doc`
-- **THEN** editor поддерживает schema и editing flows без document API, WebSocket или production route mounting
+- **THEN** editor поддерживает schema и editing flows без document API, WebSocket или persistence
 
 #### Scenario: Future transport заменяет composition
 - **WHEN** future Hocuspocus adapter предоставляет тот же ready doc/editable boundary

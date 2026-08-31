@@ -13,17 +13,13 @@
 - Подготовить seam для будущего Hocuspocus adapter без production wiring. Hocuspocus connection/sync status и server persistence semantics остаются его собственным contract; `synced` с collaboration server не означает persistence в PostgreSQL.
 - Сохранить принятый проектом `lucide-react`; это решение не пересматривается.
 
-Этот PR изменяет только OpenSpec planning artifacts. Dependencies, editor, API adapters, Hocuspocus integration, workspace integration и иные production-файлы в нём не изменяются.
+Этот PR включает согласованные OpenSpec artifacts и реализацию editor core. Во время ручного QA `InMemoryPageDocumentSession` временно монтировалась вместо workspace placeholder без document API, REST, Hocuspocus или persistence. После проверки editor UI временный mount удалён, placeholder восстановлен, а production integration оставлена будущему reviewed Hocuspocus change.
 
 ## Capabilities
 
 ### New Capabilities
 
 - `web-page-editor`: Versioned document schema, transport-neutral editor core, доступные editing flows и безопасные external media без production transport.
-
-### Modified Capabilities
-
-Нет. Поведение `web-page-workspace` в этом change не меняется: placeholder остаётся до отдельного reviewed Hocuspocus change.
 
 ## Impact
 
@@ -32,4 +28,4 @@
 - Backend/API: endpoints, DTO, database schema и generated API не меняются. Admission editor document использует уже authoritative пару `PAGE_DOCUMENTS.tiptap_schema_version` и `PAGE_DOCUMENTS.yjs_state`, но не вводит metadata внутрь Y.Doc.
 - Publication: будущие immutable snapshots используют derived TipTap JSON для static rendering; editable document не получает authoritative JSON-копию.
 - Follow-up: production collaboration, Hocuspocus persistence lifecycle, public route и asset uploads рассматриваются отдельными reviewed changes.
-- Текущий PR: только `proposal.md`, `design.md`, delta spec и `tasks.md`; production changes запрещены.
+- Текущий PR: planning artifacts и editor core в одной ветке; REST/Hocuspocus transports, public route и production persistence запрещены. Временное in-memory QA-mount удалено, существующий workspace снова показывает placeholder.

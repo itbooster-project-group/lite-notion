@@ -1,0 +1,24 @@
+.editorContent ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.editorContent li[data-checked] {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.editorContent li[data-checked] > label {
+  flex: 0 0 auto;
+  margin-top: 0.25rem;
+}
+
+.editorContent li[data-checked] > div {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+.editorContent li[data-checked] > div > p {
+  margin-block: 0;
+}

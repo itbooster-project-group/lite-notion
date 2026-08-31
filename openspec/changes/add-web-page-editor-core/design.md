@@ -2,7 +2,7 @@
 
 См. `proposal.md` и delta spec `web-page-editor`. Backend хранит opaque binary Yjs state, а `docs/database-schema.md` уже различает mutable рабочий документ и immutable publication snapshot с derived TipTap JSON. В текущем workspace editor отсутствует; issues #44 и #45 ещё не дают effective permissions или Hocuspocus room.
 
-PR #66 остаётся planning-only. Полный document REST API не имеет revision/locking semantics и после решения не выпускать REST editor не нужен editor core: сложный frontend bridge был бы disposable code без user flow. Следовательно, этот change проектирует и в будущем реализует только in-memory/fake core; ни dependencies, ни source code не меняются в текущем PR.
+PR #66 содержит planning artifacts и реализацию editor core в одной ветке. Полный document REST API не имеет revision/locking semantics и после решения не выпускать REST editor не нужен editor core: сложный frontend bridge был бы disposable code без user flow. Во время ручного QA `InMemoryPageDocumentSession` временно монтировалась вместо workspace placeholder без transport или production persistence; после проверки mount удалён и placeholder восстановлен.
 
 Authoritative document metadata уже разделена: `PAGE_DOCUMENTS.tiptap_schema_version` хранит версию TipTap/ProseMirror application schema, а `PAGE_DOCUMENTS.yjs_state` — binary Yjs state. `Y.Doc` сам по себе не содержит надёжного утверждения о schema version; отдельный metadata mechanism внутрь Y.Doc этим change не вводится.
 
@@ -18,13 +18,15 @@ Authoritative document metadata уже разделена: `PAGE_DOCUMENTS.tipta
 
 **Non-Goals:**
 
-- Любая production-реализация в PR #66.
+- Production transport, document API и persistence lifecycle в пользовательском workspace в PR #66.
 - Frontend REST lifecycle: document GET/PUT, autosave, debounce, retries, `flush`, `beforeunload`, payload-size handling, AbortController и межвкладочная политика.
 - Подключение редактора к `WorkspaceMain` или замена placeholder.
 - Hocuspocus provider/server, WebSocket transport, awareness, presence, reconnect, effective permissions или PostgreSQL persistence guarantees.
 - Public Next.js route, фактическая генерация publication snapshot, production static renderer и `PAGE_ASSETS` integration.
 - Backend endpoints, migrations, uploads, private assets и durable offline queue.
 - Полная keyboard accessibility всего ProseMirror продукта; фиксируются конкретные keyboard flows, включая альтернативу drag-and-drop.
+
+Временный workspace mount использовался только для ручной проверки editor UI, не менял server resources и после проверки был удалён. Финальный workspace этой ветки сохраняет placeholder до будущей reviewed Hocuspocus composition.
 
 ## Decisions
 

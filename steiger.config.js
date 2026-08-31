@@ -7,4 +7,15 @@ export default defineConfig([
   {
     ignores: ['./apps/web/src/shared/api/generated/**', '**/*.spec.ts', '**/*.spec.tsx'],
   },
+  // Editor core is intentionally isolated until a separate Hocuspocus change adds production composition.
+  {
+    files: [
+      './apps/web/src/entities/page-document/**',
+      './apps/web/src/features/page-editing/**',
+      './apps/web/src/widgets/page-editor/**',
+    ],
+    rules: {
+      'fsd/insignificant-slice': 'off',
+    },
+  },
 ]);
