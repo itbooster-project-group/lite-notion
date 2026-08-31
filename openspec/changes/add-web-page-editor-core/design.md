@@ -4,6 +4,8 @@
 
 PR #66 остаётся planning-only. Полный document REST API не имеет revision/locking semantics и после решения не выпускать REST editor не нужен editor core: сложный frontend bridge был бы disposable code без user flow. Следовательно, этот change проектирует и в будущем реализует только in-memory/fake core; ни dependencies, ни source code не меняются в текущем PR.
 
+Authoritative document metadata уже разделена: `PAGE_DOCUMENTS.tiptap_schema_version` хранит версию TipTap/ProseMirror application schema, а `PAGE_DOCUMENTS.yjs_state` — binary Yjs state. `Y.Doc` сам по себе не содержит надёжного утверждения о schema version; отдельный metadata mechanism внутрь Y.Doc этим change не вводится.
+
 ## Goals / Non-Goals
 
 **Goals:**
@@ -92,9 +94,9 @@ future Hocuspocus session (separate) ┘
 
 Migration REST → Hocuspocus больше не является задачей этого change. Future Hocuspocus adapter заменит production composition и добавит свою diagnostics UI, не притворяясь REST persistence lifecycle и не переписывая schema/surface.
 
-### 3. `Y.Doc` и collaboration field — единый editable persisted contract
+### 3. Schema metadata, `Y.Doc` и collaboration field образуют admission contract
 
-Рабочий документ хранится как binary Yjs update; TipTap/ProseMirror — view/command layer над тем же `Y.Doc`. Authoritative TipTap JSON, block CRUD и mutable copy в TanStack Query не создаются. TipTap Collaboration/Yjs history — единственный undo/redo mechanism; стандартный history extension отключается.
+Рабочий документ состоит из отдельной metadata version и binary state; TipTap/ProseMirror — view/command layer над admitted `Y.Doc`. Authoritative TipTap JSON, block CRUD и mutable copy в TanStack Query не создаются. TipTap Collaboration/Yjs history — единственный undo/redo mechanism; стандартный history extension отключается.
 
 Schema v1 фиксирует две публичные константы:
 
@@ -103,7 +105,7 @@ export const PAGE_DOCUMENT_SCHEMA_VERSION = 1;
 export const PAGE_CONTENT_YJS_FIELD = 'default';
 ```
 
-`PAGE_CONTENT_YJS_FIELD` — имя `Y.XmlFragment`, используемого TipTap Collaboration `field`. Его используют без неявного default одно и то же значение:
+`PAGE_CONTENT_YJS_FIELD` — canonical имя `Y.XmlFragment`, используемого TipTap Collaboration `field`. Его используют без неявного default одно и то же значение:
 
 - interactive TipTap editor;
 - `Y.Doc → TipTap/ProseMirror JSON` conversion и static-render preparation;
@@ -111,11 +113,27 @@ export const PAGE_CONTENT_YJS_FIELD = 'default';
 - future Hocuspocus editor;
 - migration/import/conversion utilities.
 
-Изменение field визуально сделало бы существующий Y.Doc пустым для editor, поэтому field меняется только с новой schema version и явной migration. Round-trip test создаёт state в `PAGE_CONTENT_YJS_FIELD` и доказывает, что interactive/conversion code читает именно этот fragment.
+Admission выполняется до создания `PageEditorSurface`:
+
+```text
+PAGE_DOCUMENTS.tiptap_schema_version + PAGE_DOCUMENTS.yjs_state
+  → session admission validation
+  → supported schema metadata + successfully decoded Y.Doc
+  → PageDocumentSession status 'ready'
+  → PageEditorSurface
+```
+
+Session factory/admission validator в `features/page-editing` сверяет metadata с version constants из `entities/page-document`, декодирует binary state и только затем создаёт ready session. `ready` означает, что schema metadata поддерживается, Yjs state успешно декодирован и document допущен к редактированию. Surface не проверяет database schema version самостоятельно.
+
+Физическое отсутствие top-level shared type в encoded update не является ошибкой: valid empty `Y.Doc` может не содержать materialized `Y.XmlFragment` до первого content update. После decode `doc.getXmlFragment(PAGE_CONTENT_YJS_FIELD)` корректно создаёт/возвращает пустой content root. Blocking error относится только к unsupported schema metadata, corrupted/undecodable Yjs state или incompatible document metadata.
+
+Изменение field визуально сделало бы существующий Y.Doc пустым для editor, поэтому field меняется только с новой schema version и явной migration. Round-trip test проверяет и populated content, и empty `Y.Doc → encode → applyUpdate → getXmlFragment(PAGE_CONTENT_YJS_FIELD)`, подтверждая валидный пустой editor document.
 
 ### 4. Schema v1 является static-renderable persisted contract
 
-Одна schema factory и `PAGE_DOCUMENT_SCHEMA_VERSION` используются editor, conversion tests и будущим publication renderer. Базовые nodes/marks: document, text, paragraph, headings 1–3, bullet/ordered lists, task list/task item, hard break, bold, italic, strike и inline code. Изменение names, attrs, defaults или semantics требует новой schema version либо явной migration.
+Одна schema factory и `PAGE_DOCUMENT_SCHEMA_VERSION` используются editor, conversion tests и будущим publication renderer. Базовые nodes/marks: document, text, paragraph, headings 1–3, bullet/ordered lists, task list/task item, hard break, bold, italic, strike и inline code.
+
+Новая schema version либо явная compatibility migration обязательны при любом изменении persisted contract: добавлении, удалении или переименовании node/mark type; изменении persisted attrs, их semantics или defaults; изменении `PAGE_CONTENT_YJS_FIELD`. Добавление TipTap node/mark не считается автоматически backward-compatible: старый клиент может получить технически валидный Yjs update с неизвестным ProseMirror type и не суметь безопасно открыть document.
 
 Custom JSON contracts:
 
@@ -161,7 +179,7 @@ Image и iframe получают `referrerPolicy='no-referrer'`; для оста
 
 ### 7. In-memory session покрывает editor core и lifecycle cleanup
 
-`InMemoryPageDocumentSession` создаёт/получает `Y.Doc` для tests, Storybook и isolated development без backend API. Он реализует только базовый session contract и создаёт ready/error state, достаточный для surface. Это позволяет проверять schema, commands, history и read-only presentation без внедрения disposable REST persistence code.
+`InMemoryPageDocumentSession` создаёт/получает уже декодированный `Y.Doc` для tests, Storybook и isolated development без backend API. Его factory принимает document и schema metadata, например `createInMemoryPageDocumentSession({ doc, schemaVersion })`, и повторяет metadata admission rule: supported `schemaVersion` даёт `ready`; unsupported version даёт blocking `error`, а surface не монтируется. Fake session отдельно моделирует decode/admission error. Это позволяет проверять schema, commands, history и read-only presentation без внедрения disposable REST persistence code.
 
 При смене page identity, unmount или replacement session выполняется идемпотентный `destroy()`:
 
@@ -194,7 +212,7 @@ Tests проверяют accessible names, keyboard reachability, disabled bound
 
 ## Migration Notes / Future Changes
 
-- Future Hocuspocus change реализует provider и собственные connection/sync semantics, подключит adapter к production composition и не введёт REST editable persistence. `synced` не будет сообщаться как PostgreSQL durability.
+- Future Hocuspocus change реализует provider и собственные connection/sync semantics, подключит adapter к production composition и не введёт REST editable persistence. До допуска клиента к полноценной editing/collaboration session adapter валидирует `PAGE_DOCUMENTS.tiptap_schema_version`; Yjs protocol validity не заменяет TipTap/ProseMirror application-schema compatibility. `synced` не будет сообщаться как PostgreSQL durability.
 - Future publication change создаст immutable derived JSON при publish и public Next.js renderer без per-request Yjs decode.
 - Future asset change сможет связать `PAGE_ASSETS` с уже сохранённым media `nodeId`; uploads и asset lifecycle не являются задачами этого change.
 - Если снова понадобится REST bridge, это отдельный reviewed change с собственными REST-specific state/capabilities и single-writer design; он не изменяет базовый `PageDocumentSession`.

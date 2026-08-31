@@ -13,8 +13,8 @@
 
 ## 3. Persisted schema v1 и static-renderability
 
-- [ ] 3.1 Реализовать и экспортировать `PAGE_DOCUMENT_SCHEMA_VERSION = 1` и `PAGE_CONTENT_YJS_FIELD = 'default'`; передать field явно в TipTap Collaboration и во все Yjs conversion utilities.
-- [ ] 3.2 Добавить Yjs round-trip test, который записывает content в `PAGE_CONTENT_YJS_FIELD` и подтверждает, что interactive editor и conversion/static preparation читают именно этот fragment, а не неявный default.
+- [ ] 3.1 Реализовать и экспортировать `PAGE_DOCUMENT_SCHEMA_VERSION = 1` и `PAGE_CONTENT_YJS_FIELD = 'default'`; хранить/валидировать schema version отдельно от binary Yjs state через `PAGE_DOCUMENTS.tiptap_schema_version` и передавать field явно в TipTap Collaboration и Yjs conversion utilities.
+- [ ] 3.2 Добавить Yjs round-trip tests для populated и empty document: `empty Y.Doc → getXmlFragment(field) → encodeStateAsUpdate → applyUpdate(new Y.Doc) → getXmlFragment(field)` даёт valid empty editor document; interactive editor и conversion/static preparation читают тот же canonical fragment без проверки его физического наличия в update.
 - [ ] 3.3 Реализовать единую schema factory для базовых nodes/marks, custom media nodes и link mark; отключить стандартный TipTap history при Collaboration/Yjs.
 - [ ] 3.4 Зафиксировать attrs/defaults/validation `image`: generated stable `nodeId`, HTTPS `src` без credentials, `alt`, `decorative`, optional `caption`, `alignment` и integer `widthPercent` 25–100; покрыть invalid combinations и boundary values tests.
 - [ ] 3.5 Зафиксировать attrs/defaults/validation `youtube`: generated stable `nodeId`, normalized allowlisted video ID вместо URL/iframe HTML, optional caption/alignment/widthPercent; покрыть normalisation supported URLs и invalid hosts/IDs tests.
@@ -23,13 +23,13 @@
 - [ ] 3.8 Реализовать link normalization для HTTPS/HTTP/mailto и безопасный rendering external links с `rel='noopener noreferrer'`; покрыть запрещённые schemes tests.
 - [ ] 3.9 Реализовать deterministic non-editor HTML/static mappings для каждого custom node/mark без React NodeView: `figure`/caption/image/video, privacy-enhanced YouTube iframe и link output.
 - [ ] 3.10 Добавить fixture tests `Y.Doc → TipTap JSON → static mappings` для schema v1, field, node IDs, widthPercent и deterministic output без монтирования interactive editor; не создавать public route или publication snapshot writer.
-- [ ] 3.11 Добавить schema mismatch, missing-field и corrupted Yjs state tests: session блокирует surface и не заменяет state пустым document; зафиксировать version-bump/migration policy для несовместимых изменений.
+- [ ] 3.11 Добавить admission tests для supported/unsupported `PAGE_DOCUMENTS.tiptap_schema_version`, incompatible metadata и corrupted Yjs state: только поддерживаемая metadata с декодируемым state даёт ready и surface; отсутствие materialized field в empty update не является error. Зафиксировать version bump/compatibility migration для добавления, удаления или переименования persisted node/mark, attrs/defaults/semantics и `PAGE_CONTENT_YJS_FIELD`.
 
 ## 4. Minimal document session и lifecycle cleanup
 
-- [ ] 4.1 Определить transport-neutral `PageDocumentSession` только с `doc`, `editable`, status `loading|ready|error`, typed error и `destroy()`; не добавлять в общий type dirty/save/retry/flush или Hocuspocus connection/sync states.
-- [ ] 4.2 Реализовать `InMemoryPageDocumentSession` и fake test helper для unit tests, Storybook и isolated development без document API/WebSocket/persistence lifecycle.
-- [ ] 4.3 Реализовать `PageEditor`/`PageEditorSurface` boundary: surface получает только ready Y.Doc и editable presentation props и не знает transport, persistence или connection diagnostics.
+- [ ] 4.1 Определить transport-neutral `PageDocumentSession` только с `doc`, `editable`, status `loading|ready|error`, typed error и `destroy()`; `ready` означает validated schema metadata плюс successfully decoded Yjs state. Не добавлять в общий type dirty/save/retry/flush или Hocuspocus connection/sync states.
+- [ ] 4.2 Реализовать `InMemoryPageDocumentSession` и fake test helper для unit tests, Storybook и isolated development без document API/WebSocket/persistence lifecycle; factory принимает schema metadata и не монтирует surface для unsupported version.
+- [ ] 4.3 Реализовать `PageEditor`/`PageEditorSurface` boundary: surface получает только admitted ready Y.Doc и editable presentation props и не знает transport, persistence, connection diagnostics или database schema-version validation.
 - [ ] 4.4 Реализовать идемпотентный cleanup при page identity change, unmount и replacement session: Y.Doc/editor listeners, local UI timers/pending callbacks, TipTap editor и временный Y.Doc.
 - [ ] 4.5 Добавить tests, подтверждающие, что callbacks уничтоженной session не меняют replacement session и не создают stale editor/listener/timer effects.
 - [ ] 4.6 Добавить architecture contract test будущей replaceability: fake transport предоставляет тот же minimal ready-doc boundary без изменения schema или `PageEditorSurface`; не реализовывать Hocuspocus adapter.
@@ -54,7 +54,7 @@
 
 ## Follow-up work — не является задачами этого change
 
-- Отдельный Hocuspocus change реализует provider/server, connection/sync diagnostics, effective permissions и production composition. `synced` с collaboration server не будет интерпретироваться frontend как PostgreSQL durability guarantee.
+- Отдельный Hocuspocus change реализует provider/server, connection/sync diagnostics, effective permissions и production composition. До начала полноценной editing/collaboration session adapter валидирует `PAGE_DOCUMENTS.tiptap_schema_version`; Yjs protocol validity не заменяет TipTap/ProseMirror application-schema compatibility. `synced` с collaboration server не будет интерпретироваться frontend как PostgreSQL durability guarantee.
 - Отдельный publication change создаст immutable derived TipTap JSON при publish и public Next.js renderer без per-request Yjs decode.
 - Отдельный asset change свяжет уже сохранённые media `nodeId` с `PAGE_ASSETS` и определит uploads/asset lifecycle.
 - Если снова понадобится REST editor, отдельный reviewed change определит REST-specific save lifecycle и single-writer protection; он не расширяет base `PageDocumentSession`.

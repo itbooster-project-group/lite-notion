@@ -4,12 +4,12 @@
 
 ## ADDED Requirements
 
-### Requirement: Yjs и collaboration field являются единственным editable persisted contract
+### Requirement: Schema metadata, Yjs и collaboration field образуют editable persisted contract
 
-Система MUST использовать `Y.Doc` как единственный authoritative mutable state. Система MUST NOT создавать authoritative TipTap JSON, block CRUD или вторую mutable-копию content в TanStack Query. Schema version 1 MUST использовать `PAGE_CONTENT_YJS_FIELD` со стабильным значением `default` как имя `Y.XmlFragment`/TipTap Collaboration `field`; стандартный history extension MUST быть отключён при Collaboration/Yjs.
+Система MUST использовать `Y.Doc` как единственный authoritative mutable state. Система MUST NOT создавать authoritative TipTap JSON, block CRUD или вторую mutable-копию content в TanStack Query. Версия TipTap/ProseMirror schema MUST храниться отдельно в `PAGE_DOCUMENTS.tiptap_schema_version` рядом с `PAGE_DOCUMENTS.yjs_state`; `Y.Doc` сам по себе MUST NOT считаться носителем schema version. Schema v1 MUST использовать `PAGE_CONTENT_YJS_FIELD` со стабильным значением `default` как canonical имя `Y.XmlFragment`/TipTap Collaboration `field`; стандартный history extension MUST быть отключён при Collaboration/Yjs.
 
 #### Scenario: Editor открывает document schema v1
-- **WHEN** interactive editor получает `Y.Doc` version 1
+- **WHEN** session получает `PAGE_DOCUMENTS.tiptap_schema_version = 1` и успешно декодированный `PAGE_DOCUMENTS.yjs_state`
 - **THEN** он читает ProseMirror content из `PAGE_CONTENT_YJS_FIELD`, а не из неявного или произвольного Yjs field
 
 #### Scenario: Conversion готовит derived JSON
@@ -24,20 +24,24 @@
 - **WHEN** для текущего клиента доступно undo или redo
 - **THEN** операция выполняется history mechanism, совместимым с Yjs collaboration model, без competing standard history stack
 
+#### Scenario: Empty Yjs document не содержит materialized content root
+- **WHEN** пустой `Y.Doc` получает `PAGE_CONTENT_YJS_FIELD`, кодируется через `Y.encodeStateAsUpdate`, применяется к новому `Y.Doc`, а затем новый документ запрашивает тот же fragment
+- **THEN** `getXmlFragment(PAGE_CONTENT_YJS_FIELD)` возвращает корректный пустой content root, а session допускает valid empty editor document
+
 ### Requirement: Schema version 1 является static-renderable persisted contract
 
-Schema v1 MUST фиксировать nodes/marks document, text, paragraph, headings 1–3, bullet/ordered lists, task list/task item, hard break, bold, italic, strike, inline code, link, image, YouTube и direct video. Names, attrs, defaults, `schemaVersion = 1` и `collaborationField = default` MUST быть стабильными для persisted Yjs state и derived publication JSON. Каждый custom node/mark MUST иметь deterministic non-editor representation; React NodeView MUST NOT быть единственным renderer.
+Schema v1 MUST фиксировать nodes/marks document, text, paragraph, headings 1–3, bullet/ordered lists, task list/task item, hard break, bold, italic, strike, inline code, link, image, YouTube и direct video. Names, attrs, defaults, metadata `tiptap_schema_version = 1` и `collaborationField = default` MUST быть стабильными для persisted Yjs state и derived publication JSON. Каждый custom node/mark MUST иметь deterministic non-editor representation; React NodeView MUST NOT быть единственным renderer. Добавление, удаление или переименование persisted node/mark, изменение persisted attrs, их semantics/defaults либо `PAGE_CONTENT_YJS_FIELD` MUST требовать новой schema version или явной compatibility migration; новый TipTap type MUST NOT считаться автоматически backward-compatible.
 
 #### Scenario: Документ использует поддерживаемую schema
-- **WHEN** session получает state schema version 1
+- **WHEN** session получает поддерживаемую metadata schema version и successfully decoded Yjs state
 - **THEN** editor, conversion и static renderer используют один contract nodes, marks, attrs, defaults и collaboration field
 
 #### Scenario: Одинаковый snapshot рендерится повторно
 - **WHEN** static renderer дважды получает одинаковый versioned derived JSON
 - **THEN** структурный HTML/React output совпадает и не зависит от состояния interactive editor или React NodeView
 
-#### Scenario: Документ использует неизвестную schema или field contract
-- **WHEN** session получает неподдерживаемую schema version, отсутствующий ожидаемый field или повреждённый encoded state
+#### Scenario: Document не проходит admission validation
+- **WHEN** session получает неподдерживаемую metadata schema version, incompatible document metadata или повреждённый/недекодируемый encoded Yjs state
 - **THEN** система показывает безопасную blocking error, не создаёт editable surface и не заменяет state пустым document
 
 ### Requirement: Custom media nodes имеют stable IDs и нормализованную ширину
@@ -162,7 +166,7 @@ Interactive и static rendering SHALL быть совместимы с CSP, ог
 
 ### Requirement: Editor surface зависит только от minimal session contract
 
-Система SHALL передавать editor surface только ready `Y.Doc` и presentation `editable` из `PageDocumentSession`. Базовая session MUST ограничиваться status `loading`, `ready` или `error`, error и lifecycle `destroy`; surface MUST NOT определять transport, persistence, REST save state или Hocuspocus connection/sync state.
+Система SHALL передавать editor surface только ready `Y.Doc` и presentation `editable` из `PageDocumentSession`. Базовая session MUST ограничиваться status `loading`, `ready` или `error`, error и lifecycle `destroy`; `ready` MUST означать, что metadata schema version валидирована, Yjs state успешно декодирован и document допущен к editing. Surface MUST NOT самостоятельно проверять database schema version либо определять transport, persistence, REST save state или Hocuspocus connection/sync state.
 
 #### Scenario: Surface работает с in-memory session
 - **WHEN** InMemory/Fake session предоставляет ready `Y.Doc`
