@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Editor } from '@tiptap/core';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -134,5 +134,33 @@ describe('slash menu', () => {
 
     expect(screen.queryByRole('listbox', { name: 'Команды редактора' })).toBeNull();
     expect(editor.getText()).toBe('');
+  });
+
+  it('пересчитывает fixed position при scroll/resize и очищает listeners', async () => {
+    const editor = createEditor('/заг');
+    const coordinates = vi.mocked(editor.view.coordsAtPos);
+    const view = render(
+      <SlashMenu
+        editor={editor}
+        onKeyDownChange={vi.fn()}
+        onLinkCommand={vi.fn()}
+        onMediaCommand={vi.fn()}
+      />,
+    );
+    const menu = screen.getByRole('listbox', { name: 'Команды редактора' });
+
+    coordinates.mockReturnValue({ bottom: 90, left: 64, right: 64, top: 74 });
+    fireEvent.scroll(window);
+    await waitFor(() => expect(menu).toHaveStyle({ left: '64px', top: '98px' }));
+
+    coordinates.mockReturnValue({ bottom: 130, left: 88, right: 88, top: 114 });
+    fireEvent.resize(window);
+    await waitFor(() => expect(menu).toHaveStyle({ left: '88px', top: '138px' }));
+
+    view.unmount();
+    coordinates.mockClear();
+    fireEvent.scroll(window);
+    fireEvent.resize(window);
+    expect(coordinates).not.toHaveBeenCalled();
   });
 });

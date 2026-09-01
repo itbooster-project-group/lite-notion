@@ -23,6 +23,7 @@ describe('page document URL validation', () => {
     );
     expect(normalizePageDocumentLink('javascript:alert(1)')).toBeUndefined();
     expect(normalizePageDocumentLink('data:text/plain,unsafe')).toBeUndefined();
+    expect(normalizePageDocumentLink('https://user:secret@example.com')).toBeUndefined();
   });
 
   it('принимает external image только по HTTPS без credentials', () => {

@@ -9,6 +9,7 @@ import {
   type PageEditorSlashQuery,
   runPageEditorSlashCommand,
 } from '../../model/slash-menu';
+import { useEditorPopupPosition } from '../editor-popup-position/use-editor-popup-position';
 
 export type SlashMenuProps = Readonly<{
   editor: Editor;
@@ -16,20 +17,6 @@ export type SlashMenuProps = Readonly<{
   onMediaCommand(mediaType: 'image' | 'video' | 'youtube'): void;
   onKeyDownChange(handler: ((event: KeyboardEvent) => boolean) | undefined): void;
 }>;
-
-type SlashMenuPosition = Readonly<{
-  left: number;
-  top: number;
-}>;
-
-function getSlashMenuPosition(editor: Editor, query: PageEditorSlashQuery): SlashMenuPosition {
-  const coordinates = editor.view.coordsAtPos(query.to);
-
-  return {
-    left: coordinates.left,
-    top: coordinates.bottom + 8,
-  };
-}
 
 export function SlashMenu({
   editor,
@@ -40,15 +27,20 @@ export function SlashMenu({
   const [query, setQuery] = useState<PageEditorSlashQuery | undefined>(() =>
     getPageEditorSlashQuery(editor),
   );
-  const [position, setPosition] = useState<SlashMenuPosition | undefined>(() => {
-    const initialQuery = getPageEditorSlashQuery(editor);
-    return initialQuery ? getSlashMenuPosition(editor, initialQuery) : undefined;
-  });
   const [activeIndex, setActiveIndex] = useState(0);
   const commands = useMemo(
     () => (query ? filterPageEditorSlashCommands(query.query) : []),
     [query],
   );
+  const getPopupAnchor = useCallback(
+    () => (query ? editor.view.coordsAtPos(query.to) : undefined),
+    [editor, query],
+  );
+  const popup = useEditorPopupPosition({
+    editor,
+    getAnchor: getPopupAnchor,
+    placement: 'below',
+  });
 
   const runCommand = useCallback(
     (command: PageEditorSlashCommand) => {
@@ -81,9 +73,9 @@ export function SlashMenu({
     const refresh = () => {
       const nextQuery = getPageEditorSlashQuery(editor);
       setQuery(nextQuery);
-      setPosition(nextQuery ? getSlashMenuPosition(editor, nextQuery) : undefined);
       setActiveIndex(0);
     };
+    refresh();
     editor.on('transaction', refresh);
     editor.on('selectionUpdate', refresh);
     return () => {
@@ -132,14 +124,15 @@ export function SlashMenu({
     return () => onKeyDownChange(undefined);
   }, [activeIndex, commands, editor, onKeyDownChange, query, runCommand]);
 
-  if (!query || !position) return null;
+  if (!query || !popup.position) return null;
 
   return (
     <div
       aria-label="Команды редактора"
       className="fixed z-50 max-h-72 w-64 overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+      ref={popup.floatingRef}
       role="listbox"
-      style={position}
+      style={popup.position}
     >
       {commands.length ? (
         commands.map((command, index) => (

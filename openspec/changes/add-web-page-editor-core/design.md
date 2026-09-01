@@ -148,11 +148,15 @@ Custom JSON contracts:
 
 `caption` — string или `null`; `widthPercent` — нормализованное целое число, обозначающее процент ширины editor/content area, а не CSS string. Interactive и static renderer трактуют его одинаково; percentage и pixel CSS strings не являются допустимым persisted value.
 
+`alignment` имеет визуальную, а не только persisted semantics: `start` использует inline-start, `center` центрирует figure, `end` использует inline-end. Deterministic markup фиксирует это вместе с `widthPercent` через logical `margin-inline-start`/`margin-inline-end`, поэтому contract не зашивает LTR-направление. Те же selectors используются interactive rich-text presentation.
+
 `nodeId` создаётся один раз при создании custom/media node, сохраняется в TipTap JSON и Yjs state, не меняется при edit, resize, alignment или move и доступен static renderer/publication pipeline. Явное clone/paste/import обязано deconflict-ить ID и выдать новый уникальный `nodeId`; это позволяет позднее связать node с `PAGE_ASSETS` без schema v1 migration. Программная insertion и ProseMirror `transformPasted` используют один низкоуровневый uniqueness helper. При обходе clipboard `Slice` ID проверяется одновременно относительно текущего document и уже обработанных media nodes того же slice.
 
 Static renderer гарантирует валидный deterministic markup, сохраняющий доступные persisted alt/title/caption/source metadata, но не проверяет доступность external URL и не обещает UI fallback при HTTP/network error. Такой runtime `onError` experience остаётся задачей будущего React/public renderer.
 
 React NodeView может улучшать interactive editing, но не является единственным renderer. Fixtures проверяют JSON defaults, node IDs, Yjs field и deterministic static output без монтирования React NodeViews. Schema mismatch или decode error создаёт safe error state и не заменяет state пустым document.
+
+Persisted Yjs/derived JSON не считается trusted только потому, что текущие UI forms валидируют insertion. Перед static/public rendering работает отдельная normalization boundary, переиспользующая entity validators для `src`, `videoId`, `alignment`, `widthPercent`, `nodeId` и link `href`. Invalid link mark снимается с сохранением текста; invalid external media fail-safe исключается из renderable document. Interactive schema output дополнительно не создаёт external element из invalid media attrs. Полная publication admission/migration policy остаётся future publication/Hocuspocus change и не создаёт второй mutable store.
 
 ### 5. Publication остаётся derived pipeline, а не editor store
 
@@ -181,9 +185,11 @@ URL parser из document entity принимает только явно раз�
 
 Image и iframe получают `referrerPolicy='no-referrer'`; для остального действует document `Referrer-Policy: strict-origin-when-cross-origin`. YouTube iframe получает фиксированные safe `allow`, `allowFullScreen` и title. Строгость текущей policy сохраняется, а расширение host/protocol allowlist требует отдельного security review.
 
+Privacy trade-off принят явно: external image/direct video policy намеренно разрешает прямой browser request к произвольному HTTPS origin. Даже с `no-referrer` такой origin видит сам network request и IP пользователя. До production/private documents отдельный security/product review оценивает asset proxy, controlled storage или более строгий allowlist; CSP не маскирует и не устраняет этот риск.
+
 ### 7. In-memory session покрывает editor core и lifecycle cleanup
 
-`InMemoryPageDocumentSession` создаёт/получает уже декодированный `Y.Doc` для tests, Storybook и isolated development без backend API. Его factory принимает document и schema metadata, например `createInMemoryPageDocumentSession({ doc, schemaVersion })`, и повторяет metadata admission rule: supported `schemaVersion` даёт `ready`; unsupported version даёт blocking `error`, а surface не монтируется. Fake session отдельно моделирует decode/admission error. Это позволяет проверять schema, commands, history и read-only presentation без внедрения disposable REST persistence code.
+`InMemoryPageDocumentSession` создаёт/получает уже декодированный `Y.Doc` для tests, Storybook и isolated development без backend API. Его factory принимает document и schema metadata, например `createInMemoryPageDocumentSession({ doc, schemaVersion })`, и немедленно принимает exclusive ownership переданного doc даже при admission error. Caller после вызова управляет doc только через returned `session.destroy()` и не уничтожает/не переиспользует переданный resource отдельно. Supported `schemaVersion` даёт `ready`; unsupported version даёт blocking `error`, а surface не монтируется. Fake session отдельно моделирует decode/admission error. Это позволяет проверять schema, commands, history и read-only presentation без внедрения disposable REST persistence code.
 
 Ownership lifecycle явный: caller/factory/hook, создавший `PageDocumentSession`, уничтожает её при смене page identity, unmount своей composition или replacement session. `PageEditor` получает session через props и не вызывает её `destroy()`. TipTap `useEditor` владеет созданным editor instance и использует собственный Strict Mode-safe lifecycle.
 
@@ -196,9 +202,13 @@ Ownership lifecycle явный: caller/factory/hook, создавший `PageDoc
 
 Callbacks destroyed session становятся no-op и не могут менять состояние replacement session. `AbortController`, network retries и provider disconnect не входят в in-memory core; future Hocuspocus adapter обязан очищать provider/awareness listeners в своём lifecycle.
 
+Surface отдельно владеет только document-specific transient UI. При смене `doc` или editor instance lifecycle закрывает link/image/video/YouTube dialogs, сбрасывает bubble/slash state и coordinates, очищает RelativePosition/bookmark и handler refs. Global UI вне editor document не сбрасывается. Link selection хранится как Yjs RelativePosition текущего binding и разрешается перед command; mismatch/unresolvable position не создаёт transaction.
+
+Bubble и slash menus используют единый fixed-position hook: ProseMirror selection/transaction, capture-scroll (включая container scroll), window resize и ResizeObserver запускают пересчёт; flip/shift ограничивает popup viewport, cleanup удаляет все listeners/observers. Rich-text paragraphs/headings/lists/task/media presentation собрана в CSS module, тогда как TSX оставляет component layout и interactive positioning.
+
 ### 8. Перестановка блоков имеет keyboard alternative
 
-Pointer drag handle доступна для поддерживаемых верхнеуровневых blocks, а тот же command path предоставляется через keyboard-reachable `Move up` и `Move down`. Визуально скрытая в покое keyboard group становится видимой через `focus-within`, кнопки имеют заметный focus indicator. Действия используют одну ProseMirror transaction, отключаются на границах документа и возвращают focus к перемещённому block. Вложенные list items не получают top-level handle.
+Pointer drag handle доступна для поддерживаемых верхнеуровневых blocks, но как pointer-only control имеет `tabIndex=-1` и не создаёт бесполезный keyboard tab stop. Тот же command path предоставляется отдельными keyboard-reachable локализованными `Переместить вверх` и `Переместить вниз`. Визуально скрытая в покое keyboard group становится видимой через `focus-within`, кнопки имеют заметный focus indicator. Действия используют одну ProseMirror transaction, отключаются на границах документа и возвращают focus к перемещённому block. Вложенные list items не получают top-level handle.
 
 Tests проверяют accessible names, keyboard reachability, disabled boundaries, selection/focus и изменение порядка без pointer events. Этот contract не заявляет полную accessibility всего ProseMirror продукта.
 

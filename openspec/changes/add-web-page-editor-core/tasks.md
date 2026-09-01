@@ -52,8 +52,9 @@
 - [x] 6.5 Запустить `pnpm dedupe --check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, Steiger и relevant web checks на финальном состоянии ветки.
 - [x] 6.6 Временно заменить workspace placeholder на `PageEditor` с отдельной `InMemoryPageDocumentSession` на `pageId`, показать warning о сбросе content при reload/navigation и проверить mount вручную и тестом без API/persistence; после QA удалить mount, восстановить placeholder и зафиксировать отсутствие editor surface в workspace test.
 - [x] 6.7 Устранить review findings: caller-owned session и Strict Mode regression, native clipboard nodeId deconflict с общим helper, deterministic media markup contract, visible keyboard reorder controls, scoped page-document CSP и deduplicated lockfile.
-- [x] 6.8 Запустить `openspec validate add-web-page-editor-core --strict` после выполнения implementation и verification tasks.
-- [ ] 6.9 Получить human review implementation и архивировать change только после прохождения фактического CI и review.
+- [x] 6.8 Устранить follow-up review findings: document transient reset, Yjs RelativePosition для LinkForm с collaboration regression, persisted-content render boundary, alignment semantics, общий popup positioning lifecycle, CSS-module rich-text presentation, drag handle a11y, узкие slice barrels, external-media privacy note и явный InMemory Y.Doc ownership transfer.
+- [x] 6.9 Запустить `openspec validate add-web-page-editor-core --strict` после выполнения implementation и verification tasks.
+- [ ] 6.10 Получить human review implementation и архивировать change только после прохождения фактического CI и review.
 
 ## Follow-up work — не является задачами этого change
 

@@ -86,7 +86,7 @@ Image, YouTube и direct video MUST хранить opaque `nodeId`, сгенер
 
 ### Requirement: Контекстное форматирование и безопасные ссылки
 
-Система SHALL показывать BubbleMenu только для непустого текстового выделения и SHALL позволять создавать, изменять и удалять normalized HTTP, HTTPS и mailto links. Адрес без scheme SHALL нормализоваться в HTTPS; запрещённая или некорректная scheme MUST NOT изменять document. Внешняя ссылка с target blank MUST получать `rel='noopener noreferrer'` при rendering.
+Система SHALL показывать BubbleMenu только для непустого текстового выделения и SHALL позволять создавать, изменять и удалять normalized HTTP, HTTPS и mailto links. Адрес без scheme SHALL нормализоваться в HTTPS; запрещённая или некорректная scheme MUST NOT изменять document. Внешняя ссылка с target blank MUST получать `rel='noopener noreferrer'` при rendering. Пока link form открыта, выделение MUST храниться как Yjs RelativePosition, привязанная к текущему shared fragment, а не как неподвижные числовые ProseMirror coordinates. Relative selection MUST разрешаться заново перед command и MUST NOT применяться к replacement document или случайному диапазону при невозможности разрешения.
 
 #### Scenario: Пользователь выделяет текст
 - **WHEN** пользователь создаёт непустое текстовое выделение
@@ -99,6 +99,14 @@ Image, YouTube и direct video MUST хранить opaque `nodeId`, сгенер
 #### Scenario: Пользователь вводит небезопасный адрес
 - **WHEN** пользователь пытается применить запрещённую или некорректную URI scheme
 - **THEN** document не изменяется, а форма показывает доступное сообщение об ошибке
+
+#### Scenario: Collaborator вставляет текст перед сохранённым выделением
+- **WHEN** пользователь открыл link form для слова, а другой editor вставил текст перед этим словом в общем Y.Doc
+- **THEN** link mark применяется к исходному логическому слову через заново разрешённую RelativePosition, а не к вставленному или соседнему диапазону
+
+#### Scenario: Сохранённое выделение больше не разрешается
+- **WHEN** link form закрыта, editor document заменён либо RelativePosition не принадлежит текущему Y.Doc/fragment
+- **THEN** сохранённое выделение очищается или операция безопасно отклоняется без изменения случайного диапазона
 
 #### Scenario: Renderer выводит внешнюю ссылку
 - **WHEN** static или interactive renderer представляет validated HTTP(S) link в новой вкладке
@@ -128,9 +136,17 @@ Image, YouTube и direct video MUST хранить opaque `nodeId`, сгенер
 - **WHEN** static renderer получает сохранённый validated media node без network probing
 - **THEN** он выдаёт deterministic valid markup с доступными alt/title/caption и source metadata, не обещая обнаружить HTTP/network error; runtime error UI остаётся будущему public renderer
 
+#### Scenario: Persisted content не проходил текущую UI validation
+- **WHEN** static/public rendering boundary получает derived TipTap JSON со старыми, изменёнными или импортированными media/link attrs
+- **THEN** boundary повторно нормализует `src`, `videoId`, `alignment`, `widthPercent`, `nodeId` и `href`, а невалидные external media fail-safe не рендерятся и не инициируют network request
+
+#### Scenario: Renderer применяет alignment media
+- **WHEN** valid media node имеет `alignment=start`, `center` или `end` вместе с `widthPercent`
+- **THEN** interactive и deterministic static markup выравнивают figure по inline start, center или inline end через logical margin semantics
+
 ### Requirement: Rendering external media ограничен security policy
 
-Interactive и static rendering SHALL быть совместимы с CSP, ограничивающей `img-src` и `media-src` значениями `'self' https:`, `frame-src` значением `https://www.youtube-nocookie.com` и `object-src` значением `'none'`. Эта page-document policy MUST применяться только к routes, представляющим editor/public document media, а не глобально ко всему приложению. Image/iframe SHALL применять установленную referrer policy, а YouTube iframe SHALL получать фиксированные безопасные attrs от renderer.
+Interactive и static rendering SHALL быть совместимы с CSP, ограничивающей `img-src` и `media-src` значениями `'self' https:`, `frame-src` значением `https://www.youtube-nocookie.com` и `object-src` значением `'none'`. Эта page-document policy MUST применяться только к routes, представляющим editor/public document media, а не глобально ко всему приложению. Image/iframe SHALL применять установленную referrer policy, а YouTube iframe SHALL получать фиксированные безопасные attrs от renderer. Текущая policy намеренно разрешает прямые browser requests к произвольным HTTPS origins; `no-referrer` не скрывает IP/network request от external origin. До production private documents MUST быть отдельно оценены asset proxy/controlled storage либо более строгий allowlist.
 
 #### Scenario: Renderer представляет сохранённый YouTube node
 - **WHEN** node содержит validated video ID
@@ -174,6 +190,8 @@ Interactive и static rendering SHALL быть совместимы с CSP, ог
 
 Создавший `PageDocumentSession` caller/hook/factory MUST владеть её lifecycle и вызывать `destroy()`; `PageEditor`, получивший session через props, MUST NOT уничтожать внешний resource. Editor instance, созданный TipTap `useEditor`, MUST использовать встроенный Strict Mode-safe lifecycle без ручного `editor.destroy()` в surface effect.
 
+`createInMemoryPageDocumentSession({ doc })` MUST немедленно принимать exclusive ownership переданного `Y.Doc`, включая admission error: caller после передачи MUST управлять ресурсом только через `session.destroy()` и MUST NOT повторно использовать или отдельно уничтожать переданный doc. При смене admitted `doc`/editor identity surface MUST явно закрывать document-specific dialogs и сбрасывать bubble/slash state, popup coordinates, сохранённые selections/bookmarks и handler refs без сброса unrelated global UI.
+
 #### Scenario: Surface работает с in-memory session
 - **WHEN** InMemory/Fake session предоставляет ready `Y.Doc`
 - **THEN** editor поддерживает schema и editing flows без document API, WebSocket или persistence
@@ -185,6 +203,18 @@ Interactive и static rendering SHALL быть совместимы с CSP, ог
 #### Scenario: Session уничтожается или заменяется владельцем
 - **WHEN** page identity меняется, owner unmount или composition создаёт replacement session
 - **THEN** owner вызывает идемпотентный session cleanup после отсоединения surface, а `PageEditor` не уничтожает переданный session во время React Strict Mode effect replay
+
+#### Scenario: Ready document заменяется при открытой форме
+- **WHEN** LinkForm или media form открыта для page A и composition передаёт ready Y.Doc page B
+- **THEN** document-specific dialogs, menus, coordinates и stored selections page A очищаются до дальнейшего взаимодействия с page B
+
+### Requirement: Floating editor menus отслеживают viewport и container layout
+
+Bubble и slash menus с `position: fixed` MUST использовать общий positioning lifecycle. Position MUST пересчитываться после editor transaction/selection update, window resize, window или container scroll и наблюдаемого layout resize; listeners/observers MUST очищаться при replacement editor/unmount. Positioning SHALL выполнять viewport shift/clipping и flip там, где preferred placement не помещается.
+
+#### Scenario: Контейнер редактора прокручивается
+- **WHEN** bubble или slash menu открыта и window либо scroll container меняет viewport coordinates editor anchor
+- **THEN** popup получает пересчитанные coordinates и не остаётся на прежней позиции
 
 ### Requirement: Статусы и presentation read-only доступны пользователю
 

@@ -2,15 +2,20 @@
 
 import type { Editor } from '@tiptap/core';
 import { EditorContent, useEditor } from '@tiptap/react';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 import { createPageDocumentEditorExtensions } from '@/entities/page-document';
 import { cn } from '@/shared/lib/cn';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/shared/ui';
 
 import { shouldShowPageEditorBubbleMenu } from '../../model/bubble-menu';
+import {
+  createPageDocumentRelativeSelection,
+  type PageDocumentRelativeSelection,
+} from '../../model/page-document-relative-selection';
 import { BlockReorderControls } from '../block-reorder-controls';
 import { BubbleFormattingMenu } from '../bubble-menu';
+import { useEditorPopupPosition } from '../editor-popup-position/use-editor-popup-position';
 import { EditorToolbar } from '../editor-toolbar';
 import { LinkForm } from '../link-form';
 import { ImageForm, VideoForm, YoutubeForm } from '../media-form';
@@ -20,11 +25,6 @@ import styles from './page-editor-surface.module.css';
 export type PageEditorSurfaceProps = Readonly<{
   doc: Y.Doc;
   editable: boolean;
-}>;
-
-type BubbleMenuPosition = Readonly<{
-  left: number;
-  top: number;
 }>;
 
 type EditorFormDialogProps = Readonly<{
@@ -60,13 +60,17 @@ function EditorFormDialog({
 }
 
 export function PageEditorSurface({ doc, editable }: PageEditorSurfaceProps) {
-  const [bubbleMenuPosition, setBubbleMenuPosition] = useState<BubbleMenuPosition | undefined>();
+  const [transientIdentity, setTransientIdentity] = useState<{
+    doc: Y.Doc;
+    editor: Editor | null;
+  }>({ doc, editor: null });
   const [linkFormOpen, setLinkFormOpen] = useState(false);
   const [imageFormOpen, setImageFormOpen] = useState(false);
   const [videoFormOpen, setVideoFormOpen] = useState(false);
   const [youtubeFormOpen, setYoutubeFormOpen] = useState(false);
-  const linkSelectionRef = useRef<Readonly<{ from: number; to: number }> | undefined>(undefined);
+  const linkSelectionRef = useRef<PageDocumentRelativeSelection | undefined>(undefined);
   const slashKeyDownHandlerRef = useRef<((event: KeyboardEvent) => boolean) | undefined>(undefined);
+  const editorRef = useRef<Editor | null>(null);
   const editor = useEditor(
     {
       editable,
@@ -75,7 +79,7 @@ export function PageEditorSurface({ doc, editable }: PageEditorSurfaceProps) {
           'aria-label': 'Содержимое страницы',
           class: cn(
             styles.editorContent,
-            'min-h-64 w-full max-w-none px-1 py-4 text-sm leading-6 outline-none [&_h1]:mb-3 [&_h1]:mt-6 [&_h1]:text-3xl [&_h1]:font-bold [&_h1]:leading-tight [&_h2]:mb-3 [&_h2]:mt-5 [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:leading-tight [&_h3]:mb-2 [&_h3]:mt-4 [&_h3]:text-xl [&_h3]:font-semibold [&_h3]:leading-tight [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-6',
+            'min-h-64 w-full max-w-none px-1 py-4 text-sm leading-6 outline-none',
           ),
           'data-page-editor-content': '',
           role: 'textbox',
@@ -83,10 +87,10 @@ export function PageEditorSurface({ doc, editable }: PageEditorSurfaceProps) {
         handleKeyDown: (_view, event) => {
           if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k' && editable) {
             event.preventDefault();
-            linkSelectionRef.current = {
-              from: _view.state.selection.from,
-              to: _view.state.selection.to,
-            };
+            linkSelectionRef.current = editorRef.current
+              ? createPageDocumentRelativeSelection(editorRef.current)
+              : undefined;
+            if (!linkSelectionRef.current) return true;
             setLinkFormOpen(true);
             return true;
           }
@@ -99,66 +103,84 @@ export function PageEditorSurface({ doc, editable }: PageEditorSurfaceProps) {
     },
     [doc],
   );
+  editorRef.current = editor;
+  const documentUiIsCurrent = transientIdentity.doc === doc && transientIdentity.editor === editor;
+
+  const getBubbleMenuAnchor = useCallback(() => {
+    if (!editor) return undefined;
+    const { from, to } = editor.state.selection;
+    if (!shouldShowPageEditorBubbleMenu(editor, from, to)) return undefined;
+    return editor.view.coordsAtPos(to);
+  }, [editor]);
+  const bubbleMenuPopup = useEditorPopupPosition({
+    editor,
+    getAnchor: getBubbleMenuAnchor,
+    placement: 'above',
+  });
 
   function openLinkForm() {
     if (!editor) return;
-    linkSelectionRef.current = {
-      from: editor.state.selection.from,
-      to: editor.state.selection.to,
-    };
+    linkSelectionRef.current = createPageDocumentRelativeSelection(editor);
+    if (!linkSelectionRef.current) return;
     setLinkFormOpen(true);
   }
 
-  useEffect(() => {
-    editor?.setEditable(editable);
-    if (!editable) setLinkFormOpen(false);
-  }, [editable, editor]);
+  function closeLinkForm() {
+    linkSelectionRef.current = undefined;
+    setLinkFormOpen(false);
+  }
 
   useEffect(() => {
-    if (!editor) return;
-
-    const refreshBubbleMenu = () => {
-      const { from, to } = editor.state.selection;
-      if (!shouldShowPageEditorBubbleMenu(editor, from, to)) {
-        setBubbleMenuPosition(undefined);
-        return;
-      }
-
-      const coordinates = editor.view.coordsAtPos(to);
-      setBubbleMenuPosition({
-        left: coordinates.left,
-        top: coordinates.top - 8,
-      });
+    const resetDocumentTransientUi = () => {
+      setLinkFormOpen(false);
+      setImageFormOpen(false);
+      setVideoFormOpen(false);
+      setYoutubeFormOpen(false);
+      linkSelectionRef.current = undefined;
+      slashKeyDownHandlerRef.current = undefined;
     };
 
-    refreshBubbleMenu();
-    editor.on('selectionUpdate', refreshBubbleMenu);
-    editor.on('transaction', refreshBubbleMenu);
+    resetDocumentTransientUi();
+    setTransientIdentity({ doc, editor });
+    doc.on('destroy', resetDocumentTransientUi);
+    editor?.on('destroy', resetDocumentTransientUi);
 
     return () => {
-      editor.off('selectionUpdate', refreshBubbleMenu);
-      editor.off('transaction', refreshBubbleMenu);
+      doc.off('destroy', resetDocumentTransientUi);
+      editor?.off('destroy', resetDocumentTransientUi);
     };
-  }, [editor]);
+  }, [doc, editor]);
+
+  useEffect(() => {
+    editor?.setEditable(editable);
+    if (!editable) {
+      setLinkFormOpen(false);
+      setImageFormOpen(false);
+      setVideoFormOpen(false);
+      setYoutubeFormOpen(false);
+      linkSelectionRef.current = undefined;
+      slashKeyDownHandlerRef.current = undefined;
+    }
+  }, [editable, editor]);
 
   return (
     <div className="w-full" data-page-editor-surface="">
       {editable && editor && <EditorToolbar editor={editor} />}
-      {editable && editor && linkFormOpen && (
+      {documentUiIsCurrent && editable && editor && linkFormOpen && (
         <EditorFormDialog
           description="Вставьте адрес — ссылку без протокола мы автоматически откроем по HTTPS."
           editor={editor}
-          onClose={() => setLinkFormOpen(false)}
+          onClose={closeLinkForm}
           title="Добавить ссылку"
         >
           <LinkForm
             editor={editor}
             initialSelection={linkSelectionRef.current}
-            onClose={() => setLinkFormOpen(false)}
+            onClose={closeLinkForm}
           />
         </EditorFormDialog>
       )}
-      {editable && editor && imageFormOpen && (
+      {documentUiIsCurrent && editable && editor && imageFormOpen && (
         <EditorFormDialog
           description="Добавьте безопасный HTTPS-адрес и описание изображения."
           editor={editor}
@@ -168,7 +190,7 @@ export function PageEditorSurface({ doc, editable }: PageEditorSurfaceProps) {
           <ImageForm editor={editor} onClose={() => setImageFormOpen(false)} />
         </EditorFormDialog>
       )}
-      {editable && editor && youtubeFormOpen && (
+      {documentUiIsCurrent && editable && editor && youtubeFormOpen && (
         <EditorFormDialog
           description="Поддерживаются обычные и короткие ссылки YouTube."
           editor={editor}
@@ -178,7 +200,7 @@ export function PageEditorSurface({ doc, editable }: PageEditorSurfaceProps) {
           <YoutubeForm editor={editor} onClose={() => setYoutubeFormOpen(false)} />
         </EditorFormDialog>
       )}
-      {editable && editor && videoFormOpen && (
+      {documentUiIsCurrent && editable && editor && videoFormOpen && (
         <EditorFormDialog
           description="Добавьте прямой HTTPS-адрес файла MP4 или WebM."
           editor={editor}
@@ -188,7 +210,7 @@ export function PageEditorSurface({ doc, editable }: PageEditorSurfaceProps) {
           <VideoForm editor={editor} onClose={() => setVideoFormOpen(false)} />
         </EditorFormDialog>
       )}
-      {editable && editor && (
+      {documentUiIsCurrent && editable && editor && (
         <SlashMenu
           editor={editor}
           onLinkCommand={openLinkForm}
@@ -203,8 +225,12 @@ export function PageEditorSurface({ doc, editable }: PageEditorSurfaceProps) {
         />
       )}
       {editable && editor && <BlockReorderControls editor={editor} />}
-      {editable && editor && bubbleMenuPosition && (
-        <div className="fixed z-50 -translate-y-full" style={bubbleMenuPosition}>
+      {documentUiIsCurrent && editable && editor && bubbleMenuPopup.position && (
+        <div
+          className="fixed z-50"
+          ref={bubbleMenuPopup.floatingRef}
+          style={bubbleMenuPopup.position}
+        >
           <BubbleFormattingMenu editor={editor} onOpenLinkForm={openLinkForm} />
         </div>
       )}

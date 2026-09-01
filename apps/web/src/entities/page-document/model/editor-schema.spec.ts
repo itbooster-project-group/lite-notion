@@ -172,7 +172,12 @@ describe('page document schema version 1', () => {
 
     expect(second).toBe(first);
     expect(first).toContain(`data-node-id="${NODE_ID}"`);
-    expect(first).toContain('style="width:60%"');
+    expect(first).toContain('data-alignment="start"');
+    expect(first).toContain('style="width:60%;margin-inline-start:0;margin-inline-end:auto"');
+    expect(first).toContain('data-alignment="center"');
+    expect(first).toContain('style="width:80%;margin-inline-start:auto;margin-inline-end:auto"');
+    expect(first).toContain('data-alignment="end"');
+    expect(first).toContain('style="width:50%;margin-inline-start:auto;margin-inline-end:0"');
     expect(first).toContain('alt="Горы"');
     expect(first).toContain('referrerpolicy="no-referrer"');
     expect(first).toContain('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ');

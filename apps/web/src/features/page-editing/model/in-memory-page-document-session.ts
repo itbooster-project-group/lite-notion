@@ -59,6 +59,12 @@ function createErrorSession(error: PageDocumentError): PageDocumentSession {
   };
 }
 
+/**
+ * Takes exclusive ownership of `doc` immediately, including when schema
+ * admission fails. The caller owns the returned session lifecycle and must
+ * call `session.destroy()` instead of destroying or reusing the transferred
+ * Y.Doc directly.
+ */
 export function createInMemoryPageDocumentSession({
   doc,
   schemaVersion,

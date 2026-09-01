@@ -39,12 +39,11 @@ describe('block reorder controls', () => {
     const editor = createEditor();
     render(<BlockReorderControls editor={editor} />);
 
-    expect(screen.getByRole('button', { name: 'Перетащить блок' }).parentElement).toHaveAttribute(
-      'data-nested',
-      'false',
-    );
-    expect(screen.getByRole('button', { name: 'Move up' })).toBeDisabled();
-    const moveDown = screen.getByRole('button', { name: 'Move down' });
+    const pointerHandle = screen.getByRole('button', { name: 'Перетащить блок' });
+    expect(pointerHandle.parentElement).toHaveAttribute('data-nested', 'false');
+    expect(pointerHandle).toHaveAttribute('tabindex', '-1');
+    expect(screen.getByRole('button', { name: 'Переместить вверх' })).toBeDisabled();
+    const moveDown = screen.getByRole('button', { name: 'Переместить вниз' });
     const keyboardControls = screen.getByRole('group', {
       name: 'Перемещение блока с клавиатуры',
     });
@@ -58,7 +57,7 @@ describe('block reorder controls', () => {
     fireEvent.click(moveDown);
 
     expect(editor.getJSON().content?.map(({ type }) => type)).toEqual(['heading', 'paragraph']);
-    expect(screen.getByRole('button', { name: 'Move down' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Move up' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Переместить вниз' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Переместить вверх' })).toBeEnabled();
   });
 });

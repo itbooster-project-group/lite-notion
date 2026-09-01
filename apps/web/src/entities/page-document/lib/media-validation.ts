@@ -50,6 +50,12 @@ type MediaPresentationInput = Readonly<{
 
 type NodeIdFactory = () => string;
 
+type UnknownRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): UnknownRecord | undefined {
+  return typeof value === 'object' && value !== null ? (value as UnknownRecord) : undefined;
+}
+
 function normalizeHttpsUrl(value: string): URL | undefined {
   const trimmedValue = value.trim();
 
@@ -73,15 +79,16 @@ function normalizeHttpsUrl(value: string): URL | undefined {
   }
 }
 
-function normalizeCaption(value: string | null | undefined): string | null {
-  const caption = value?.trim();
+function normalizeCaption(value: unknown): string | null {
+  const caption = typeof value === 'string' ? value.trim() : '';
   return caption ? caption : null;
 }
 
-function normalizeAlignment(
-  value: PageDocumentMediaAlignment | undefined,
-): PageDocumentMediaAlignment {
-  return value && PAGE_DOCUMENT_MEDIA_ALIGNMENTS.includes(value) ? value : 'center';
+function normalizeAlignment(value: unknown): PageDocumentMediaAlignment {
+  return typeof value === 'string' &&
+    PAGE_DOCUMENT_MEDIA_ALIGNMENTS.includes(value as PageDocumentMediaAlignment)
+    ? (value as PageDocumentMediaAlignment)
+    : 'center';
 }
 
 function createPresentationAttributes(input: MediaPresentationInput) {
@@ -134,7 +141,7 @@ export function normalizePageDocumentLink(value: string): string | undefined {
       return url.pathname ? url.href : undefined;
     }
 
-    return url.hostname ? url.href : undefined;
+    return url.hostname && !url.username && !url.password ? url.href : undefined;
   } catch {
     return undefined;
   }
@@ -173,6 +180,72 @@ export function normalizePageDocumentYoutubeVideoId(value: string): string | und
   }
 
   return videoId && YOUTUBE_VIDEO_ID_PATTERN.test(videoId) ? videoId : undefined;
+}
+
+export function normalizePersistedPageDocumentImageAttributes(
+  value: unknown,
+): PageDocumentImageAttributes | undefined {
+  const input = asRecord(value);
+  if (!input || !isPageDocumentNodeId(input.nodeId) || typeof input.src !== 'string') {
+    return undefined;
+  }
+
+  const src = normalizePageDocumentImageUrl(input.src);
+  const decorative = input.decorative === true;
+  const alt = typeof input.alt === 'string' ? input.alt.trim() : '';
+  if (!src || (decorative ? alt.length > 0 : alt.length === 0)) return undefined;
+
+  return {
+    alignment: normalizeAlignment(input.alignment),
+    alt,
+    caption: normalizeCaption(input.caption),
+    decorative,
+    nodeId: input.nodeId,
+    src,
+    widthPercent: clampPageDocumentWidthPercent(Number(input.widthPercent)),
+  };
+}
+
+export function normalizePersistedPageDocumentYoutubeAttributes(
+  value: unknown,
+): PageDocumentYoutubeAttributes | undefined {
+  const input = asRecord(value);
+  if (
+    !input ||
+    !isPageDocumentNodeId(input.nodeId) ||
+    typeof input.videoId !== 'string' ||
+    !YOUTUBE_VIDEO_ID_PATTERN.test(input.videoId)
+  ) {
+    return undefined;
+  }
+
+  return {
+    alignment: normalizeAlignment(input.alignment),
+    caption: normalizeCaption(input.caption),
+    nodeId: input.nodeId,
+    videoId: input.videoId,
+    widthPercent: clampPageDocumentWidthPercent(Number(input.widthPercent)),
+  };
+}
+
+export function normalizePersistedPageDocumentVideoAttributes(
+  value: unknown,
+): PageDocumentVideoAttributes | undefined {
+  const input = asRecord(value);
+  if (!input || !isPageDocumentNodeId(input.nodeId) || typeof input.src !== 'string') {
+    return undefined;
+  }
+
+  const src = normalizePageDocumentVideoUrl(input.src);
+  if (!src) return undefined;
+
+  return {
+    alignment: normalizeAlignment(input.alignment),
+    caption: normalizeCaption(input.caption),
+    nodeId: input.nodeId,
+    src,
+    widthPercent: clampPageDocumentWidthPercent(Number(input.widthPercent)),
+  };
 }
 
 export function createPageDocumentImageAttributes(

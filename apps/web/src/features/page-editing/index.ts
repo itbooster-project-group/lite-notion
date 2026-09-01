@@ -17,6 +17,4 @@ export {
   type PageDocumentSessionLifecycle,
   type PageDocumentSessionStatus,
 } from './model/page-document-session';
-export { LinkForm, type LinkFormProps } from './ui/link-form';
 export { PageEditorSurface, type PageEditorSurfaceProps } from './ui/page-editor-surface';
-export { SlashMenu, type SlashMenuProps } from './ui/slash-menu';

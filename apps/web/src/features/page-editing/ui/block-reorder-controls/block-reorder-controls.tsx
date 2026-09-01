@@ -30,7 +30,7 @@ export function BlockReorderControls({ editor }: BlockReorderControlsProps) {
   return (
     <>
       <DragHandle className="page-editor-drag-handle" editor={editor} nested={false}>
-        <button aria-label="Перетащить блок" type="button">
+        <button aria-label="Перетащить блок" tabIndex={-1} type="button">
           <GripVertical aria-hidden="true" />
         </button>
       </DragHandle>
@@ -40,7 +40,7 @@ export function BlockReorderControls({ editor }: BlockReorderControlsProps) {
         data-keyboard-reorder-controls=""
       >
         <Button
-          aria-label="Move up"
+          aria-label="Переместить вверх"
           disabled={!canMovePageDocumentBlock(editor, 'up')}
           onClick={() => movePageDocumentBlock(editor, 'up')}
           size="icon-sm"
@@ -50,7 +50,7 @@ export function BlockReorderControls({ editor }: BlockReorderControlsProps) {
           <ArrowUp aria-hidden="true" />
         </Button>
         <Button
-          aria-label="Move down"
+          aria-label="Переместить вниз"
           disabled={!canMovePageDocumentBlock(editor, 'down')}
           onClick={() => movePageDocumentBlock(editor, 'down')}
           size="icon-sm"

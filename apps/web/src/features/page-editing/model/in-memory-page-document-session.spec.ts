@@ -83,7 +83,7 @@ describe('page document session admission', () => {
     source.destroy();
   });
 
-  it('владеет временным Y.Doc и уничтожает его ровно один раз', () => {
+  it('принимает ownership переданного Y.Doc и уничтожает его ровно один раз', () => {
     const doc = new Y.Doc();
     const onDestroy = vi.fn();
     doc.on('destroy', onDestroy);

@@ -6,9 +6,15 @@ import { useEffect, useRef, useState } from 'react';
 import { normalizePageDocumentLink } from '@/entities/page-document';
 import { Button, Input } from '@/shared/ui';
 
+import {
+  createPageDocumentRelativeSelection,
+  type PageDocumentRelativeSelection,
+  resolvePageDocumentRelativeSelection,
+} from '../../model/page-document-relative-selection';
+
 export type LinkFormProps = Readonly<{
   editor: Editor;
-  initialSelection?: Readonly<{ from: number; to: number }> | undefined;
+  initialSelection?: PageDocumentRelativeSelection | undefined;
   onClose(): void;
 }>;
 
@@ -19,18 +25,19 @@ function getActiveLinkHref(editor: Editor): string {
 
 export function LinkForm({ editor, initialSelection, onClose }: LinkFormProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const hasActiveLinkRef = useRef(Boolean(getActiveLinkHref(editor)));
-  const selectionRef = useRef(
-    initialSelection ?? { from: editor.state.selection.from, to: editor.state.selection.to },
+  const initialHrefRef = useRef(getActiveLinkHref(editor));
+  const selectionRef = useRef<PageDocumentRelativeSelection | undefined>(
+    initialSelection ?? createPageDocumentRelativeSelection(editor),
   );
   const [error, setError] = useState<string | null>(null);
-  const [href, setHref] = useState(() => getActiveLinkHref(editor));
+  const [href, setHref] = useState(initialHrefRef.current);
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
   function closeAndFocusEditor() {
+    selectionRef.current = undefined;
     onClose();
     requestAnimationFrame(() => {
       if (!editor.isDestroyed) editor.commands.focus();
@@ -45,10 +52,20 @@ export function LinkForm({ editor, initialSelection, onClose }: LinkFormProps) {
       return;
     }
 
-    const chain = editor.chain().setTextSelection(selectionRef.current).focus();
-    if (hasActiveLinkRef.current) {
+    const savedSelection = selectionRef.current;
+    const selection = savedSelection
+      ? resolvePageDocumentRelativeSelection(editor, savedSelection)
+      : undefined;
+
+    if (!selection) {
+      setError('Выделение больше недоступно. Выберите текст заново.');
+      return;
+    }
+
+    const chain = editor.chain().setTextSelection(selection).focus();
+    if (initialHrefRef.current) {
       chain.extendMarkRange('link').setLink({ href: normalizedHref }).run();
-    } else if (selectionRef.current.from === selectionRef.current.to) {
+    } else if (selection.from === selection.to) {
       chain
         .insertContent({
           marks: [{ attrs: { href: normalizedHref }, type: 'link' }],
@@ -63,8 +80,18 @@ export function LinkForm({ editor, initialSelection, onClose }: LinkFormProps) {
   }
 
   function removeLink() {
-    const chain = editor.chain().setTextSelection(selectionRef.current).focus();
-    if (hasActiveLinkRef.current) chain.extendMarkRange('link');
+    const savedSelection = selectionRef.current;
+    const selection = savedSelection
+      ? resolvePageDocumentRelativeSelection(editor, savedSelection)
+      : undefined;
+
+    if (!selection) {
+      setError('Выделение больше недоступно. Выберите текст заново.');
+      return;
+    }
+
+    const chain = editor.chain().setTextSelection(selection).focus();
+    if (initialHrefRef.current) chain.extendMarkRange('link');
     chain.unsetLink().run();
     closeAndFocusEditor();
   }
@@ -106,7 +133,7 @@ export function LinkForm({ editor, initialSelection, onClose }: LinkFormProps) {
         </p>
       )}
       <div className="flex flex-wrap justify-end gap-2 pt-2">
-        {getActiveLinkHref(editor) && (
+        {initialHrefRef.current && (
           <Button onClick={removeLink} type="button" variant="ghost">
             <Link2Off aria-hidden="true" />
             Удалить ссылку

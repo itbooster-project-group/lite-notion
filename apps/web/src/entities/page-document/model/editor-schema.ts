@@ -3,12 +3,16 @@ import Collaboration from '@tiptap/extension-collaboration';
 import Link from '@tiptap/extension-link';
 import TaskItem from '@tiptap/extension-task-item';
 import TaskList from '@tiptap/extension-task-list';
+import type { DOMOutputSpec } from '@tiptap/pm/model';
 import StarterKit from '@tiptap/starter-kit';
 import type { Doc as YDoc } from 'yjs';
 
 import {
   clampPageDocumentWidthPercent,
   normalizePageDocumentLink,
+  normalizePersistedPageDocumentImageAttributes,
+  normalizePersistedPageDocumentVideoAttributes,
+  normalizePersistedPageDocumentYoutubeAttributes,
   PAGE_DOCUMENT_MAX_WIDTH_PERCENT,
 } from '../lib/media-validation';
 import { PageDocumentNodeIdDeconflict } from './node-id-deconflict';
@@ -39,16 +43,36 @@ const sharedMediaAttributes = {
   },
 };
 
-function mediaFigureAttributes(nodeType: string, attrs: Record<string, unknown>) {
+function mediaFigureAttributes(
+  nodeType: string,
+  attrs: Readonly<{ alignment: unknown; nodeId: unknown; widthPercent: unknown }>,
+) {
   const widthPercent = clampPageDocumentWidthPercent(Number(attrs.widthPercent));
+  const alignment =
+    attrs.alignment === 'start' || attrs.alignment === 'end' ? attrs.alignment : 'center';
+  const margins = {
+    center: 'margin-inline-start:auto;margin-inline-end:auto',
+    end: 'margin-inline-start:auto;margin-inline-end:0',
+    start: 'margin-inline-start:0;margin-inline-end:auto',
+  } as const;
 
   return {
-    'data-alignment': String(attrs.alignment ?? 'center'),
+    'data-alignment': alignment,
     'data-node-id': String(attrs.nodeId ?? ''),
     'data-page-document-node': nodeType,
     'data-width-percent': String(widthPercent),
-    style: `width:${widthPercent}%`,
+    style: `width:${widthPercent}%;${margins[alignment]}`,
   };
+}
+
+function invalidMediaOutput(nodeType: string): DOMOutputSpec {
+  return [
+    'figure',
+    {
+      'data-page-document-invalid': 'true',
+      'data-page-document-node': nodeType,
+    },
+  ];
 }
 
 function captionOutput(caption: unknown) {
@@ -86,7 +110,9 @@ export const PageDocumentImage = Node.create({
     return [{ tag: 'figure[data-page-document-node="image"]' }];
   },
   renderHTML({ node }) {
-    const { alt, caption, decorative, src } = node.attrs;
+    const attrs = normalizePersistedPageDocumentImageAttributes(node.attrs);
+    if (!attrs) return invalidMediaOutput('image');
+    const { alt, caption, decorative, src } = attrs;
     const image = [
       'img',
       {
@@ -102,7 +128,7 @@ export const PageDocumentImage = Node.create({
       ? [
           'figure',
           {
-            ...mediaFigureAttributes('image', node.attrs),
+            ...mediaFigureAttributes('image', attrs),
             'data-decorative': String(Boolean(decorative)),
           },
           image,
@@ -111,7 +137,7 @@ export const PageDocumentImage = Node.create({
       : [
           'figure',
           {
-            ...mediaFigureAttributes('image', node.attrs),
+            ...mediaFigureAttributes('image', attrs),
             'data-decorative': String(Boolean(decorative)),
           },
           image,
@@ -139,7 +165,9 @@ export const PageDocumentYoutube = Node.create({
     return [{ tag: 'figure[data-page-document-node="youtube"]' }];
   },
   renderHTML({ node }) {
-    const { caption, videoId } = node.attrs;
+    const attrs = normalizePersistedPageDocumentYoutubeAttributes(node.attrs);
+    if (!attrs) return invalidMediaOutput('youtube');
+    const { caption, videoId } = attrs;
     const renderedCaption = captionOutput(caption);
     const iframe = [
       'iframe',
@@ -154,7 +182,7 @@ export const PageDocumentYoutube = Node.create({
       },
     ];
     const figureAttributes = {
-      ...mediaFigureAttributes('youtube', node.attrs),
+      ...mediaFigureAttributes('youtube', attrs),
       'data-video-id': String(videoId ?? ''),
     };
 
@@ -184,7 +212,9 @@ export const PageDocumentVideo = Node.create({
     return [{ tag: 'figure[data-page-document-node="video"]' }];
   },
   renderHTML({ node }) {
-    const { caption, src } = node.attrs;
+    const attrs = normalizePersistedPageDocumentVideoAttributes(node.attrs);
+    if (!attrs) return invalidMediaOutput('video');
+    const { caption, src } = attrs;
     const renderedCaption = captionOutput(caption);
     const video = [
       'video',
@@ -197,8 +227,8 @@ export const PageDocumentVideo = Node.create({
     ];
 
     return renderedCaption
-      ? ['figure', mediaFigureAttributes('video', node.attrs), video, renderedCaption]
-      : ['figure', mediaFigureAttributes('video', node.attrs), video];
+      ? ['figure', mediaFigureAttributes('video', attrs), video, renderedCaption]
+      : ['figure', mediaFigureAttributes('video', attrs), video];
   },
 });
 
@@ -207,9 +237,20 @@ const PageDocumentLink = Link.extend({
     return {
       href: {
         default: null,
-        parseHTML: (element: HTMLElement) => element.getAttribute('href'),
+        parseHTML: (element: HTMLElement) =>
+          normalizePageDocumentLink(element.getAttribute('href') ?? '') ?? null,
       },
     };
+  },
+  renderHTML({ HTMLAttributes }) {
+    const href =
+      typeof HTMLAttributes.href === 'string'
+        ? normalizePageDocumentLink(HTMLAttributes.href)
+        : undefined;
+
+    return href
+      ? ['a', { href, rel: 'noopener noreferrer', target: '_blank' }, 0]
+      : ['span', {}, 0];
   },
 }).configure({
   autolink: true,
