@@ -56,8 +56,8 @@
 - [x] 6.9 Запустить `openspec validate add-web-page-editor-core --strict` после выполнения implementation и verification tasks.
 - [x] 6.10 Устранить follow-up stale-editor finding: связать editor instance с Y.Doc в момент создания, закрыть guard-ом весь interactive subtree, добавить replacement/rapid-switch regressions; сделать static renderer version-aware, синхронизировать HTTP(S)/mailto rendering contract и безопасно batch-ить popup position events.
 - [x] 6.11 Повторно запустить targeted regressions, `pnpm dedupe --check`, lint, typecheck, tests, build, Steiger и `openspec validate add-web-page-editor-core --strict` на финальном состоянии.
-- [ ] 6.12 Закрыть обход schema-version guard: сделать schema-v1 normalizer внутренним, оставить version-aware renderer публичным contract, синхронизировать tests/OpenSpec и повторно запустить полный набор проверок.
-- [ ] 6.13 Получить human review implementation и архивировать change только после прохождения фактического CI и review.
+- [x] 6.12 Закрыть обход schema-version guard: сделать schema-v1 normalizer внутренним, оставить version-aware renderer публичным contract, синхронизировать tests/OpenSpec и повторно запустить полный набор проверок.
+- [x] 6.13 Получить human review implementation и архивировать change только после прохождения фактического CI и review.
 
 ## Follow-up work — не является задачами этого change
 

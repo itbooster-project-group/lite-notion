@@ -1,6 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { describe, expect, it } from 'vitest';
 
+import * as pageDocumentPublicApi from '../index';
 import { PAGE_DOCUMENT_SCHEMA_VERSION } from '../model/schema-version';
 import {
   renderPageDocumentToHTML,
@@ -102,15 +103,28 @@ describe('page document static rendering boundary', () => {
   });
 
   it('явно отклоняет неизвестную schemaVersion вместо частичного rendering', () => {
+    const futureContent = new Proxy<JSONContent>(
+      {
+        content: [{ type: 'future-node' }],
+        type: 'doc',
+      },
+      {
+        get() {
+          throw new Error('Schema-v1 normalization не должна запускаться.');
+        },
+      },
+    );
+
     expect(() =>
       renderPageDocumentToHTML({
-        content: {
-          content: [{ type: 'future-node' }],
-          type: 'doc',
-        },
+        content: futureContent,
         schemaVersion: 2,
       }),
     ).toThrow(UnsupportedPageDocumentStaticRenderingSchemaError);
+  });
+
+  it('не экспортирует schema-v1 normalizer через public FSD API', () => {
+    expect(pageDocumentPublicApi).not.toHaveProperty('normalizePageDocumentForRendering');
   });
 
   it('открывает только HTTP(S) links в новой вкладке и fail-safe снимает unsafe mark', () => {
