@@ -10,6 +10,7 @@ import { HttpExceptionFilter } from './http-exception.filter';
 import { PageDocumentModule } from './pages/page-document/page-document.module';
 import { PagesModule } from './pages/pages.module';
 import { ProjectsModule } from './projects/projects.module';
+import { TrashCleanupModule } from './trash/trash-cleanup.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { ProjectsModule } from './projects/projects.module';
     PagesModule,
     PageDocumentModule,
     ProjectsModule,
+    TrashCleanupModule,
   ],
   providers: [
     {

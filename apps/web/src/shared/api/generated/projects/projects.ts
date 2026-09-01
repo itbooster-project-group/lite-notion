@@ -24,7 +24,14 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import type { BodyType, ErrorType } from '../../api-fetch';
 
 import { apiFetch } from '../../api-fetch';
-import type { CreateProjectDto, HttpErrorResponseDto, ProjectDto } from '../model';
+import type {
+  CreateProjectDto,
+  DeletedProjectDto,
+  HttpErrorResponseDto,
+  ProjectDto,
+  PurgeProjectParams,
+  PurgeProjectTrashParams,
+} from '../model';
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
@@ -236,3 +243,460 @@ export function useListProjects<
 
   return withQueryKey(query, queryOptions.queryKey);
 }
+
+export const getGetProjectTrashUrl = () => {
+  return `/api/v1/projects/trash`;
+};
+
+/**
+ * @summary List deleted projects of the current user
+ */
+export const getProjectTrash = async (
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<DeletedProjectDto[]> => {
+  return apiFetch<DeletedProjectDto[]>(getGetProjectTrashUrl(), {
+    ...options,
+    method: 'GET',
+  });
+};
+
+export const getGetProjectTrashQueryKey = () => {
+  return [`/api/v1/projects/trash`] as const;
+};
+
+export const getGetProjectTrashQueryOptions = <
+  TData = Awaited<ReturnType<typeof getProjectTrash>>,
+  TError = ErrorType<HttpErrorResponseDto>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getProjectTrash>>, TError, TData>>;
+  request?: SecondParameter<typeof apiFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetProjectTrashQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getProjectTrash>>> = ({ signal }) =>
+    getProjectTrash({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getProjectTrash>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetProjectTrashQueryResult = NonNullable<Awaited<ReturnType<typeof getProjectTrash>>>;
+export type GetProjectTrashQueryError = ErrorType<HttpErrorResponseDto>;
+
+export function useGetProjectTrash<
+  TData = Awaited<ReturnType<typeof getProjectTrash>>,
+  TError = ErrorType<HttpErrorResponseDto>,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getProjectTrash>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getProjectTrash>>,
+          TError,
+          Awaited<ReturnType<typeof getProjectTrash>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetProjectTrash<
+  TData = Awaited<ReturnType<typeof getProjectTrash>>,
+  TError = ErrorType<HttpErrorResponseDto>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getProjectTrash>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getProjectTrash>>,
+          TError,
+          Awaited<ReturnType<typeof getProjectTrash>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetProjectTrash<
+  TData = Awaited<ReturnType<typeof getProjectTrash>>,
+  TError = ErrorType<HttpErrorResponseDto>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getProjectTrash>>, TError, TData>>;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary List deleted projects of the current user
+ */
+
+export function useGetProjectTrash<
+  TData = Awaited<ReturnType<typeof getProjectTrash>>,
+  TError = ErrorType<HttpErrorResponseDto>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getProjectTrash>>, TError, TData>>;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetProjectTrashQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+export const getPurgeProjectTrashUrl = (params?: PurgeProjectTrashParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value));
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/projects/trash?${stringifiedParams}`
+    : `/api/v1/projects/trash`;
+};
+
+/**
+ * @summary Permanently delete every project in the trash
+ */
+export const purgeProjectTrash = async (
+  params?: PurgeProjectTrashParams,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<void> => {
+  return apiFetch<void>(getPurgeProjectTrashUrl(params), {
+    ...options,
+    method: 'DELETE',
+  });
+};
+
+export const getPurgeProjectTrashMutationOptions = <
+  TError = ErrorType<HttpErrorResponseDto>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof purgeProjectTrash>>,
+    TError,
+    { params?: PurgeProjectTrashParams },
+    TContext
+  >;
+  request?: SecondParameter<typeof apiFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof purgeProjectTrash>>,
+  TError,
+  { params?: PurgeProjectTrashParams },
+  TContext
+> => {
+  const mutationKey = ['purgeProjectTrash'];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof purgeProjectTrash>>,
+    { params?: PurgeProjectTrashParams }
+  > = (props) => {
+    const { params } = props ?? {};
+
+    return purgeProjectTrash(params, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PurgeProjectTrashMutationResult = NonNullable<
+  Awaited<ReturnType<typeof purgeProjectTrash>>
+>;
+
+export type PurgeProjectTrashMutationError = ErrorType<HttpErrorResponseDto>;
+
+/**
+ * @summary Permanently delete every project in the trash
+ */
+export const usePurgeProjectTrash = <TError = ErrorType<HttpErrorResponseDto>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof purgeProjectTrash>>,
+      TError,
+      { params?: PurgeProjectTrashParams },
+      TContext
+    >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof purgeProjectTrash>>,
+  TError,
+  { params?: PurgeProjectTrashParams },
+  TContext
+> => {
+  return useMutation(getPurgeProjectTrashMutationOptions(options), queryClient);
+};
+export const getPurgeProjectUrl = (projectId: string, params?: PurgeProjectParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value));
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/projects/trash/${projectId}?${stringifiedParams}`
+    : `/api/v1/projects/trash/${projectId}`;
+};
+
+/**
+ * @summary Permanently delete a project from the trash
+ */
+export const purgeProject = async (
+  projectId: string,
+  params?: PurgeProjectParams,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<void> => {
+  return apiFetch<void>(getPurgeProjectUrl(projectId, params), {
+    ...options,
+    method: 'DELETE',
+  });
+};
+
+export const getPurgeProjectMutationOptions = <
+  TError = ErrorType<HttpErrorResponseDto>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof purgeProject>>,
+    TError,
+    { projectId: string; params?: PurgeProjectParams },
+    TContext
+  >;
+  request?: SecondParameter<typeof apiFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof purgeProject>>,
+  TError,
+  { projectId: string; params?: PurgeProjectParams },
+  TContext
+> => {
+  const mutationKey = ['purgeProject'];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof purgeProject>>,
+    { projectId: string; params?: PurgeProjectParams }
+  > = (props) => {
+    const { projectId, params } = props ?? {};
+
+    return purgeProject(projectId, params, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PurgeProjectMutationResult = NonNullable<Awaited<ReturnType<typeof purgeProject>>>;
+
+export type PurgeProjectMutationError = ErrorType<HttpErrorResponseDto>;
+
+/**
+ * @summary Permanently delete a project from the trash
+ */
+export const usePurgeProject = <TError = ErrorType<HttpErrorResponseDto>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof purgeProject>>,
+      TError,
+      { projectId: string; params?: PurgeProjectParams },
+      TContext
+    >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof purgeProject>>,
+  TError,
+  { projectId: string; params?: PurgeProjectParams },
+  TContext
+> => {
+  return useMutation(getPurgeProjectMutationOptions(options), queryClient);
+};
+export const getDeleteProjectUrl = (projectId: string) => {
+  return `/api/v1/projects/${projectId}`;
+};
+
+/**
+ * @summary Move a project and all of its pages to the trash
+ */
+export const deleteProject = async (
+  projectId: string,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<void> => {
+  return apiFetch<void>(getDeleteProjectUrl(projectId), {
+    ...options,
+    method: 'DELETE',
+  });
+};
+
+export const getDeleteProjectMutationOptions = <
+  TError = ErrorType<HttpErrorResponseDto>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteProject>>,
+    TError,
+    { projectId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof apiFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteProject>>,
+  TError,
+  { projectId: string },
+  TContext
+> => {
+  const mutationKey = ['deleteProject'];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteProject>>,
+    { projectId: string }
+  > = (props) => {
+    const { projectId } = props ?? {};
+
+    return deleteProject(projectId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteProjectMutationResult = NonNullable<Awaited<ReturnType<typeof deleteProject>>>;
+
+export type DeleteProjectMutationError = ErrorType<HttpErrorResponseDto>;
+
+/**
+ * @summary Move a project and all of its pages to the trash
+ */
+export const useDeleteProject = <TError = ErrorType<HttpErrorResponseDto>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof deleteProject>>,
+      TError,
+      { projectId: string },
+      TContext
+    >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof deleteProject>>,
+  TError,
+  { projectId: string },
+  TContext
+> => {
+  return useMutation(getDeleteProjectMutationOptions(options), queryClient);
+};
+export const getRestoreProjectUrl = (projectId: string) => {
+  return `/api/v1/projects/${projectId}/restore`;
+};
+
+/**
+ * @summary Restore a project from the trash
+ */
+export const restoreProject = async (
+  projectId: string,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<ProjectDto> => {
+  return apiFetch<ProjectDto>(getRestoreProjectUrl(projectId), {
+    ...options,
+    method: 'POST',
+  });
+};
+
+export const getRestoreProjectMutationOptions = <
+  TError = ErrorType<HttpErrorResponseDto>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof restoreProject>>,
+    TError,
+    { projectId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof apiFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof restoreProject>>,
+  TError,
+  { projectId: string },
+  TContext
+> => {
+  const mutationKey = ['restoreProject'];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof restoreProject>>,
+    { projectId: string }
+  > = (props) => {
+    const { projectId } = props ?? {};
+
+    return restoreProject(projectId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RestoreProjectMutationResult = NonNullable<Awaited<ReturnType<typeof restoreProject>>>;
+
+export type RestoreProjectMutationError = ErrorType<HttpErrorResponseDto>;
+
+/**
+ * @summary Restore a project from the trash
+ */
+export const useRestoreProject = <TError = ErrorType<HttpErrorResponseDto>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof restoreProject>>,
+      TError,
+      { projectId: string },
+      TContext
+    >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof restoreProject>>,
+  TError,
+  { projectId: string },
+  TContext
+> => {
+  return useMutation(getRestoreProjectMutationOptions(options), queryClient);
+};

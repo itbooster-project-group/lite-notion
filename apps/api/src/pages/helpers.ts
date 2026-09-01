@@ -1,11 +1,14 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 
+import { PurgeConfirmationRequiredError } from '../common/errors';
 import { ProjectNotFoundError } from '../projects/errors';
 import { POSITION_ALPHABET, POSITION_MAX_LENGTH } from './constants';
 import {
   PageCycleError,
   PageNotFoundError,
   PageProjectMismatchError,
+  PageRestoreProjectDeletedError,
+  PageRestoreTargetProjectRejectedError,
   SiblingOrderError,
   SiblingParentMismatchError,
 } from './errors';
@@ -118,13 +121,18 @@ export async function toHttpException<T>(operation: () => Promise<T>): Promise<T
       throw new NotFoundException(error.message);
     }
 
-    if (error instanceof PageCycleError) {
+    if (error instanceof PageCycleError || error instanceof PageRestoreProjectDeletedError) {
       throw new ConflictException(error.message);
+    }
+
+    if (error instanceof PurgeConfirmationRequiredError) {
+      throw new ConflictException(error.toMessage());
     }
 
     if (
       error instanceof SiblingParentMismatchError ||
       error instanceof PageProjectMismatchError ||
+      error instanceof PageRestoreTargetProjectRejectedError ||
       error instanceof SiblingOrderError
     ) {
       throw new BadRequestException(error.message);

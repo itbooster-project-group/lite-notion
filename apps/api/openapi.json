@@ -353,6 +353,110 @@
         "tags": ["pages"]
       }
     },
+    "/api/v1/pages/trash": {
+      "get": {
+        "operationId": "getPageTrash",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Deleted pages as a tree",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DeletedPageTreeNodeDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Page or project does not exist, or belongs to another user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get the page trash of the current user",
+        "tags": ["pages"]
+      },
+      "delete": {
+        "operationId": "purgePageTrash",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": "Page trash emptied"
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Page or project does not exist, or belongs to another user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Permanently delete every page in the trash",
+        "tags": ["pages"]
+      }
+    },
     "/api/v1/pages/{pageId}": {
       "get": {
         "operationId": "getPage",
@@ -489,6 +593,62 @@
         ],
         "summary": "Rename a page",
         "tags": ["pages"]
+      },
+      "delete": {
+        "operationId": "deletePage",
+        "parameters": [
+          {
+            "name": "pageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Page moved to the trash"
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Page or project does not exist, or belongs to another user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Move a page and its subtree to the trash",
+        "tags": ["pages"]
       }
     },
     "/api/v1/pages/{pageId}/move": {
@@ -576,6 +736,168 @@
         "tags": ["pages"]
       }
     },
+    "/api/v1/pages/trash/{pageId}": {
+      "delete": {
+        "operationId": "purgePage",
+        "parameters": [
+          {
+            "name": "cascade",
+            "required": false,
+            "in": "query",
+            "description": "Confirms destroying trash entries that the trash listing showed outside the target. Without it such a request is refused with 409 listing their titles.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "pageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Page permanently deleted"
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Page or project does not exist, or belongs to another user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Trash entries outside the target would be destroyed; confirm with cascade=true",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Permanently delete a page from the trash",
+        "tags": ["pages"]
+      }
+    },
+    "/api/v1/pages/{pageId}/restore": {
+      "post": {
+        "operationId": "restorePage",
+        "parameters": [
+          {
+            "name": "pageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestorePageDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Page restored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Page or project does not exist, or belongs to another user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The page was deleted along with its parent or project, so it cannot be restored on its own",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Restore a page from the trash",
+        "tags": ["pages"]
+      }
+    },
     "/api/v1/projects": {
       "post": {
         "operationId": "createProject",
@@ -613,6 +935,16 @@
           },
           "401": {
             "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Project does not exist, is in the trash, or belongs to another user",
             "content": {
               "application/json": {
                 "schema": {
@@ -666,6 +998,16 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Project does not exist, is in the trash, or belongs to another user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -674,6 +1016,330 @@
           }
         ],
         "summary": "List projects owned by the current user",
+        "tags": ["projects"]
+      }
+    },
+    "/api/v1/projects/trash": {
+      "get": {
+        "operationId": "getProjectTrash",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Deleted projects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DeletedProjectDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Project does not exist, is in the trash, or belongs to another user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List deleted projects of the current user",
+        "tags": ["projects"]
+      },
+      "delete": {
+        "operationId": "purgeProjectTrash",
+        "parameters": [
+          {
+            "name": "cascade",
+            "required": false,
+            "in": "query",
+            "description": "Confirms destroying trash entries that the trash listing showed outside the target. Without it such a request is refused with 409 listing their titles.",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Project trash emptied"
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Project does not exist, is in the trash, or belongs to another user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Trash entries outside the target would be destroyed; confirm with cascade=true",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Permanently delete every project in the trash",
+        "tags": ["projects"]
+      }
+    },
+    "/api/v1/projects/trash/{projectId}": {
+      "delete": {
+        "operationId": "purgeProject",
+        "parameters": [
+          {
+            "name": "cascade",
+            "required": false,
+            "in": "query",
+            "description": "Confirms destroying trash entries that the trash listing showed outside the target. Without it such a request is refused with 409 listing their titles.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "projectId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Project permanently deleted"
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Project does not exist, is in the trash, or belongs to another user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Trash entries outside the target would be destroyed; confirm with cascade=true",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Permanently delete a project from the trash",
+        "tags": ["projects"]
+      }
+    },
+    "/api/v1/projects/{projectId}": {
+      "delete": {
+        "operationId": "deleteProject",
+        "parameters": [
+          {
+            "name": "projectId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Project moved to the trash"
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Project does not exist, is in the trash, or belongs to another user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Move a project and all of its pages to the trash",
+        "tags": ["projects"]
+      }
+    },
+    "/api/v1/projects/{projectId}/restore": {
+      "post": {
+        "operationId": "restoreProject",
+        "parameters": [
+          {
+            "name": "projectId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Project restored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Project does not exist, is in the trash, or belongs to another user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Restore a project from the trash",
         "tags": ["projects"]
       }
     },
@@ -1126,6 +1792,80 @@
           "children"
         ]
       },
+      "DeletedPageTreeNodeDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "4c8f1b1a-0f6d-4a5e-9f6d-0f6d4a5e9f6d",
+            "format": "uuid"
+          },
+          "ownerId": {
+            "type": "string",
+            "example": "9f6d4a5e-0f6d-4a5e-9f6d-0f6d4a5e9f6d",
+            "format": "uuid"
+          },
+          "projectId": {
+            "type": "string",
+            "example": "1b1a4c8f-0f6d-4a5e-9f6d-0f6d4a5e9f6d",
+            "format": "uuid"
+          },
+          "parentPageId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "createdById": {
+            "type": "string",
+            "example": "9f6d4a5e-0f6d-4a5e-9f6d-0f6d4a5e9f6d",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "example": "Release notes"
+          },
+          "position": {
+            "type": "string",
+            "description": "Fractional rank among siblings. Server-generated, ordered lexicographically.",
+            "example": "V"
+          },
+          "createdAt": {
+            "type": "string",
+            "example": "2026-08-27T12:00:00.000Z",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "example": "2026-08-27T12:00:00.000Z",
+            "format": "date-time"
+          },
+          "deletedAt": {
+            "type": "string",
+            "description": "When the page was moved to the trash. Retention is counted from this moment.",
+            "example": "2026-08-30T12:00:00.000Z",
+            "format": "date-time"
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeletedPageTreeNodeDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "ownerId",
+          "projectId",
+          "parentPageId",
+          "createdById",
+          "title",
+          "position",
+          "createdAt",
+          "updatedAt",
+          "deletedAt",
+          "children"
+        ]
+      },
       "RenamePageDto": {
         "type": "object",
         "properties": {
@@ -1160,6 +1900,16 @@
           }
         }
       },
+      "RestorePageDto": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "description": "Live project to restore the page into. Accepted only when the page own project is in the trash.",
+            "format": "uuid"
+          }
+        }
+      },
       "CreateProjectDto": {
         "type": "object",
         "properties": {
@@ -1191,6 +1941,32 @@
           }
         },
         "required": ["id", "ownerId", "name"]
+      },
+      "DeletedProjectDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "4c8f1b1a-0f6d-4a5e-9f6d-0f6d4a5e9f6d",
+            "format": "uuid"
+          },
+          "ownerId": {
+            "type": "string",
+            "example": "9f6d4a5e-0f6d-4a5e-9f6d-0f6d4a5e9f6d",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "example": "Workspace"
+          },
+          "deletedAt": {
+            "type": "string",
+            "description": "When the project was moved to the trash. Retention is counted from this moment.",
+            "example": "2026-08-30T12:00:00.000Z",
+            "format": "date-time"
+          }
+        },
+        "required": ["id", "ownerId", "name", "deletedAt"]
       },
       "PageDocumentDto": {
         "type": "object",

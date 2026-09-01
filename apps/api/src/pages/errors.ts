@@ -55,3 +55,39 @@ export class SiblingOrderError extends Error {
     this.name = 'SiblingOrderError';
   }
 }
+
+/**
+ * Проект восстанавливаемой страницы сам лежит в корзине. Живая страница в
+ * удалённом проекте невозможна, а подъём в корень не помогает: корень принадлежит
+ * тому же удалённому проекту.
+ *
+ * `409`, а не `404`: страница вызывающему видна — корзина её показывает, — поэтому
+ * скрывать нечего, и запрос противоречит состоянию, а не правам.
+ *
+ * Единственный отказ восстановления по состоянию. Источник удаления восстановление
+ * не гоняет: вложенная страница не отклоняется, а поднимается в корень своего
+ * проекта.
+ */
+export class PageRestoreProjectDeletedError extends Error {
+  constructor() {
+    super(
+      'The project of this page is in the trash: restore it, or pass projectId of a live project',
+    );
+    this.name = 'PageRestoreProjectDeletedError';
+  }
+}
+
+/**
+ * Проект назначения указан, а собственный проект страницы жив — переносить её
+ * незачем и некуда. Принять параметр здесь значило бы завести перенос между
+ * проектами чёрным ходом, минуя требование `specs/page-tree`.
+ *
+ * `400`, а не `409`: запрос внутренне противоречив, и обе записи вызывающему
+ * видны, поэтому раскрытия чужих данных нет.
+ */
+export class PageRestoreTargetProjectRejectedError extends Error {
+  constructor() {
+    super('projectId is accepted only when the page own project is in the trash');
+    this.name = 'PageRestoreTargetProjectRejectedError';
+  }
+}

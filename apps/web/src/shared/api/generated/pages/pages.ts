@@ -26,12 +26,15 @@ import type { BodyType, ErrorType } from '../../api-fetch';
 import { apiFetch } from '../../api-fetch';
 import type {
   CreatePageDto,
+  DeletedPageTreeNodeDto,
   HttpErrorResponseDto,
   MovePageDto,
   PageDocumentDto,
   PageDto,
   PageTreeNodeDto,
+  PurgePageParams,
   RenamePageDto,
+  RestorePageDto,
   UpdatePageDocumentDto,
 } from '../model';
 
@@ -246,6 +249,175 @@ export function useGetPageTree<
   return withQueryKey(query, queryOptions.queryKey);
 }
 
+export const getGetPageTrashUrl = () => {
+  return `/api/v1/pages/trash`;
+};
+
+/**
+ * @summary Get the page trash of the current user
+ */
+export const getPageTrash = async (
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<DeletedPageTreeNodeDto[]> => {
+  return apiFetch<DeletedPageTreeNodeDto[]>(getGetPageTrashUrl(), {
+    ...options,
+    method: 'GET',
+  });
+};
+
+export const getGetPageTrashQueryKey = () => {
+  return [`/api/v1/pages/trash`] as const;
+};
+
+export const getGetPageTrashQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPageTrash>>,
+  TError = ErrorType<HttpErrorResponseDto>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getPageTrash>>, TError, TData>>;
+  request?: SecondParameter<typeof apiFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetPageTrashQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getPageTrash>>> = ({ signal }) =>
+    getPageTrash({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPageTrash>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetPageTrashQueryResult = NonNullable<Awaited<ReturnType<typeof getPageTrash>>>;
+export type GetPageTrashQueryError = ErrorType<HttpErrorResponseDto>;
+
+export function useGetPageTrash<
+  TData = Awaited<ReturnType<typeof getPageTrash>>,
+  TError = ErrorType<HttpErrorResponseDto>,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getPageTrash>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPageTrash>>,
+          TError,
+          Awaited<ReturnType<typeof getPageTrash>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetPageTrash<
+  TData = Awaited<ReturnType<typeof getPageTrash>>,
+  TError = ErrorType<HttpErrorResponseDto>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getPageTrash>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPageTrash>>,
+          TError,
+          Awaited<ReturnType<typeof getPageTrash>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetPageTrash<
+  TData = Awaited<ReturnType<typeof getPageTrash>>,
+  TError = ErrorType<HttpErrorResponseDto>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getPageTrash>>, TError, TData>>;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Get the page trash of the current user
+ */
+
+export function useGetPageTrash<
+  TData = Awaited<ReturnType<typeof getPageTrash>>,
+  TError = ErrorType<HttpErrorResponseDto>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getPageTrash>>, TError, TData>>;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetPageTrashQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+export const getPurgePageTrashUrl = () => {
+  return `/api/v1/pages/trash`;
+};
+
+/**
+ * @summary Permanently delete every page in the trash
+ */
+export const purgePageTrash = async (options?: Parameters<typeof apiFetch>[1]): Promise<void> => {
+  return apiFetch<void>(getPurgePageTrashUrl(), {
+    ...options,
+    method: 'DELETE',
+  });
+};
+
+export const getPurgePageTrashMutationOptions = <
+  TError = ErrorType<HttpErrorResponseDto>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<Awaited<ReturnType<typeof purgePageTrash>>, TError, void, TContext>;
+  request?: SecondParameter<typeof apiFetch>;
+}): UseMutationOptions<Awaited<ReturnType<typeof purgePageTrash>>, TError, void, TContext> => {
+  const mutationKey = ['purgePageTrash'];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof purgePageTrash>>, void> = () => {
+    return purgePageTrash(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PurgePageTrashMutationResult = NonNullable<Awaited<ReturnType<typeof purgePageTrash>>>;
+
+export type PurgePageTrashMutationError = ErrorType<HttpErrorResponseDto>;
+
+/**
+ * @summary Permanently delete every page in the trash
+ */
+export const usePurgePageTrash = <TError = ErrorType<HttpErrorResponseDto>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof purgePageTrash>>,
+      TError,
+      void,
+      TContext
+    >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<Awaited<ReturnType<typeof purgePageTrash>>, TError, void, TContext> => {
+  return useMutation(getPurgePageTrashMutationOptions(options), queryClient);
+};
 export const getGetPageUrl = (pageId: string) => {
   return `/api/v1/pages/${pageId}`;
 };
@@ -452,6 +624,84 @@ export const useRenamePage = <TError = ErrorType<HttpErrorResponseDto>, TContext
 > => {
   return useMutation(getRenamePageMutationOptions(options), queryClient);
 };
+export const getDeletePageUrl = (pageId: string) => {
+  return `/api/v1/pages/${pageId}`;
+};
+
+/**
+ * @summary Move a page and its subtree to the trash
+ */
+export const deletePage = async (
+  pageId: string,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<void> => {
+  return apiFetch<void>(getDeletePageUrl(pageId), {
+    ...options,
+    method: 'DELETE',
+  });
+};
+
+export const getDeletePageMutationOptions = <
+  TError = ErrorType<HttpErrorResponseDto>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deletePage>>,
+    TError,
+    { pageId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof apiFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deletePage>>,
+  TError,
+  { pageId: string },
+  TContext
+> => {
+  const mutationKey = ['deletePage'];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof deletePage>>, { pageId: string }> = (
+    props,
+  ) => {
+    const { pageId } = props ?? {};
+
+    return deletePage(pageId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeletePageMutationResult = NonNullable<Awaited<ReturnType<typeof deletePage>>>;
+
+export type DeletePageMutationError = ErrorType<HttpErrorResponseDto>;
+
+/**
+ * @summary Move a page and its subtree to the trash
+ */
+export const useDeletePage = <TError = ErrorType<HttpErrorResponseDto>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof deletePage>>,
+      TError,
+      { pageId: string },
+      TContext
+    >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof deletePage>>,
+  TError,
+  { pageId: string },
+  TContext
+> => {
+  return useMutation(getDeletePageMutationOptions(options), queryClient);
+};
 export const getMovePageUrl = (pageId: string) => {
   return `/api/v1/pages/${pageId}/move`;
 };
@@ -533,6 +783,180 @@ export const useMovePage = <TError = ErrorType<HttpErrorResponseDto>, TContext =
   TContext
 > => {
   return useMutation(getMovePageMutationOptions(options), queryClient);
+};
+export const getPurgePageUrl = (pageId: string, params?: PurgePageParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value));
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/pages/trash/${pageId}?${stringifiedParams}`
+    : `/api/v1/pages/trash/${pageId}`;
+};
+
+/**
+ * @summary Permanently delete a page from the trash
+ */
+export const purgePage = async (
+  pageId: string,
+  params?: PurgePageParams,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<void> => {
+  return apiFetch<void>(getPurgePageUrl(pageId, params), {
+    ...options,
+    method: 'DELETE',
+  });
+};
+
+export const getPurgePageMutationOptions = <
+  TError = ErrorType<HttpErrorResponseDto>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof purgePage>>,
+    TError,
+    { pageId: string; params?: PurgePageParams },
+    TContext
+  >;
+  request?: SecondParameter<typeof apiFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof purgePage>>,
+  TError,
+  { pageId: string; params?: PurgePageParams },
+  TContext
+> => {
+  const mutationKey = ['purgePage'];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof purgePage>>,
+    { pageId: string; params?: PurgePageParams }
+  > = (props) => {
+    const { pageId, params } = props ?? {};
+
+    return purgePage(pageId, params, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PurgePageMutationResult = NonNullable<Awaited<ReturnType<typeof purgePage>>>;
+
+export type PurgePageMutationError = ErrorType<HttpErrorResponseDto>;
+
+/**
+ * @summary Permanently delete a page from the trash
+ */
+export const usePurgePage = <TError = ErrorType<HttpErrorResponseDto>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof purgePage>>,
+      TError,
+      { pageId: string; params?: PurgePageParams },
+      TContext
+    >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof purgePage>>,
+  TError,
+  { pageId: string; params?: PurgePageParams },
+  TContext
+> => {
+  return useMutation(getPurgePageMutationOptions(options), queryClient);
+};
+export const getRestorePageUrl = (pageId: string) => {
+  return `/api/v1/pages/${pageId}/restore`;
+};
+
+/**
+ * @summary Restore a page from the trash
+ */
+export const restorePage = async (
+  pageId: string,
+  restorePageDto?: RestorePageDto,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<PageDto> => {
+  return apiFetch<PageDto>(getRestorePageUrl(pageId), {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(restorePageDto),
+  });
+};
+
+export const getRestorePageMutationOptions = <
+  TError = ErrorType<HttpErrorResponseDto>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof restorePage>>,
+    TError,
+    { pageId: string; data?: BodyType<RestorePageDto> },
+    TContext
+  >;
+  request?: SecondParameter<typeof apiFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof restorePage>>,
+  TError,
+  { pageId: string; data?: BodyType<RestorePageDto> },
+  TContext
+> => {
+  const mutationKey = ['restorePage'];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof restorePage>>,
+    { pageId: string; data?: BodyType<RestorePageDto> }
+  > = (props) => {
+    const { pageId, data } = props ?? {};
+
+    return restorePage(pageId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RestorePageMutationResult = NonNullable<Awaited<ReturnType<typeof restorePage>>>;
+export type RestorePageMutationBody = BodyType<RestorePageDto> | undefined;
+export type RestorePageMutationError = ErrorType<HttpErrorResponseDto>;
+
+/**
+ * @summary Restore a page from the trash
+ */
+export const useRestorePage = <TError = ErrorType<HttpErrorResponseDto>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof restorePage>>,
+      TError,
+      { pageId: string; data?: BodyType<RestorePageDto> },
+      TContext
+    >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof restorePage>>,
+  TError,
+  { pageId: string; data?: BodyType<RestorePageDto> },
+  TContext
+> => {
+  return useMutation(getRestorePageMutationOptions(options), queryClient);
 };
 export const getGetPageDocumentUrl = (pageId: string) => {
   return `/api/v1/pages/${pageId}/document`;
