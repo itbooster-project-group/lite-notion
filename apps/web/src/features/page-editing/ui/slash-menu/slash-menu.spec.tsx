@@ -149,13 +149,18 @@ describe('slash menu', () => {
     );
     const menu = screen.getByRole('listbox', { name: 'Команды редактора' });
 
+    coordinates.mockClear();
     coordinates.mockReturnValue({ bottom: 90, left: 64, right: 64, top: 74 });
     fireEvent.scroll(window);
+    fireEvent.scroll(window);
     await waitFor(() => expect(menu).toHaveStyle({ left: '64px', top: '98px' }));
+    expect(coordinates).toHaveBeenCalledTimes(1);
 
+    coordinates.mockClear();
     coordinates.mockReturnValue({ bottom: 130, left: 88, right: 88, top: 114 });
     fireEvent.resize(window);
     await waitFor(() => expect(menu).toHaveStyle({ left: '88px', top: '138px' }));
+    expect(coordinates).toHaveBeenCalledTimes(1);
 
     view.unmount();
     coordinates.mockClear();

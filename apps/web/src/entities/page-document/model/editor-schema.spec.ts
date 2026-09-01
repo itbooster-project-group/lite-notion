@@ -114,7 +114,7 @@ describe('page document schema version 1', () => {
     expect(editor.commands.redo).toBeTypeOf('function');
   });
 
-  it('хранит только href link mark и генерирует safe output attrs', () => {
+  it('рендерит https в новой вкладке, mailto без target и отклоняет unsafe link', () => {
     const { editor } = createEditor();
     editor.commands.setContent('<p>Документация</p>');
     editor.commands.selectAll();
@@ -126,6 +126,11 @@ describe('page document schema version 1', () => {
     ]);
     expect(editor.getHTML()).toContain('rel="noopener noreferrer"');
     expect(editor.getHTML()).toContain('target="_blank"');
+
+    expect(editor.commands.setLink({ href: 'mailto:editor@example.com' })).toBe(true);
+    expect(editor.getHTML()).toContain('href="mailto:editor@example.com"');
+    expect(editor.getHTML()).not.toContain('rel="noopener noreferrer"');
+    expect(editor.getHTML()).not.toContain('target="_blank"');
   });
 
   it('статически рендерит custom media deterministic и без React NodeView', () => {
@@ -167,8 +172,14 @@ describe('page document schema version 1', () => {
       type: 'doc',
     };
 
-    const first = renderPageDocumentToHTML(content);
-    const second = renderPageDocumentToHTML(content);
+    const first = renderPageDocumentToHTML({
+      content,
+      schemaVersion: PAGE_DOCUMENT_SCHEMA_VERSION,
+    });
+    const second = renderPageDocumentToHTML({
+      content,
+      schemaVersion: PAGE_DOCUMENT_SCHEMA_VERSION,
+    });
 
     expect(second).toBe(first);
     expect(first).toContain(`data-node-id="${NODE_ID}"`);

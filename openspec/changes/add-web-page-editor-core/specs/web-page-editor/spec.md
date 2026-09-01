@@ -30,7 +30,7 @@
 
 ### Requirement: Schema version 1 является static-renderable persisted contract
 
-Schema v1 MUST фиксировать nodes/marks document, text, paragraph, headings 1–3, bullet/ordered lists, task list/task item, hard break, bold, italic, strike, inline code, link, image, YouTube и direct video. Names, attrs, defaults, metadata `tiptap_schema_version = 1` и `collaborationField = default` MUST быть стабильными для persisted Yjs state и derived publication JSON. Каждый custom node/mark MUST иметь deterministic non-editor representation; React NodeView MUST NOT быть единственным renderer. Добавление, удаление или переименование persisted node/mark, изменение persisted attrs, их semantics/defaults либо `PAGE_CONTENT_YJS_FIELD` MUST требовать новой schema version или явной compatibility migration; новый TipTap type MUST NOT считаться автоматически backward-compatible.
+Schema v1 MUST фиксировать nodes/marks document, text, paragraph, headings 1–3, bullet/ordered lists, task list/task item, hard break, bold, italic, strike, inline code, link, image, YouTube и direct video. Names, attrs, defaults, metadata `tiptap_schema_version = 1` и `collaborationField = default` MUST быть стабильными для persisted Yjs state и derived publication JSON. Каждый custom node/mark MUST иметь deterministic non-editor representation; React NodeView MUST NOT быть единственным renderer. Static rendering boundary MUST получать schema version вместе с derived JSON и MUST явно отклонять unsupported version до normalization; молчаливое удаление неизвестных nodes будущей schema MUST NOT считаться compatibility strategy. Добавление, удаление или переименование persisted node/mark, изменение persisted attrs, их semantics/defaults либо `PAGE_CONTENT_YJS_FIELD` MUST требовать новой schema version или явной compatibility migration; новый TipTap type MUST NOT считаться автоматически backward-compatible.
 
 #### Scenario: Документ использует поддерживаемую schema
 - **WHEN** session получает поддерживаемую metadata schema version и successfully decoded Yjs state
@@ -39,6 +39,10 @@ Schema v1 MUST фиксировать nodes/marks document, text, paragraph, hea
 #### Scenario: Одинаковый snapshot рендерится повторно
 - **WHEN** static renderer дважды получает одинаковый versioned derived JSON
 - **THEN** структурный HTML/React output совпадает и не зависит от состояния interactive editor или React NodeView
+
+#### Scenario: Static renderer получает неподдерживаемую schema version
+- **WHEN** static rendering boundary получает derived JSON с неизвестной `schemaVersion`
+- **THEN** renderer выбрасывает явную typed error до normalization и не создаёт частичный HTML с молча удалёнными future nodes
 
 #### Scenario: Document не проходит admission validation
 - **WHEN** session получает неподдерживаемую metadata schema version, incompatible document metadata или повреждённый/недекодируемый encoded Yjs state
@@ -111,6 +115,10 @@ Image, YouTube и direct video MUST хранить opaque `nodeId`, сгенер
 #### Scenario: Renderer выводит внешнюю ссылку
 - **WHEN** static или interactive renderer представляет validated HTTP(S) link в новой вкладке
 - **THEN** output содержит безопасный `rel` и не доверяет произвольным persisted HTML attrs
+
+#### Scenario: Renderer выводит email-ссылку
+- **WHEN** static или interactive renderer представляет validated `mailto:` link
+- **THEN** output сохраняет normalized `href` без обязательных `target='_blank'` и `rel='noopener noreferrer'`
 
 ### Requirement: URL-only external media имеют безопасный JSON contract
 
@@ -190,7 +198,7 @@ Interactive и static rendering SHALL быть совместимы с CSP, ог
 
 Создавший `PageDocumentSession` caller/hook/factory MUST владеть её lifecycle и вызывать `destroy()`; `PageEditor`, получивший session через props, MUST NOT уничтожать внешний resource. Editor instance, созданный TipTap `useEditor`, MUST использовать встроенный Strict Mode-safe lifecycle без ручного `editor.destroy()` в surface effect.
 
-`createInMemoryPageDocumentSession({ doc })` MUST немедленно принимать exclusive ownership переданного `Y.Doc`, включая admission error: caller после передачи MUST управлять ресурсом только через `session.destroy()` и MUST NOT повторно использовать или отдельно уничтожать переданный doc. При смене admitted `doc`/editor identity surface MUST явно закрывать document-specific dialogs и сбрасывать bubble/slash state, popup coordinates, сохранённые selections/bookmarks и handler refs без сброса unrelated global UI.
+`createInMemoryPageDocumentSession({ doc })` MUST немедленно принимать exclusive ownership переданного `Y.Doc`, включая admission error: caller после передачи MUST управлять ресурсом только через `session.destroy()` и MUST NOT повторно использовать или отдельно уничтожать переданный doc. При смене admitted `doc`/editor identity surface MUST явно закрывать document-specific dialogs и сбрасывать bubble/slash state, popup coordinates, сохранённые selections/bookmarks и handler refs без сброса unrelated global UI. Весь interactive subtree — `EditorContent`, toolbar, block reorder и document-specific overlays — MUST рендериться только для editor instance, чья creation identity совпадает с текущим `Y.Doc`; между replacement doc и созданием соответствующего editor surface MUST показывать безопасное non-interactive transition state.
 
 #### Scenario: Surface работает с in-memory session
 - **WHEN** InMemory/Fake session предоставляет ready `Y.Doc`
@@ -208,9 +216,17 @@ Interactive и static rendering SHALL быть совместимы с CSP, ог
 - **WHEN** LinkForm или media form открыта для page A и composition передаёт ready Y.Doc page B
 - **THEN** document-specific dialogs, menus, coordinates и stored selections page A очищаются до дальнейшего взаимодействия с page B
 
+#### Scenario: useEditor ещё возвращает instance предыдущего документа
+- **WHEN** props уже содержат Y.Doc page B, а lifecycle `useEditor` кратковременно возвращает editor instance page A
+- **THEN** content page A, toolbar, reorder controls, input и overlays не рендерятся и не принимают commands; после создания editor page B interactive subtree становится доступным только для page B
+
+#### Scenario: Документы быстро заменяются A → B → C
+- **WHEN** editor page B создаётся или завершает lifecycle после того, как текущим уже стал Y.Doc page C
+- **THEN** identity guard не допускает editor B в interactive subtree и поверхность показывает только transition state либо editor page C
+
 ### Requirement: Floating editor menus отслеживают viewport и container layout
 
-Bubble и slash menus с `position: fixed` MUST использовать общий positioning lifecycle. Position MUST пересчитываться после editor transaction/selection update, window resize, window или container scroll и наблюдаемого layout resize; listeners/observers MUST очищаться при replacement editor/unmount. Positioning SHALL выполнять viewport shift/clipping и flip там, где preferred placement не помещается.
+Bubble и slash menus с `position: fixed` MUST использовать общий positioning lifecycle. Position MUST пересчитываться после editor transaction/selection update, window resize, window или container scroll и наблюдаемого layout resize; частые события одного animation frame SHALL объединяться в один layout recalculation; listeners/observers MUST очищаться при replacement editor/unmount. Positioning SHALL выполнять viewport shift/clipping и flip там, где preferred placement не помещается.
 
 #### Scenario: Контейнер редактора прокручивается
 - **WHEN** bubble или slash menu открыта и window либо scroll container меняет viewport coordinates editor anchor

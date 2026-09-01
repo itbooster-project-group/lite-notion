@@ -23,7 +23,9 @@ export {
 } from './lib/node-id-lifecycle';
 export {
   normalizePageDocumentForRendering,
+  type PageDocumentStaticRenderingInput,
   renderPageDocumentToHTML,
+  UnsupportedPageDocumentStaticRenderingSchemaError,
 } from './lib/static-rendering';
 export {
   decodePageDocumentState,

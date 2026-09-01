@@ -100,6 +100,9 @@ export function PageEditorSurface({ doc, editable }: PageEditorSurfaceProps) {
       },
       extensions: createPageDocumentEditorExtensions(doc),
       immediatelyRender: false,
+      onCreate: ({ editor: createdEditor }) => {
+        setTransientIdentity({ doc, editor: createdEditor });
+      },
     },
     [doc],
   );
@@ -141,7 +144,6 @@ export function PageEditorSurface({ doc, editable }: PageEditorSurfaceProps) {
     };
 
     resetDocumentTransientUi();
-    setTransientIdentity({ doc, editor });
     doc.on('destroy', resetDocumentTransientUi);
     editor?.on('destroy', resetDocumentTransientUi);
 
@@ -165,76 +167,89 @@ export function PageEditorSurface({ doc, editable }: PageEditorSurfaceProps) {
 
   return (
     <div className="w-full" data-page-editor-surface="">
-      {editable && editor && <EditorToolbar editor={editor} />}
-      {documentUiIsCurrent && editable && editor && linkFormOpen && (
-        <EditorFormDialog
-          description="Вставьте адрес — ссылку без протокола мы автоматически откроем по HTTPS."
-          editor={editor}
-          onClose={closeLinkForm}
-          title="Добавить ссылку"
-        >
-          <LinkForm
-            editor={editor}
-            initialSelection={linkSelectionRef.current}
-            onClose={closeLinkForm}
-          />
-        </EditorFormDialog>
-      )}
-      {documentUiIsCurrent && editable && editor && imageFormOpen && (
-        <EditorFormDialog
-          description="Добавьте безопасный HTTPS-адрес и описание изображения."
-          editor={editor}
-          onClose={() => setImageFormOpen(false)}
-          title="Добавить изображение"
-        >
-          <ImageForm editor={editor} onClose={() => setImageFormOpen(false)} />
-        </EditorFormDialog>
-      )}
-      {documentUiIsCurrent && editable && editor && youtubeFormOpen && (
-        <EditorFormDialog
-          description="Поддерживаются обычные и короткие ссылки YouTube."
-          editor={editor}
-          onClose={() => setYoutubeFormOpen(false)}
-          title="Добавить YouTube-видео"
-        >
-          <YoutubeForm editor={editor} onClose={() => setYoutubeFormOpen(false)} />
-        </EditorFormDialog>
-      )}
-      {documentUiIsCurrent && editable && editor && videoFormOpen && (
-        <EditorFormDialog
-          description="Добавьте прямой HTTPS-адрес файла MP4 или WebM."
-          editor={editor}
-          onClose={() => setVideoFormOpen(false)}
-          title="Добавить видео"
-        >
-          <VideoForm editor={editor} onClose={() => setVideoFormOpen(false)} />
-        </EditorFormDialog>
-      )}
-      {documentUiIsCurrent && editable && editor && (
-        <SlashMenu
-          editor={editor}
-          onLinkCommand={openLinkForm}
-          onMediaCommand={(mediaType) => {
-            setImageFormOpen(mediaType === 'image');
-            setVideoFormOpen(mediaType === 'video');
-            setYoutubeFormOpen(mediaType === 'youtube');
-          }}
-          onKeyDownChange={(handler) => {
-            slashKeyDownHandlerRef.current = handler;
-          }}
-        />
-      )}
-      {editable && editor && <BlockReorderControls editor={editor} />}
-      {documentUiIsCurrent && editable && editor && bubbleMenuPopup.position && (
+      {documentUiIsCurrent && editor ? (
+        <>
+          {editable && <EditorToolbar editor={editor} />}
+          {editable && linkFormOpen && (
+            <EditorFormDialog
+              description="Вставьте адрес — ссылку без протокола мы автоматически откроем по HTTPS."
+              editor={editor}
+              onClose={closeLinkForm}
+              title="Добавить ссылку"
+            >
+              <LinkForm
+                editor={editor}
+                initialSelection={linkSelectionRef.current}
+                onClose={closeLinkForm}
+              />
+            </EditorFormDialog>
+          )}
+          {editable && imageFormOpen && (
+            <EditorFormDialog
+              description="Добавьте безопасный HTTPS-адрес и описание изображения."
+              editor={editor}
+              onClose={() => setImageFormOpen(false)}
+              title="Добавить изображение"
+            >
+              <ImageForm editor={editor} onClose={() => setImageFormOpen(false)} />
+            </EditorFormDialog>
+          )}
+          {editable && youtubeFormOpen && (
+            <EditorFormDialog
+              description="Поддерживаются обычные и короткие ссылки YouTube."
+              editor={editor}
+              onClose={() => setYoutubeFormOpen(false)}
+              title="Добавить YouTube-видео"
+            >
+              <YoutubeForm editor={editor} onClose={() => setYoutubeFormOpen(false)} />
+            </EditorFormDialog>
+          )}
+          {editable && videoFormOpen && (
+            <EditorFormDialog
+              description="Добавьте прямой HTTPS-адрес файла MP4 или WebM."
+              editor={editor}
+              onClose={() => setVideoFormOpen(false)}
+              title="Добавить видео"
+            >
+              <VideoForm editor={editor} onClose={() => setVideoFormOpen(false)} />
+            </EditorFormDialog>
+          )}
+          {editable && (
+            <SlashMenu
+              editor={editor}
+              onLinkCommand={openLinkForm}
+              onMediaCommand={(mediaType) => {
+                setImageFormOpen(mediaType === 'image');
+                setVideoFormOpen(mediaType === 'video');
+                setYoutubeFormOpen(mediaType === 'youtube');
+              }}
+              onKeyDownChange={(handler) => {
+                slashKeyDownHandlerRef.current = handler;
+              }}
+            />
+          )}
+          {editable && <BlockReorderControls editor={editor} />}
+          {editable && bubbleMenuPopup.position && (
+            <div
+              className="fixed z-50"
+              ref={bubbleMenuPopup.floatingRef}
+              style={bubbleMenuPopup.position}
+            >
+              <BubbleFormattingMenu editor={editor} onOpenLinkForm={openLinkForm} />
+            </div>
+          )}
+          <EditorContent editor={editor} />
+        </>
+      ) : (
         <div
-          className="fixed z-50"
-          ref={bubbleMenuPopup.floatingRef}
-          style={bubbleMenuPopup.position}
+          aria-busy="true"
+          aria-live="polite"
+          className="min-h-64 px-1 py-4 text-sm text-muted-foreground"
+          data-page-editor-transition=""
         >
-          <BubbleFormattingMenu editor={editor} onOpenLinkForm={openLinkForm} />
+          Подготавливаем документ…
         </div>
       )}
-      <EditorContent editor={editor} />
     </div>
   );
 }

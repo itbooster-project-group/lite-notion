@@ -2,7 +2,7 @@
 
 import type { Editor } from '@tiptap/core';
 import type { CSSProperties } from 'react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 type EditorPopupPlacement = 'above' | 'below';
 
@@ -28,6 +28,7 @@ export function useEditorPopupPosition({
 }: UseEditorPopupPositionOptions) {
   const [floatingElement, setFloatingElement] = useState<HTMLElement | null>(null);
   const [position, setPosition] = useState<CSSProperties | undefined>();
+  const scheduledFrameRef = useRef<number | undefined>(undefined);
 
   const refresh = useCallback(() => {
     if (!editor || editor.isDestroyed) {
@@ -78,28 +79,41 @@ export function useEditorPopupPosition({
     });
   }, [editor, floatingElement, getAnchor, placement]);
 
+  const scheduleRefresh = useCallback(() => {
+    if (scheduledFrameRef.current !== undefined) return;
+
+    scheduledFrameRef.current = window.requestAnimationFrame(() => {
+      scheduledFrameRef.current = undefined;
+      refresh();
+    });
+  }, [refresh]);
+
   useEffect(() => {
     setPosition(undefined);
     if (!editor) return;
     refresh();
-    editor.on('selectionUpdate', refresh);
-    editor.on('transaction', refresh);
-    window.addEventListener('resize', refresh);
-    window.addEventListener('scroll', refresh, true);
+    editor.on('selectionUpdate', scheduleRefresh);
+    editor.on('transaction', scheduleRefresh);
+    window.addEventListener('resize', scheduleRefresh);
+    window.addEventListener('scroll', scheduleRefresh, true);
 
     const resizeObserver =
-      typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(refresh);
+      typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(scheduleRefresh);
     resizeObserver?.observe(editor.view.dom);
     if (floatingElement) resizeObserver?.observe(floatingElement);
 
     return () => {
-      editor.off('selectionUpdate', refresh);
-      editor.off('transaction', refresh);
-      window.removeEventListener('resize', refresh);
-      window.removeEventListener('scroll', refresh, true);
+      editor.off('selectionUpdate', scheduleRefresh);
+      editor.off('transaction', scheduleRefresh);
+      window.removeEventListener('resize', scheduleRefresh);
+      window.removeEventListener('scroll', scheduleRefresh, true);
       resizeObserver?.disconnect();
+      if (scheduledFrameRef.current !== undefined) {
+        window.cancelAnimationFrame(scheduledFrameRef.current);
+        scheduledFrameRef.current = undefined;
+      }
     };
-  }, [editor, floatingElement, refresh]);
+  }, [editor, floatingElement, refresh, scheduleRefresh]);
 
   return { floatingRef: setFloatingElement, position } as const;
 }

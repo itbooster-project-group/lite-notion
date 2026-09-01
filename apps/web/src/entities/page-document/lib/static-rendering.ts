@@ -2,12 +2,26 @@ import type { JSONContent } from '@tiptap/core';
 import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
 
 import { createPageDocumentSchemaExtensions } from '../model/editor-schema';
+import { isSupportedPageDocumentSchemaVersion } from '../model/schema-version';
 import {
   normalizePageDocumentLink,
   normalizePersistedPageDocumentImageAttributes,
   normalizePersistedPageDocumentVideoAttributes,
   normalizePersistedPageDocumentYoutubeAttributes,
 } from './media-validation';
+
+export type PageDocumentStaticRenderingInput = Readonly<{
+  content: JSONContent;
+  schemaVersion: unknown;
+}>;
+
+export class UnsupportedPageDocumentStaticRenderingSchemaError extends Error {
+  override readonly name = 'UnsupportedPageDocumentStaticRenderingSchemaError';
+
+  constructor(readonly schemaVersion: unknown) {
+    super('Static rendering не поддерживает версию схемы документа.');
+  }
+}
 
 const RENDERABLE_NODE_TYPES = new Set([
   'bulletList',
@@ -85,7 +99,14 @@ export function normalizePageDocumentForRendering(content: JSONContent): JSONCon
   return normalizeNode(content) ?? { type: 'doc' };
 }
 
-export function renderPageDocumentToHTML(content: JSONContent): string {
+export function renderPageDocumentToHTML({
+  content,
+  schemaVersion,
+}: PageDocumentStaticRenderingInput): string {
+  if (!isSupportedPageDocumentSchemaVersion(schemaVersion)) {
+    throw new UnsupportedPageDocumentStaticRenderingSchemaError(schemaVersion);
+  }
+
   return renderToHTMLString({
     content: normalizePageDocumentForRendering(content),
     extensions: createPageDocumentSchemaExtensions(),

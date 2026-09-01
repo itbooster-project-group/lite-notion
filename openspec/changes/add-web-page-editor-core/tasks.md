@@ -54,11 +54,13 @@
 - [x] 6.7 Устранить review findings: caller-owned session и Strict Mode regression, native clipboard nodeId deconflict с общим helper, deterministic media markup contract, visible keyboard reorder controls, scoped page-document CSP и deduplicated lockfile.
 - [x] 6.8 Устранить follow-up review findings: document transient reset, Yjs RelativePosition для LinkForm с collaboration regression, persisted-content render boundary, alignment semantics, общий popup positioning lifecycle, CSS-module rich-text presentation, drag handle a11y, узкие slice barrels, external-media privacy note и явный InMemory Y.Doc ownership transfer.
 - [x] 6.9 Запустить `openspec validate add-web-page-editor-core --strict` после выполнения implementation и verification tasks.
-- [ ] 6.10 Получить human review implementation и архивировать change только после прохождения фактического CI и review.
+- [x] 6.10 Устранить follow-up stale-editor finding: связать editor instance с Y.Doc в момент создания, закрыть guard-ом весь interactive subtree, добавить replacement/rapid-switch regressions; сделать static renderer version-aware, синхронизировать HTTP(S)/mailto rendering contract и безопасно batch-ить popup position events.
+- [x] 6.11 Повторно запустить targeted regressions, `pnpm dedupe --check`, lint, typecheck, tests, build, Steiger и `openspec validate add-web-page-editor-core --strict` на финальном состоянии.
+- [ ] 6.12 Получить human review implementation и архивировать change только после прохождения фактического CI и review.
 
 ## Follow-up work — не является задачами этого change
 
 - Отдельный Hocuspocus change реализует provider/server, connection/sync diagnostics, effective permissions и production composition. До начала полноценной editing/collaboration session adapter валидирует `PAGE_DOCUMENTS.tiptap_schema_version`; Yjs protocol validity не заменяет TipTap/ProseMirror application-schema compatibility. `synced` с collaboration server не будет интерпретироваться frontend как PostgreSQL durability guarantee.
-- Отдельный publication change создаст immutable derived TipTap JSON при publish и public Next.js renderer без per-request Yjs decode.
+- Отдельный publication change создаст immutable derived TipTap JSON со schema metadata при publish и public Next.js renderer без per-request Yjs decode; unsupported renderer schema version приводит к явной ошибке/upgrade path, а не к partial silent rendering.
 - Отдельный asset change свяжет уже сохранённые media `nodeId` с `PAGE_ASSETS` и определит uploads/asset lifecycle.
 - Если снова понадобится REST editor, отдельный reviewed change определит REST-specific save lifecycle и single-writer protection; он не расширяет base `PageDocumentSession`.

@@ -248,9 +248,11 @@ const PageDocumentLink = Link.extend({
         ? normalizePageDocumentLink(HTMLAttributes.href)
         : undefined;
 
-    return href
+    if (!href) return ['span', {}, 0];
+
+    return href.startsWith('http:') || href.startsWith('https:')
       ? ['a', { href, rel: 'noopener noreferrer', target: '_blank' }, 0]
-      : ['span', {}, 0];
+      : ['a', { href }, 0];
   },
 }).configure({
   autolink: true,
