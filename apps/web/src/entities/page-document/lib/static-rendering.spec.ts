@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 
 import { PAGE_DOCUMENT_SCHEMA_VERSION } from '../model/schema-version';
 import {
-  normalizePageDocumentForRendering,
   renderPageDocumentToHTML,
   UnsupportedPageDocumentStaticRenderingSchemaError,
 } from './static-rendering';
@@ -45,27 +44,15 @@ describe('page document static rendering boundary', () => {
       type: 'doc',
     };
 
-    const normalized = normalizePageDocumentForRendering(untrustedContent);
     const html = renderPageDocumentToHTML({
       content: untrustedContent,
       schemaVersion: PAGE_DOCUMENT_SCHEMA_VERSION,
     });
 
-    expect(normalized.content?.[0]?.content).toEqual([
-      { text: 'unsafe', type: 'text' },
-      {
-        marks: [{ attrs: { href: 'https://example.com/docs' }, type: 'link' }],
-        text: 'safe',
-        type: 'text',
-      },
-    ]);
-    expect(normalized.content?.[1]?.attrs).toMatchObject({
-      alignment: 'center',
-      caption: 'Вид',
-      widthPercent: 100,
-    });
     expect(html).not.toContain('javascript:');
+    expect(html).toContain('unsafe');
     expect(html).toContain('href="https://example.com/docs"');
+    expect(html).toContain('<figcaption>Вид</figcaption>');
     expect(html).toContain('style="width:100%;margin-inline-start:auto;margin-inline-end:auto"');
   });
 

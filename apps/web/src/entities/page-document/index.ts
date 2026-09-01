@@ -22,7 +22,6 @@ export {
   preparePageDocumentContentForInsertion,
 } from './lib/node-id-lifecycle';
 export {
-  normalizePageDocumentForRendering,
   type PageDocumentStaticRenderingInput,
   renderPageDocumentToHTML,
   UnsupportedPageDocumentStaticRenderingSchemaError,

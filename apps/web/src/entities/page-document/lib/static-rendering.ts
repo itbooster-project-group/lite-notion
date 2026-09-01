@@ -89,11 +89,7 @@ function normalizeNode(node: JSONContent): JSONContent | undefined {
   };
 }
 
-/**
- * Converts untrusted persisted/derived JSON into the schema-v1 subset that may
- * cross the immutable/static rendering boundary.
- */
-export function normalizePageDocumentForRendering(content: JSONContent): JSONContent {
+function normalizePageDocumentV1Content(content: JSONContent): JSONContent {
   if (content.type !== 'doc') return { type: 'doc' };
 
   return normalizeNode(content) ?? { type: 'doc' };
@@ -108,7 +104,7 @@ export function renderPageDocumentToHTML({
   }
 
   return renderToHTMLString({
-    content: normalizePageDocumentForRendering(content),
+    content: normalizePageDocumentV1Content(content),
     extensions: createPageDocumentSchemaExtensions(),
   });
 }
