@@ -39,7 +39,7 @@ describe('PageDocumentService', () => {
     // содержимое читает другой.
     const store = new Map<string, StoredDocument>();
     pages = new InMemoryPagesRepository(store);
-    documents = new InMemoryPageDocumentRepository(store);
+    documents = new InMemoryPageDocumentRepository(store, pages.pages);
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -212,6 +212,33 @@ describe('PageDocumentService', () => {
     }
 
     await expect(service.read(page.id, owner)).rejects.toBeInstanceOf(PageNotFoundError);
+  });
+
+  it('отказывает записью, если страницу удалили после проверки', async () => {
+    const page = await createPage();
+    const state = new Uint8Array([1, 2, 3]);
+
+    await service.replace({
+      ownerId: owner,
+      pageId: page.id,
+      tiptapSchemaVersion: 2,
+      yjsState: state,
+    });
+    await pages.softDelete(page.id, owner);
+
+    // Репозиторий напрямую: сервис отсеял бы запрос своей проверкой, а гонка
+    // происходит как раз после неё — проверка живости обязана быть в самой записи.
+    await expect(
+      documents.replace({
+        pageId: page.id,
+        tiptapSchemaVersion: 9,
+        yjsState: new Uint8Array([9, 9]),
+      }),
+    ).resolves.toBeNull();
+    expect(documents.documents.get(page.id)).toMatchObject({
+      tiptapSchemaVersion: 2,
+      yjsState: state,
+    });
   });
 
   it('не затрагивает дерево при записи содержимого', async () => {

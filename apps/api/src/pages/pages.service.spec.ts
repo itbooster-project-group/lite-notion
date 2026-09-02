@@ -3,7 +3,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { ProjectNotFoundError } from '../projects/errors';
 import { ProjectsRepository } from '../projects/projects.repository';
-import { InMemoryProjectsRepository } from '../projects/projects.repository.in-memory';
+import {
+  InMemoryProjectsRepository,
+  type StoredProject,
+} from '../projects/projects.repository.in-memory';
 import { ProjectsService } from '../projects/projects.service';
 import { TIPTAP_SCHEMA_VERSION } from './constants';
 import {
@@ -14,7 +17,7 @@ import {
   SiblingParentMismatchError,
 } from './errors';
 import { PagesRepository } from './pages.repository';
-import { InMemoryPagesRepository } from './pages.repository.in-memory';
+import { InMemoryPagesRepository, type StoredPage } from './pages.repository.in-memory';
 import { PagesService } from './pages.service';
 
 const owner = '11111111-1111-1111-1111-111111111111';
@@ -38,8 +41,12 @@ describe('PagesService', () => {
     });
 
   beforeEach(async () => {
-    pages = new InMemoryPagesRepository();
-    projects = new InMemoryProjectsRepository();
+    // Хранилища общие на оба репозитория: в базе это отдельные таблицы одной схемы,
+    // и каскад удаления проекта обязан быть виден через репозиторий страниц.
+    const pageStore = new Map<string, StoredPage>();
+    const projectStore = new Map<string, StoredProject>();
+    pages = new InMemoryPagesRepository(new Map(), projectStore, pageStore);
+    projects = new InMemoryProjectsRepository(pageStore, projectStore);
 
     const moduleRef = await Test.createTestingModule({
       providers: [

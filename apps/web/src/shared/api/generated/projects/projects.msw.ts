@@ -9,7 +9,7 @@ import { faker } from '@faker-js/faker';
 import type { RequestHandlerOptions } from 'msw';
 import { HttpResponse, http } from 'msw';
 
-import type { ProjectDto } from '../model';
+import type { DeletedProjectDto, ProjectDto } from '../model';
 
 export const getCreateProjectResponseMock = (
   overrideResponse: Partial<Extract<ProjectDto, object>> = {},
@@ -26,6 +26,23 @@ export const getListProjectsResponseMock = (): ProjectDto[] =>
     ownerId: faker.string.uuid(),
     name: faker.string.alpha({ length: { min: 10, max: 20 } }),
   }));
+
+export const getGetProjectTrashResponseMock = (): DeletedProjectDto[] =>
+  Array.from({ length: faker.number.int({ min: 1, max: 10 }) }, (_, i) => i + 1).map(() => ({
+    id: faker.string.uuid(),
+    ownerId: faker.string.uuid(),
+    name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    deletedAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
+  }));
+
+export const getRestoreProjectResponseMock = (
+  overrideResponse: Partial<Extract<ProjectDto, object>> = {},
+): ProjectDto => ({
+  id: faker.string.uuid(),
+  ownerId: faker.string.uuid(),
+  name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  ...overrideResponse,
+});
 
 export const getCreateProjectMockHandler = (
   overrideResponse?:
@@ -72,4 +89,115 @@ export const getListProjectsMockHandler = (
     options,
   );
 };
-export const getProjectsMock = () => [getCreateProjectMockHandler(), getListProjectsMockHandler()];
+
+export const getGetProjectTrashMockHandler = (
+  overrideResponse?:
+    | DeletedProjectDto[]
+    | ((
+        info: Parameters<Parameters<typeof http.get>[1]>[0],
+      ) => Promise<DeletedProjectDto[]> | DeletedProjectDto[]),
+  options?: RequestHandlerOptions,
+) => {
+  return http.get(
+    '*/api/v1/projects/trash',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetProjectTrashResponseMock(),
+        { status: 200 },
+      );
+    },
+    options,
+  );
+};
+
+export const getPurgeProjectTrashMockHandler = (
+  overrideResponse?:
+    | void
+    | ((info: Parameters<Parameters<typeof http.delete>[1]>[0]) => Promise<void> | void),
+  options?: RequestHandlerOptions,
+) => {
+  return http.delete(
+    '*/api/v1/projects/trash',
+    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+      if (typeof overrideResponse === 'function') {
+        await overrideResponse(info);
+      }
+
+      return new HttpResponse(null, { status: 204 });
+    },
+    options,
+  );
+};
+
+export const getPurgeProjectMockHandler = (
+  overrideResponse?:
+    | void
+    | ((info: Parameters<Parameters<typeof http.delete>[1]>[0]) => Promise<void> | void),
+  options?: RequestHandlerOptions,
+) => {
+  return http.delete(
+    '*/api/v1/projects/trash/:projectId',
+    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+      if (typeof overrideResponse === 'function') {
+        await overrideResponse(info);
+      }
+
+      return new HttpResponse(null, { status: 204 });
+    },
+    options,
+  );
+};
+
+export const getDeleteProjectMockHandler = (
+  overrideResponse?:
+    | void
+    | ((info: Parameters<Parameters<typeof http.delete>[1]>[0]) => Promise<void> | void),
+  options?: RequestHandlerOptions,
+) => {
+  return http.delete(
+    '*/api/v1/projects/:projectId',
+    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+      if (typeof overrideResponse === 'function') {
+        await overrideResponse(info);
+      }
+
+      return new HttpResponse(null, { status: 204 });
+    },
+    options,
+  );
+};
+
+export const getRestoreProjectMockHandler = (
+  overrideResponse?:
+    | ProjectDto
+    | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<ProjectDto> | ProjectDto),
+  options?: RequestHandlerOptions,
+) => {
+  return http.post(
+    '*/api/v1/projects/:projectId/restore',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getRestoreProjectResponseMock(),
+        { status: 200 },
+      );
+    },
+    options,
+  );
+};
+export const getProjectsMock = () => [
+  getCreateProjectMockHandler(),
+  getListProjectsMockHandler(),
+  getGetProjectTrashMockHandler(),
+  getPurgeProjectTrashMockHandler(),
+  getPurgeProjectMockHandler(),
+  getDeleteProjectMockHandler(),
+  getRestoreProjectMockHandler(),
+];

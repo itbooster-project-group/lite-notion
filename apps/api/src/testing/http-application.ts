@@ -10,9 +10,16 @@ import { PrismaService } from '../database/prisma.service';
 import { PageDocumentRepository } from '../pages/page-document/page-document.repository';
 import { InMemoryPageDocumentRepository } from '../pages/page-document/page-document.repository.in-memory';
 import { PagesRepository } from '../pages/pages.repository';
-import { InMemoryPagesRepository, type StoredDocument } from '../pages/pages.repository.in-memory';
+import {
+  InMemoryPagesRepository,
+  type StoredDocument,
+  type StoredPage,
+} from '../pages/pages.repository.in-memory';
 import { ProjectsRepository } from '../projects/projects.repository';
-import { InMemoryProjectsRepository } from '../projects/projects.repository.in-memory';
+import {
+  InMemoryProjectsRepository,
+  type StoredProject,
+} from '../projects/projects.repository.in-memory';
 
 export interface HttpTestContext {
   app: INestApplication;
@@ -32,9 +39,13 @@ export async function createHttpTestContext(): Promise<HttpTestContext> {
   // Одна таблица документов на оба репозитория: страницу создаёт репозиторий
   // страниц, а содержимое читает и пишет репозиторий документа.
   const documentStore = new Map<string, StoredDocument>();
-  const pages = new InMemoryPagesRepository(documentStore);
-  const documents = new InMemoryPageDocumentRepository(documentStore);
-  const projects = new InMemoryProjectsRepository();
+  // Хранилища общие на оба репозитория: в базе это отдельные таблицы одной схемы,
+  // и каскад удаления проекта обязан быть виден через репозиторий страниц.
+  const pageStore = new Map<string, StoredPage>();
+  const projectStore = new Map<string, StoredProject>();
+  const pages = new InMemoryPagesRepository(documentStore, projectStore, pageStore);
+  const documents = new InMemoryPageDocumentRepository(documentStore, pageStore);
+  const projects = new InMemoryProjectsRepository(pageStore, projectStore, documentStore);
 
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(PrismaService)
