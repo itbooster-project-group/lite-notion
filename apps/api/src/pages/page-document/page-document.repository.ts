@@ -29,6 +29,11 @@ const DOCUMENT_FIELDS = { pageId: true, tiptapSchemaVersion: true, yjsState: tru
 export abstract class PageDocumentRepository {
   abstract find(pageId: string): Promise<PageDocumentRecord | null>;
 
+  /**
+   * `null`, когда страницы уже нет или она лежит в корзине. Проверка живости
+   * идёт условием самой записи, а не отдельным запросом до неё: между двумя
+   * запросами страницу успевают удалить, и содержимое ушло бы в корзину.
+   */
   abstract replace(input: ReplaceDocumentInput): Promise<PageDocumentRecord | null>;
 }
 
@@ -49,7 +54,9 @@ export class PrismaPageDocumentRepository extends PageDocumentRepository {
         tiptapSchemaVersion: input.tiptapSchemaVersion,
         yjsState: input.yjsState,
       },
-      where: { pageId: input.pageId },
+      // Мягкое удаление строку документа не трогает, поэтому одного `pageId`
+      // мало: условие живости страницы делает проверку и запись одним UPDATE.
+      where: { page: { deletedAt: null }, pageId: input.pageId },
     });
 
     return count === 0 ? null : this.find(input.pageId);

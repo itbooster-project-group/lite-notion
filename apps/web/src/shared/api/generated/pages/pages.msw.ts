@@ -9,7 +9,7 @@ import { faker } from '@faker-js/faker';
 import type { RequestHandlerOptions } from 'msw';
 import { HttpResponse, http } from 'msw';
 
-import type { PageDocumentDto, PageDto, PageTreeNodeDto } from '../model';
+import type { DeletedPageTreeNodeDto, PageDocumentDto, PageDto, PageTreeNodeDto } from '../model';
 
 export const getCreatePageResponseMock = (
   overrideResponse: Partial<Extract<PageDto, object>> = {},
@@ -37,6 +37,21 @@ export const getGetPageTreeResponseMock = (): PageTreeNodeDto[] =>
     position: faker.string.alpha({ length: { min: 10, max: 20 } }),
     createdAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
     updatedAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
+    children: [],
+  }));
+
+export const getGetPageTrashResponseMock = (): DeletedPageTreeNodeDto[] =>
+  Array.from({ length: faker.number.int({ min: 1, max: 10 }) }, (_, i) => i + 1).map(() => ({
+    id: faker.string.uuid(),
+    ownerId: faker.string.uuid(),
+    projectId: faker.string.uuid(),
+    parentPageId: faker.helpers.arrayElement([faker.string.uuid(), null]),
+    createdById: faker.string.uuid(),
+    title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    position: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    createdAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
+    updatedAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
+    deletedAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
     children: [],
   }));
 
@@ -71,6 +86,21 @@ export const getRenamePageResponseMock = (
 });
 
 export const getMovePageResponseMock = (
+  overrideResponse: Partial<Extract<PageDto, object>> = {},
+): PageDto => ({
+  id: faker.string.uuid(),
+  ownerId: faker.string.uuid(),
+  projectId: faker.string.uuid(),
+  parentPageId: faker.helpers.arrayElement([faker.string.uuid(), null]),
+  createdById: faker.string.uuid(),
+  title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  position: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  createdAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
+  updatedAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
+  ...overrideResponse,
+});
+
+export const getRestorePageResponseMock = (
   overrideResponse: Partial<Extract<PageDto, object>> = {},
 ): PageDto => ({
   id: faker.string.uuid(),
@@ -149,6 +179,49 @@ export const getGetPageTreeMockHandler = (
   );
 };
 
+export const getGetPageTrashMockHandler = (
+  overrideResponse?:
+    | DeletedPageTreeNodeDto[]
+    | ((
+        info: Parameters<Parameters<typeof http.get>[1]>[0],
+      ) => Promise<DeletedPageTreeNodeDto[]> | DeletedPageTreeNodeDto[]),
+  options?: RequestHandlerOptions,
+) => {
+  return http.get(
+    '*/api/v1/pages/trash',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetPageTrashResponseMock(),
+        { status: 200 },
+      );
+    },
+    options,
+  );
+};
+
+export const getPurgePageTrashMockHandler = (
+  overrideResponse?:
+    | void
+    | ((info: Parameters<Parameters<typeof http.delete>[1]>[0]) => Promise<void> | void),
+  options?: RequestHandlerOptions,
+) => {
+  return http.delete(
+    '*/api/v1/pages/trash',
+    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+      if (typeof overrideResponse === 'function') {
+        await overrideResponse(info);
+      }
+
+      return new HttpResponse(null, { status: 204 });
+    },
+    options,
+  );
+};
+
 export const getGetPageMockHandler = (
   overrideResponse?:
     | PageDto
@@ -193,6 +266,25 @@ export const getRenamePageMockHandler = (
   );
 };
 
+export const getDeletePageMockHandler = (
+  overrideResponse?:
+    | void
+    | ((info: Parameters<Parameters<typeof http.delete>[1]>[0]) => Promise<void> | void),
+  options?: RequestHandlerOptions,
+) => {
+  return http.delete(
+    '*/api/v1/pages/:pageId',
+    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+      if (typeof overrideResponse === 'function') {
+        await overrideResponse(info);
+      }
+
+      return new HttpResponse(null, { status: 204 });
+    },
+    options,
+  );
+};
+
 export const getMovePageMockHandler = (
   overrideResponse?:
     | PageDto
@@ -208,6 +300,47 @@ export const getMovePageMockHandler = (
             ? await overrideResponse(info)
             : overrideResponse
           : getMovePageResponseMock(),
+        { status: 200 },
+      );
+    },
+    options,
+  );
+};
+
+export const getPurgePageMockHandler = (
+  overrideResponse?:
+    | void
+    | ((info: Parameters<Parameters<typeof http.delete>[1]>[0]) => Promise<void> | void),
+  options?: RequestHandlerOptions,
+) => {
+  return http.delete(
+    '*/api/v1/pages/trash/:pageId',
+    async (info: Parameters<Parameters<typeof http.delete>[1]>[0]) => {
+      if (typeof overrideResponse === 'function') {
+        await overrideResponse(info);
+      }
+
+      return new HttpResponse(null, { status: 204 });
+    },
+    options,
+  );
+};
+
+export const getRestorePageMockHandler = (
+  overrideResponse?:
+    | PageDto
+    | ((info: Parameters<Parameters<typeof http.post>[1]>[0]) => Promise<PageDto> | PageDto),
+  options?: RequestHandlerOptions,
+) => {
+  return http.post(
+    '*/api/v1/pages/:pageId/restore',
+    async (info: Parameters<Parameters<typeof http.post>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getRestorePageResponseMock(),
         { status: 200 },
       );
     },
@@ -265,9 +398,14 @@ export const getUpdatePageDocumentMockHandler = (
 export const getPagesMock = () => [
   getCreatePageMockHandler(),
   getGetPageTreeMockHandler(),
+  getGetPageTrashMockHandler(),
+  getPurgePageTrashMockHandler(),
   getGetPageMockHandler(),
   getRenamePageMockHandler(),
+  getDeletePageMockHandler(),
   getMovePageMockHandler(),
+  getPurgePageMockHandler(),
+  getRestorePageMockHandler(),
   getGetPageDocumentMockHandler(),
   getUpdatePageDocumentMockHandler(),
 ];

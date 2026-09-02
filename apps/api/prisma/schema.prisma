@@ -43,37 +43,58 @@ model Session {
   @@index([expiresAt])
 }
 
+/// Источник удаления страницы: кто именно инициировал пометку. Отличает корень
+/// корзины от каскадно помеченных потомков и задаёт границы восстановления.
+/// SELF восстанавливается адресно и не воскресает вместе с предком; PARENT_PAGE
+/// снимается восстановлением предка-страницы; PROJECT — восстановлением проекта.
+/// Подробности в openspec design.md, раздел 2.
+enum PageDeletionOrigin {
+  SELF
+  PARENT_PAGE
+  PROJECT
+}
+
 /// Контейнер верхнего уровня для дерева страниц. Пара (id, ownerId) — составной
 /// ключ-кандидат: он существует только затем, чтобы на него мог сослаться composite
 /// FK со стороны Page и база сама держала «проект страницы принадлежит её владельцу».
 model Project {
-  id      String @id @default(uuid()) @db.Uuid
-  ownerId String @db.Uuid
-  name    String @db.VarChar(255)
+  id        String    @id @default(uuid()) @db.Uuid
+  ownerId   String    @db.Uuid
+  name      String    @db.VarChar(255)
+  deletedAt DateTime?
 
   owner User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   pages Page[]
 
   @@unique([id, ownerId])
   @@index([ownerId])
+  @@index([ownerId, deletedAt])
+  @@index([deletedAt])
 }
 
-/// Узел дерева страниц. Дерево целиком принадлежит одному владельцу и лежит в одном
-/// проекте: и то, и другое держит тройной composite FK (parentPageId, ownerId,
-/// projectId) → Page(id, ownerId, projectId), а не проверка в коде. parentPageId
-/// nullable, и MATCH SIMPLE отключает проверку для root-страниц — это и нужно.
-/// Порядок братьев — fractional rank в position, подробности в openspec design.md.
+// Узел дерева страниц. Дерево целиком принадлежит одному владельцу и лежит в одном
+// проекте: и то, и другое держит тройной composite FK (parentPageId, ownerId,
+// projectId) → Page(id, ownerId, projectId), а не проверка в коде. parentPageId
+// nullable, и MATCH SIMPLE отключает проверку для root-страниц — это и нужно.
+// Порядок братьев — fractional rank в position, подробности в openspec design.md.
+//
+// deletedAt и deletedOrigin — пара: оба null либо оба не null. Согласованность держит
+// CHECK-constraint в миграции 20260831..._add_page_tree_soft_delete, а не код: Prisma
+// такое ограничение не выражает. Мягкое удаление не трогает parentPageId и position —
+// они нужны восстановлению, поэтому нарисованная в корзине вложенность и физическая
+// расходятся, и корзина собирается по deletedOrigin, а не по parentPageId.
 model Page {
-  id           String    @id @default(uuid()) @db.Uuid
-  ownerId      String    @db.Uuid
-  projectId    String    @db.Uuid
-  parentPageId String?   @db.Uuid
-  createdById  String    @db.Uuid
-  title        String    @db.VarChar(255)
-  position     String    @db.VarChar(255)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  deletedAt    DateTime?
+  id            String              @id @default(uuid()) @db.Uuid
+  ownerId       String              @db.Uuid
+  projectId     String              @db.Uuid
+  parentPageId  String?             @db.Uuid
+  createdById   String              @db.Uuid
+  title         String              @db.VarChar(255)
+  position      String              @db.VarChar(255)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  deletedAt     DateTime?
+  deletedOrigin PageDeletionOrigin?
 
   owner     User          @relation("PageOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   createdBy User          @relation("PageCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
@@ -85,6 +106,8 @@ model Page {
   @@unique([id, ownerId, projectId])
   @@index([ownerId, parentPageId, position])
   @@index([ownerId, deletedAt])
+  // Очистка по сроку хранения идёт без владельца: WHERE "deletedAt" < cutoff.
+  @@index([deletedAt])
 }
 
 /// Содержимое страницы. Строка создаётся вместе со страницей пустой и удаляется
