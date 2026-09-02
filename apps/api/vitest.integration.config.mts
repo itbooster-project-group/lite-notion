@@ -1,5 +1,7 @@
 import { defineConfig } from 'vitest/config';
 
+import { FailedOnlyReporter } from './vitest.config.mjs';
+
 /**
  * Интеграционные тесты: единственное место, где допустимо обращение к живой
  * базе. Юнит-конфигурация их не подхватывает — она включает `*.spec.ts`, а эти
@@ -21,5 +23,11 @@ export default defineConfig({
     fileParallelism: false,
     include: ['src/**/*.integration-spec.ts'],
     setupFiles: ['./vitest.setup.ts'],
+    hideSkippedTests: true,
+    printConsoleTrace: true,
+    // Убирает node_modules из стек-трейса
+    onStackTrace: (_error, frame) => !frame.file.includes('node_modules'),
+    reporters: [new FailedOnlyReporter()],
+    slowTestThreshold: 1000,
   },
 });
