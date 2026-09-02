@@ -58,7 +58,9 @@ export async function createHttpTestContext(): Promise<HttpTestContext> {
     .useValue(projects)
     .compile();
 
-  const app = moduleRef.createNestApplication();
+  const app = moduleRef.createNestApplication({
+    logger: ['error', 'fatal'],
+  });
 
   configureApplication(app, {
     corsOrigin: 'http://localhost:3000',
