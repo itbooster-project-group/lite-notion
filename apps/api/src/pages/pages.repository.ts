@@ -241,11 +241,6 @@ export class PrismaPagesRepository extends PagesRepository {
 
   async move(input: MovePageInput): Promise<PageRecord> {
     return this.prisma.$transaction(async (tx) => {
-      // Первой операцией и до любого чтения: две транзакции, взявшие строчные
-      // блокировки до advisory lock, получили бы deadlock. Блокировка снимается
-      // вместе с транзакцией и берётся только на перемещение.
-      // $executeRaw, а не $queryRaw: функция возвращает void, и Prisma не умеет
-      // десериализовать такую колонку — запрос упал бы на живой базе.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.ownerId}))`;
 
       const page = await tx.page.findFirst({

@@ -149,10 +149,6 @@ export class PrismaProjectsRepository extends ProjectsRepository {
       // не попав в перечень, который подтверждал вызывающий.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${ownerId}))`;
 
-      // Без блокировки подсчёт обречённых страниц и удаление разъезжаются:
-      // READ COMMITTED позволяет параллельному мягкому удалению страницы
-      // закоммититься между `assertConfirmed` и `delete`, и она уедет
-      // навсегда, не попав в перечень, который подтверждал вызывающий.
       const project = await tx.project.findFirst({
         select: { id: true },
         where: { deletedAt: { not: null }, id, ownerId },
