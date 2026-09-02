@@ -14,10 +14,10 @@
   "rtl": false,
   "aliases": {
     "components": "@/shared/ui",
-    "utils": "@/shared/libs",
+    "utils": "@/shared/lib",
     "ui": "@/shared/ui/shadcn",
-    "lib": "@/shared/libs",
-    "hooks": "@/shared/libs/hooks"
+    "lib": "@/shared/lib",
+    "hooks": "@/shared/lib/hooks"
   },
   "menuColor": "default",
   "menuAccent": "subtle",

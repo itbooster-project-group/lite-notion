@@ -30,6 +30,7 @@ describe('private shell navigation', () => {
     );
 
     expect(screen.getByRole('link', { name: 'Lite Notion' })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('banner').firstElementChild).not.toHaveClass('max-w-shell', 'mx-auto');
 
     const profileLink = screen.getByRole('link', { name: 'Ada Lovelace' });
     expect(profileLink).toHaveAttribute('href', '/profile');
