@@ -30,6 +30,7 @@ import {
 
 import { type AuthenticatedUser, CurrentUser } from '../common/decorators/current-user.decorator';
 import { CascadeQueryDto } from '../common/dto/cascade-query.dto';
+import { PurgeConfirmationResponseDto } from '../common/dto/purge-confirmation-response.dto';
 import { HttpErrorResponseDto } from '../http-error-response.dto';
 // Не `import type`: emitDecoratorMetadata кладёт в design:paramtypes рантайм-ссылку
 // на класс, и без неё ValidationPipe молча перестаёт валидировать тело запроса.
@@ -177,7 +178,7 @@ export class PagesController {
   @ApiNoContentResponse({ description: 'Page permanently deleted' })
   @ApiConflictResponse({
     description: 'Trash entries outside the target would be destroyed; confirm with cascade=true',
-    type: HttpErrorResponseDto,
+    type: PurgeConfirmationResponseDto,
   })
   async purge(
     @CurrentUser() user: AuthenticatedUser,

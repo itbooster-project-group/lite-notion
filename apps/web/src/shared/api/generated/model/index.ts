@@ -21,6 +21,7 @@ export * from './pageDocumentDto';
 export * from './pageDto';
 export * from './pageTreeNodeDto';
 export * from './projectDto';
+export * from './purgeConfirmationResponseDto';
 export * from './purgePageParams';
 export * from './purgeProjectParams';
 export * from './purgeProjectTrashParams';

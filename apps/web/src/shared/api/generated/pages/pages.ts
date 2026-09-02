@@ -32,6 +32,7 @@ import type {
   PageDocumentDto,
   PageDto,
   PageTreeNodeDto,
+  PurgeConfirmationResponseDto,
   PurgePageParams,
   RenamePageDto,
   RestorePageDto,
@@ -815,7 +816,7 @@ export const purgePage = async (
 };
 
 export const getPurgePageMutationOptions = <
-  TError = ErrorType<HttpErrorResponseDto>,
+  TError = ErrorType<HttpErrorResponseDto | PurgeConfirmationResponseDto>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -852,12 +853,15 @@ export const getPurgePageMutationOptions = <
 
 export type PurgePageMutationResult = NonNullable<Awaited<ReturnType<typeof purgePage>>>;
 
-export type PurgePageMutationError = ErrorType<HttpErrorResponseDto>;
+export type PurgePageMutationError = ErrorType<HttpErrorResponseDto | PurgeConfirmationResponseDto>;
 
 /**
  * @summary Permanently delete a page from the trash
  */
-export const usePurgePage = <TError = ErrorType<HttpErrorResponseDto>, TContext = unknown>(
+export const usePurgePage = <
+  TError = ErrorType<HttpErrorResponseDto | PurgeConfirmationResponseDto>,
+  TContext = unknown,
+>(
   options?: {
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof purgePage>>,

@@ -29,6 +29,7 @@ import {
 
 import { type AuthenticatedUser, CurrentUser } from '../common/decorators/current-user.decorator';
 import { CascadeQueryDto } from '../common/dto/cascade-query.dto';
+import { PurgeConfirmationResponseDto } from '../common/dto/purge-confirmation-response.dto';
 import { HttpErrorResponseDto } from '../http-error-response.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { DeletedProjectDto } from './dto/deleted-project.dto';
@@ -102,7 +103,7 @@ export class ProjectsController {
   @ApiNoContentResponse({ description: 'Project trash emptied' })
   @ApiConflictResponse({
     description: 'Trash entries outside the target would be destroyed; confirm with cascade=true',
-    type: HttpErrorResponseDto,
+    type: PurgeConfirmationResponseDto,
   })
   async purgeTrash(
     @CurrentUser() user: AuthenticatedUser,
@@ -128,7 +129,7 @@ export class ProjectsController {
   @ApiNoContentResponse({ description: 'Project permanently deleted' })
   @ApiConflictResponse({
     description: 'Trash entries outside the target would be destroyed; confirm with cascade=true',
-    type: HttpErrorResponseDto,
+    type: PurgeConfirmationResponseDto,
   })
   async purge(
     @CurrentUser() user: AuthenticatedUser,

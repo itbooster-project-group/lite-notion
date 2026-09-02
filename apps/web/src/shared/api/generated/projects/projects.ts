@@ -29,6 +29,7 @@ import type {
   DeletedProjectDto,
   HttpErrorResponseDto,
   ProjectDto,
+  PurgeConfirmationResponseDto,
   PurgeProjectParams,
   PurgeProjectTrashParams,
 } from '../model';
@@ -387,7 +388,7 @@ export const purgeProjectTrash = async (
 };
 
 export const getPurgeProjectTrashMutationOptions = <
-  TError = ErrorType<HttpErrorResponseDto>,
+  TError = ErrorType<HttpErrorResponseDto | PurgeConfirmationResponseDto>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -426,12 +427,17 @@ export type PurgeProjectTrashMutationResult = NonNullable<
   Awaited<ReturnType<typeof purgeProjectTrash>>
 >;
 
-export type PurgeProjectTrashMutationError = ErrorType<HttpErrorResponseDto>;
+export type PurgeProjectTrashMutationError = ErrorType<
+  HttpErrorResponseDto | PurgeConfirmationResponseDto
+>;
 
 /**
  * @summary Permanently delete every project in the trash
  */
-export const usePurgeProjectTrash = <TError = ErrorType<HttpErrorResponseDto>, TContext = unknown>(
+export const usePurgeProjectTrash = <
+  TError = ErrorType<HttpErrorResponseDto | PurgeConfirmationResponseDto>,
+  TContext = unknown,
+>(
   options?: {
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof purgeProjectTrash>>,
@@ -481,7 +487,7 @@ export const purgeProject = async (
 };
 
 export const getPurgeProjectMutationOptions = <
-  TError = ErrorType<HttpErrorResponseDto>,
+  TError = ErrorType<HttpErrorResponseDto | PurgeConfirmationResponseDto>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -518,12 +524,17 @@ export const getPurgeProjectMutationOptions = <
 
 export type PurgeProjectMutationResult = NonNullable<Awaited<ReturnType<typeof purgeProject>>>;
 
-export type PurgeProjectMutationError = ErrorType<HttpErrorResponseDto>;
+export type PurgeProjectMutationError = ErrorType<
+  HttpErrorResponseDto | PurgeConfirmationResponseDto
+>;
 
 /**
  * @summary Permanently delete a project from the trash
  */
-export const usePurgeProject = <TError = ErrorType<HttpErrorResponseDto>, TContext = unknown>(
+export const usePurgeProject = <
+  TError = ErrorType<HttpErrorResponseDto | PurgeConfirmationResponseDto>,
+  TContext = unknown,
+>(
   options?: {
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof purgeProject>>,
