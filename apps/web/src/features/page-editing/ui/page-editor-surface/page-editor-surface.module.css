@@ -1,0 +1,96 @@
+.editorContent p {
+  margin-block: 0.5rem;
+}
+
+.editorContent h1,
+.editorContent h2,
+.editorContent h3 {
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.editorContent h1 {
+  margin-block: 1.5rem 0.75rem;
+  font-size: 1.875rem;
+}
+
+.editorContent h2 {
+  margin-block: 1.25rem 0.75rem;
+  font-size: 1.5rem;
+}
+
+.editorContent h3 {
+  margin-block: 1rem 0.5rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.editorContent ol,
+.editorContent ul {
+  margin-block: 0.5rem;
+  padding-inline-start: 1.5rem;
+}
+
+.editorContent ol {
+  list-style: decimal;
+}
+
+.editorContent ul {
+  list-style: disc;
+}
+
+.editorContent ul[data-type="taskList"] {
+  list-style: none;
+  padding-inline-start: 0;
+}
+
+.editorContent li[data-checked] {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.editorContent li[data-checked] > label {
+  flex: 0 0 auto;
+  margin-top: 0.25rem;
+}
+
+.editorContent li[data-checked] > div {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+.editorContent li[data-checked] > div > p {
+  margin-block: 0;
+}
+
+.editorContent figure[data-page-document-node] {
+  max-width: 100%;
+  margin-block: 1rem;
+}
+
+.editorContent figure[data-alignment="start"] {
+  margin-inline: 0 auto;
+}
+
+.editorContent figure[data-alignment="center"] {
+  margin-inline: auto;
+}
+
+.editorContent figure[data-alignment="end"] {
+  margin-inline: auto 0;
+}
+
+.editorContent figure[data-page-document-node] > img,
+.editorContent figure[data-page-document-node] > iframe,
+.editorContent figure[data-page-document-node] > video {
+  display: block;
+  width: 100%;
+}
+
+.editorContent figcaption {
+  margin-block-start: 0.5rem;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}

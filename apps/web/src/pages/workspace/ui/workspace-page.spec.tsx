@@ -138,6 +138,7 @@ describe('workspace page', () => {
     expect(
       screen.getByText('Редактор страницы появится в следующем обновлении.'),
     ).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Содержимое страницы' })).toBeNull();
   });
 
   it('показывает fallback для legacy title во всех представлениях', async () => {

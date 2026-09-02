@@ -17,7 +17,7 @@
     "format": "biome check --write .",
     "typecheck": "pnpm --recursive run typecheck",
     "web:typecheck": "pnpm --filter @lite-notion/web typecheck",
-    "test": "pnpm --recursive run test",
+    "test": "pnpm --workspace-concurrency=1 --recursive run test",
     "web:test": "pnpm --filter @lite-notion/web test",
     "prepare": "husky",
     "steiger": "pnpm steiger:web",
