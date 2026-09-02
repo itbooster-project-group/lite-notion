@@ -44,7 +44,7 @@ export async function createHttpTestContext(): Promise<HttpTestContext> {
   const pageStore = new Map<string, StoredPage>();
   const projectStore = new Map<string, StoredProject>();
   const pages = new InMemoryPagesRepository(documentStore, projectStore, pageStore);
-  const documents = new InMemoryPageDocumentRepository(documentStore);
+  const documents = new InMemoryPageDocumentRepository(documentStore, pageStore);
   const projects = new InMemoryProjectsRepository(pageStore, projectStore, documentStore);
 
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })

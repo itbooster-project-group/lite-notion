@@ -9,6 +9,7 @@ import { ProjectNotFoundError } from '../projects/errors';
 import { PrismaProjectsRepository } from '../projects/projects.repository';
 import { TIPTAP_SCHEMA_VERSION } from './constants';
 import { PageNotFoundError } from './errors';
+import { PrismaPageDocumentRepository } from './page-document/page-document.repository';
 import { PrismaPagesRepository } from './pages.repository';
 
 /**
@@ -31,6 +32,7 @@ describe('гонки вокруг мягкого удаления', () => {
   let holder: PrismaClient;
   let pages: PrismaPagesRepository;
   let projects: PrismaProjectsRepository;
+  let documents: PrismaPageDocumentRepository;
   const ownerId = randomUUID();
   let projectId: string;
 
@@ -53,6 +55,7 @@ describe('гонки вокруг мягкого удаления', () => {
     });
     pages = new PrismaPagesRepository(prisma as unknown as PrismaService);
     projects = new PrismaProjectsRepository(prisma as unknown as PrismaService);
+    documents = new PrismaPageDocumentRepository(prisma as unknown as PrismaService);
 
     await prisma.user.create({
       data: { email: `${ownerId}@race.test`, id: ownerId, name: 'race', passwordHash: 'hash' },
@@ -181,6 +184,46 @@ describe('гонки вокруг мягкого удаления', () => {
     `;
 
     expect(orphans).toEqual([]);
+  });
+
+  it('пишет содержимое живой страницы', async () => {
+    const page = await createPage(null, 'page');
+
+    await expect(
+      documents.replace({
+        pageId: page.id,
+        tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
+        yjsState: new Uint8Array([1, 2, 3]),
+      }),
+    ).resolves.toMatchObject({ pageId: page.id });
+  });
+
+  it('не пишет содержимое в страницу, помеченную удалённой', async () => {
+    const page = await createPage(null, 'page');
+    const state = new Uint8Array([1, 2, 3]);
+
+    await documents.replace({
+      pageId: page.id,
+      tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
+      yjsState: state,
+    });
+    await pages.softDelete(page.id, ownerId);
+
+    // Живость проверяет `PageDocumentService` до записи, поэтому к моменту UPDATE
+    // проверка может устареть, а мягкое удаление строку документа не трогает —
+    // без условия в самом UPDATE содержимое ушло бы в уже удалённую страницу.
+    await expect(
+      documents.replace({
+        pageId: page.id,
+        tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION + 1,
+        yjsState: new Uint8Array([9, 9]),
+      }),
+    ).resolves.toBeNull();
+
+    const stored = await prisma.pageDocument.findUniqueOrThrow({ where: { pageId: page.id } });
+
+    expect(stored.tiptapSchemaVersion).toBe(TIPTAP_SCHEMA_VERSION);
+    expect(Buffer.from(stored.yjsState).equals(Buffer.from(state))).toBe(true);
   });
 
   it('окончательное удаление проекта ждёт блокировку владельца', async () => {
