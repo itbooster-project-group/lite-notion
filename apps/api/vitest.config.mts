@@ -34,6 +34,6 @@ export default defineConfig({
     // Убирает node_modules из стек-трейса
     onStackTrace: (_error, frame) => !frame.file.includes('node_modules'),
     reporters: [new FailedOnlyReporter()],
-    slowTestThreshold: 1000
+    slowTestThreshold: 1000,
   },
 });
