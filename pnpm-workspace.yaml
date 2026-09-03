@@ -1,3 +1,8 @@
+# Скрипты выполняются встроенным shell pnpm, а не cmd.exe. Без этого префикс
+# переменной окружения — `VAR=value command` в `steiger:web` — работает только
+# на POSIX, а на Windows cmd.exe принимает `VAR=value` за имя программы.
+shellEmulator: true
+
 packages:
   - "apps/*"
 

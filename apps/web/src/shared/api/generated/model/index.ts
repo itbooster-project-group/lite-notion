@@ -7,11 +7,27 @@
  */
 
 export * from './authResponseDto';
+export * from './createPageDto';
+export * from './createProjectDto';
+export * from './deletedPageTreeNodeDto';
+export * from './deletedProjectDto';
 export * from './healthResponseDto';
 export * from './healthResponseDtoDatabase';
 export * from './healthResponseDtoStatus';
 export * from './httpErrorResponseDto';
 export * from './loginDto';
+export * from './movePageDto';
+export * from './pageDocumentDto';
+export * from './pageDto';
+export * from './pageTreeNodeDto';
+export * from './projectDto';
+export * from './purgeConfirmationResponseDto';
+export * from './purgePageParams';
+export * from './purgeProjectParams';
+export * from './purgeProjectTrashParams';
 export * from './registerDto';
+export * from './renamePageDto';
+export * from './restorePageDto';
 export * from './tokenResponseDto';
+export * from './updatePageDocumentDto';
 export * from './userProfileDto';

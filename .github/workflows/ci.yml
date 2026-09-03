@@ -39,6 +39,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm dedupe --check
+      - run: pnpm steiger:web
       - run: pnpm --filter @lite-notion/web run typecheck
       - run: pnpm --filter @lite-notion/web run test
       - run: pnpm --filter @lite-notion/web run build

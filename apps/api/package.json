@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "pretest": "prisma generate",
     "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.mts",
     "prisma:generate": "prisma generate",
     "db:migrate:dev": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",

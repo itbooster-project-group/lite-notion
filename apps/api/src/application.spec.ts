@@ -266,6 +266,27 @@ describe('application HTTP configuration', () => {
     expect(body.components.schemas.LoginDto.required).toEqual(['email', 'password']);
   });
 
+  it('описывает 409 окончательного удаления отдельной схемой со списком заголовков', async () => {
+    const { body } = await request(app.getHttpServer()).get('/api/openapi.json').expect(200);
+    const conflict = { $ref: '#/components/schemas/PurgeConfirmationResponseDto' };
+
+    // Тело этого отказа перечисляет заголовки обречённых записей, поэтому
+    // `message` в нём массив, а не строка общего `HttpErrorResponseDto`.
+    expect(body.paths['/api/v1/pages/trash/{pageId}'].delete.responses[409].content).toEqual({
+      'application/json': { schema: conflict },
+    });
+    expect(body.paths['/api/v1/projects/trash'].delete.responses[409].content).toEqual({
+      'application/json': { schema: conflict },
+    });
+    expect(body.paths['/api/v1/projects/trash/{projectId}'].delete.responses[409].content).toEqual({
+      'application/json': { schema: conflict },
+    });
+    expect(body.components.schemas.PurgeConfirmationResponseDto.properties.message).toMatchObject({
+      items: { type: 'string' },
+      type: 'array',
+    });
+  });
+
   it('не публикует Swagger endpoints в production', async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
