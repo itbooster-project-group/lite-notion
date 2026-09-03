@@ -3,28 +3,41 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import {
+  collectPageSubtreeIds,
   insertPageIntoTree,
+  isPageInSubtree,
   type MoveIntent,
   mapMoveIntentToDto,
   movePageInTree,
   normalizePageTree,
+  removePageSubtreeFromTree,
   renamePageInTree,
+  selectPage,
 } from '@/entities/page';
 import {
   type CreatePageDto,
   getGetPageTreeQueryKey,
   type PageTreeNodeDto,
   useCreatePage as useCreatePageMutation,
+  useDeletePage as useDeletePageMutation,
   useMovePage as useMovePageMutation,
   useRenamePage as useRenamePageMutation,
 } from '@/shared/api';
+import {
+  type WorkspaceRouteContext,
+  workspacePagePath,
+  workspaceProjectPath,
+} from '@/shared/routing';
+import { useWorkspaceDeleteCleanupCoordinator } from './delete-cleanup-coordinator';
 
-export function usePageManagement() {
+export function usePageManagement(routeContext: WorkspaceRouteContext) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const deleteCleanupCoordinator = useWorkspaceDeleteCleanupCoordinator();
   const createMutation = useCreatePageMutation();
   const renameMutation = useRenamePageMutation();
   const moveMutation = useMovePageMutation();
+  const deleteMutation = useDeletePageMutation();
 
   async function createPage(projectId: string, parentPageId: string | null, title: string) {
     if (createMutation.isPending) throw new Error('Create unavailable');
@@ -33,7 +46,7 @@ export function usePageManagement() {
     queryClient.setQueryData<PageTreeNodeDto[]>(getGetPageTreeQueryKey(), (current) =>
       insertPageIntoTree(current ?? [], page),
     );
-    router.push(`/pages/${page.id}`);
+    router.push(workspacePagePath(page.id));
   }
 
   async function renamePage(pageId: string, title: string) {
@@ -77,8 +90,42 @@ export function usePageManagement() {
     }
   }
 
+  async function deletePage(pageId: string) {
+    if (deleteMutation.isPending) throw new Error('Delete pending');
+    const queryKey = getGetPageTreeQueryKey();
+    const snapshot = queryClient.getQueryData<PageTreeNodeDto[]>(queryKey) ?? [];
+    const normalizedTree = normalizePageTree(snapshot);
+    const page = selectPage(normalizedTree, pageId);
+    if (!page) throw new Error('Delete unavailable');
+
+    const subtreePageIds = collectPageSubtreeIds(normalizedTree, pageId);
+    const affectsCurrentRoute =
+      routeContext.type === 'page' && isPageInSubtree(normalizedTree, pageId, routeContext.pageId);
+
+    await deleteMutation.mutateAsync({ pageId });
+
+    if (affectsCurrentRoute) {
+      router.replace(workspaceProjectPath(page.projectId));
+      deleteCleanupCoordinator.schedulePageDeleteCleanup({
+        kind: 'page',
+        oldRoute: routeContext,
+        projectId: page.projectId,
+        subtreePageIds,
+        subtreeRootPageId: pageId,
+      });
+      return;
+    }
+
+    queryClient.setQueryData<PageTreeNodeDto[]>(queryKey, (current) =>
+      removePageSubtreeFromTree(current ?? [], pageId),
+    );
+    void queryClient.invalidateQueries({ queryKey });
+  }
+
   return {
     createPage,
+    deletePage,
+    isDeletingPage: deleteMutation.isPending,
     isCreatingPage: createMutation.isPending,
     movePage,
     renamePage,

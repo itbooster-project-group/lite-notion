@@ -1,1 +1,1 @@
-export { WorkspacePage, type WorkspaceRouteContext } from './ui/workspace-page';
+export { WorkspacePage } from './ui/workspace-page';

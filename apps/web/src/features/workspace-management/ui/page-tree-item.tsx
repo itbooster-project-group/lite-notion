@@ -1,9 +1,11 @@
 'use client';
 
 import type { ItemInstance } from '@headless-tree/core';
+import { MoreHorizontal, Trash2 } from 'lucide-react';
 import { useRef } from 'react';
 import type { PageTreeItemData } from '@/entities/page';
 import { Button, Input, Menu, MenuItem, MenuPopup, MenuTrigger } from '@/shared/ui';
+import type { PageDeleteRequest } from '../model/delete-intent';
 import { PageDraft } from './page-draft';
 
 type PageTreeItemProps = Readonly<{
@@ -22,6 +24,7 @@ type PageTreeItemProps = Readonly<{
   onChangeCreate: (value: string) => void;
   onCompleteRename: () => void;
   onCreateChild: () => void;
+  onRequestDelete: (request: PageDeleteRequest) => void;
   onStartMove: (returnFocus: HTMLElement | undefined) => void;
   onSubmitCreate: () => void;
 }>;
@@ -42,6 +45,7 @@ export function PageTreeItem({
   onChangeCreate,
   onCompleteRename,
   onCreateChild,
+  onRequestDelete,
   onStartMove,
   onSubmitCreate,
 }: PageTreeItemProps) {
@@ -135,9 +139,12 @@ export function PageTreeItem({
             ref={actionsRef}
             aria-label={`Действия для ${data.title}`}
             render={<Button size="icon-sm" variant="ghost" />}
-            onClick={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              onActionsOpenChange(true);
+            }}
           >
-            ⋯
+            <MoreHorizontal aria-hidden="true" />
           </MenuTrigger>
           <MenuPopup sideOffset={4}>
             <MenuItem onClick={onCreateChild}>Добавить дочернюю</MenuItem>
@@ -148,6 +155,19 @@ export function PageTreeItem({
               }}
             >
               Переместить…
+            </MenuItem>
+            <MenuItem
+              variant="destructive"
+              onClick={() =>
+                onRequestDelete({
+                  pageId: data.id,
+                  returnFocus: actionsRef.current ?? undefined,
+                  title: data.title,
+                })
+              }
+            >
+              <Trash2 aria-hidden="true" />
+              Удалить
             </MenuItem>
           </MenuPopup>
         </Menu>

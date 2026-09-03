@@ -10,7 +10,8 @@ import {
   type ProjectPageTree,
   selectPage,
 } from '@/entities/page';
-import { PageTree } from '@/features/workspace-management';
+import { type PageDeleteRequest, PageTree } from '@/features/workspace-management';
+import { workspacePagePath } from '@/shared/routing';
 import { Heading, Text } from '@/shared/ui';
 
 type WorkspaceMainProps = Readonly<{
@@ -19,6 +20,7 @@ type WorkspaceMainProps = Readonly<{
   onCreatePage: (parentPageId: string | null, title: string) => Promise<void>;
   onMovePage: (intent: MoveIntent) => Promise<void>;
   onRenamePage: (pageId: string, title: string) => Promise<void>;
+  onRequestDeletePage: (request: PageDeleteRequest) => void;
   projectTree: ProjectPageTree;
   projectName: string;
 }>;
@@ -29,6 +31,7 @@ export function WorkspaceMain({
   onCreatePage,
   onMovePage,
   onRenamePage,
+  onRequestDeletePage,
   projectName,
   projectTree,
 }: WorkspaceMainProps) {
@@ -50,7 +53,8 @@ export function WorkspaceMain({
           onCreatePage={onCreatePage}
           onMovePage={onMovePage}
           onRenamePage={onRenamePage}
-          onSelectPage={(pageId) => router.push(`/pages/${pageId}`)}
+          onRequestDeletePage={onRequestDeletePage}
+          onSelectPage={(pageId) => router.push(workspacePagePath(pageId))}
         />
       </main>
     );
@@ -70,7 +74,7 @@ export function WorkspaceMain({
               ) : (
                 <Link
                   className="hover:text-foreground hover:underline"
-                  href={`/pages/${breadcrumb.id}`}
+                  href={workspacePagePath(breadcrumb.id)}
                 >
                   {breadcrumb.title}
                 </Link>
