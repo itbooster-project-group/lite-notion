@@ -15,7 +15,7 @@ export function SmokeForm() {
 
 export default function HomePage() {
   return (
-    <main className="flex min-h-screen items-center justify-center px-6 py-16">
+    <div className="flex min-h-full items-center justify-center px-6 py-16">
       <div className="flex w-full max-w-2xl flex-col items-center gap-6 text-center">
         <div className="space-y-2">
           <h1 className="text-4xl font-semibold tracking-tight">Lite Notion</h1>
@@ -25,6 +25,6 @@ export default function HomePage() {
         </div>
         <SmokeForm />
       </div>
-    </main>
+    </div>
   );
 }
