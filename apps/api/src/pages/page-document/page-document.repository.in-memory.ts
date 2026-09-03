@@ -1,3 +1,4 @@
+import type { TransactionScope } from '../../database/transaction';
 import type { StoredDocument, StoredPage } from '../pages.repository.in-memory';
 import {
   type PageDocumentRecord,
@@ -11,12 +12,10 @@ import {
  * отсюда. Тесты передают общие Map в оба репозитория.
  */
 export class InMemoryPageDocumentRepository extends PageDocumentRepository {
-  /**
-   * `pages` нужен только записи: она отказывает по удалённой странице. Страница,
-   * которой нет в хранилище, считается живой — как и проект в
-   * `InMemoryPagesRepository`: тест, не заводивший страниц, не обязан их заводить,
-   * а в базе документа без страницы не бывает — его не пустил бы FK.
-   */
+  /** Позволяет тесту уронить вставку документа, не трогая Prisma. */
+  failInsert = false;
+
+  /** `pages` нужен обеим операциям: права и живость проверяются через связь. */
   constructor(
     readonly documents: Map<string, StoredDocument> = new Map(),
     readonly pages: Map<string, StoredPage> = new Map(),
@@ -24,10 +23,14 @@ export class InMemoryPageDocumentRepository extends PageDocumentRepository {
     super();
   }
 
-  async find(pageId: string): Promise<PageDocumentRecord | null> {
+  bind(_scope: TransactionScope): InMemoryPageDocumentRepository {
+    return this;
+  }
+
+  async find(pageId: string, ownerId: string): Promise<PageDocumentRecord | null> {
     const document = this.documents.get(pageId);
 
-    return document === undefined
+    return document === undefined || !this.isVisible(pageId, ownerId)
       ? null
       : {
           pageId,
@@ -36,10 +39,22 @@ export class InMemoryPageDocumentRepository extends PageDocumentRepository {
         };
   }
 
+  async insertEmpty(pageId: string, tiptapSchemaVersion: number): Promise<void> {
+    if (this.failInsert) {
+      throw new Error('document insert failed');
+    }
+
+    this.documents.set(pageId, {
+      storageRevision: 0,
+      tiptapSchemaVersion,
+      yjsState: new Uint8Array(),
+    });
+  }
+
   async replace(input: ReplaceDocumentInput): Promise<PageDocumentRecord | null> {
     const document = this.documents.get(input.pageId);
 
-    if (document === undefined || this.pages.get(input.pageId)?.deletedAt != null) {
+    if (document === undefined || !this.isVisible(input.pageId, input.ownerId)) {
       return null;
     }
 
@@ -47,6 +62,13 @@ export class InMemoryPageDocumentRepository extends PageDocumentRepository {
     document.tiptapSchemaVersion = input.tiptapSchemaVersion;
     document.yjsState = input.yjsState;
 
-    return this.find(input.pageId);
+    return this.find(input.pageId, input.ownerId);
+  }
+
+  /** Отсутствующая в хранилище страница считается живой: в базе её держит FK. */
+  private isVisible(pageId: string, ownerId: string): boolean {
+    const page = this.pages.get(pageId);
+
+    return page === undefined || (page.deletedAt === null && page.ownerId === ownerId);
   }
 }

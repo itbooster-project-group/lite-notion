@@ -1,24 +1,14 @@
 import { randomUUID } from 'node:crypto';
 
-import { PurgeConfirmationRequiredError } from '../common/errors';
+import type { TransactionScope } from '../database/transaction';
 import type { PageDeletionOrigin } from '../generated/prisma/enums';
-import { ProjectNotFoundError } from '../projects/errors';
-import {
-  PageCycleError,
-  PageNotFoundError,
-  PageProjectMismatchError,
-  PageRestoreProjectDeletedError,
-  PageRestoreTargetProjectRejectedError,
-  SiblingOrderError,
-  SiblingParentMismatchError,
-} from './errors';
-import { positionBetween } from './helpers';
 import type {
   Bytes,
-  CreatePageInput,
   DeletedPageRecord,
-  MovePageInput,
+  InsertPageInput,
   PageRecord,
+  SiblingLevel,
+  SiblingRecord,
 } from './pages.repository';
 import { PagesRepository } from './pages.repository';
 
@@ -55,20 +45,13 @@ export interface DeletableProject {
 }
 
 /**
- * Тестовая реализация. Воспроизводит наблюдаемый контракт Prisma-версии: фильтр
- * удалённых, изоляцию по владельцу, совпадение проекта, запрет цикла, порядок
- * братьев и атомарность создания страницы вместе с документом.
- *
- * Advisory lock здесь не нужен: однопоточность JavaScript уже сериализует
- * перемещения, а роль блокировки в Prisma-версии — не дать двум транзакциям
- * увидеть дерево до чужой записи.
+ * Тестовая реализация контракта Prisma-версии: фильтр удалённых, изоляция по
+ * владельцу, порядок братьев, создание страницы вместе с документом. Advisory lock
+ * не нужен — однопоточность JavaScript уже сериализует операции.
  */
 export class InMemoryPagesRepository extends PagesRepository {
   /** Позволяет тесту уронить запись после смены родителя, не трогая Prisma. */
   failAfterReparent = false;
-
-  /** Позволяет тесту уронить создание документа, не трогая Prisma. */
-  failDocumentInsert = false;
 
   /**
    * Хранилища передаются снаружи: в базе это отдельные таблицы, и тест, который
@@ -80,6 +63,11 @@ export class InMemoryPagesRepository extends PagesRepository {
     readonly pages: Map<string, StoredPage> = new Map(),
   ) {
     super();
+  }
+
+  /** Хранилище одно на все скоупы: соединения, которое выбирает `bind`, здесь нет. */
+  bind(_scope: TransactionScope): InMemoryPagesRepository {
+    return this;
   }
 
   async findAllByOwner(ownerId: string): Promise<PageRecord[]> {
@@ -102,22 +90,7 @@ export class InMemoryPagesRepository extends PagesRepository {
       : this.toRecord(page);
   }
 
-  async create(input: CreatePageInput): Promise<PageRecord> {
-    // Однопоточность JavaScript уже сериализует создание, но контракт тот же, что
-    // у Prisma-версии: удалённый проект и удалённый родитель отвергаются.
-    const project = this.projects.get(input.projectId);
-
-    if (project !== undefined && project.deletedAt !== null) {
-      throw new ProjectNotFoundError();
-    }
-
-    if (input.parentPageId !== null && this.pages.get(input.parentPageId)?.deletedAt != null) {
-      throw new PageNotFoundError();
-    }
-
-    const siblings = this.siblingsOf(input.ownerId, input.projectId, input.parentPageId);
-    const last = siblings.at(-1);
-
+  async insert(input: InsertPageInput): Promise<PageRecord> {
     const page: StoredPage = {
       createdAt: new Date(),
       createdById: input.createdById,
@@ -126,25 +99,23 @@ export class InMemoryPagesRepository extends PagesRepository {
       id: randomUUID(),
       ownerId: input.ownerId,
       parentPageId: input.parentPageId,
-      position: positionBetween(last?.position ?? null, null),
+      position: input.position,
       projectId: input.projectId,
       title: input.title,
       updatedAt: new Date(),
     };
 
-    if (this.failDocumentInsert) {
-      // Страница не публикуется: в Prisma-версии её откатывает транзакция.
-      throw new Error('document insert failed');
-    }
-
     this.pages.set(page.id, page);
-    this.documents.set(page.id, {
-      storageRevision: 0,
-      tiptapSchemaVersion: input.tiptapSchemaVersion,
-      yjsState: new Uint8Array(),
-    });
 
     return this.toRecord(page);
+  }
+
+  async findLastPositionAtLevel(level: SiblingLevel): Promise<string | null> {
+    const siblings = this.siblingsOf(level.ownerId, level.projectId, level.parentPageId).filter(
+      (page) => page.id !== level.excludedId,
+    );
+
+    return siblings.at(-1)?.position ?? null;
   }
 
   async rename(id: string, ownerId: string, title: string): Promise<PageRecord | null> {
@@ -160,18 +131,41 @@ export class InMemoryPagesRepository extends PagesRepository {
     return this.toRecord(page);
   }
 
-  async move(input: MovePageInput): Promise<PageRecord> {
-    const page = this.pages.get(input.pageId);
+  async findAncestorIds(pageId: string): Promise<string[]> {
+    const ids: string[] = [];
 
-    if (page === undefined || page.deletedAt !== null || page.ownerId !== input.ownerId) {
-      throw new PageNotFoundError();
+    for (
+      let current: string | null = pageId;
+      current !== null;
+      current = this.pages.get(current)?.parentPageId ?? null
+    ) {
+      ids.push(current);
     }
 
-    if (input.parentPageId !== null) {
-      this.assertParentAccepts(page, input.parentPageId);
-    }
+    return ids;
+  }
 
-    const position = this.resolvePosition(page, input);
+  async findSiblingForOwner(
+    siblingId: string,
+    projectId: string,
+    ownerId: string,
+  ): Promise<SiblingRecord | null> {
+    const sibling = this.pages.get(siblingId);
+
+    return sibling === undefined ||
+      sibling.deletedAt !== null ||
+      sibling.ownerId !== ownerId ||
+      sibling.projectId !== projectId
+      ? null
+      : { parentPageId: sibling.parentPageId, position: sibling.position };
+  }
+
+  async reparent(id: string, parentPageId: string | null, position: string): Promise<PageRecord> {
+    const page = this.pages.get(id);
+
+    if (page === undefined) {
+      throw new Error(`Page ${id} is gone`);
+    }
 
     if (this.failAfterReparent) {
       // Ни родитель, ни ранг не записаны: в Prisma-версии оба поля меняет один
@@ -179,82 +173,11 @@ export class InMemoryPagesRepository extends PagesRepository {
       throw new Error('move failed before persisting the new position');
     }
 
-    page.parentPageId = input.parentPageId;
+    page.parentPageId = parentPageId;
     page.position = position;
     page.updatedAt = new Date();
 
     return this.toRecord(page);
-  }
-
-  private assertParentAccepts(page: PageRecord, parentPageId: string): void {
-    if (parentPageId === page.id) {
-      throw new PageCycleError();
-    }
-
-    const parent = this.pages.get(parentPageId);
-
-    if (parent === undefined || parent.deletedAt !== null || parent.ownerId !== page.ownerId) {
-      throw new PageNotFoundError();
-    }
-
-    if (parent.projectId !== page.projectId) {
-      throw new PageProjectMismatchError();
-    }
-
-    for (
-      let ancestor: string | null = parent.parentPageId;
-      ancestor !== null;
-      ancestor = this.pages.get(ancestor)?.parentPageId ?? null
-    ) {
-      if (ancestor === page.id) {
-        throw new PageCycleError();
-      }
-    }
-  }
-
-  private resolvePosition(page: PageRecord, input: MovePageInput): string {
-    if (input.previousSiblingId !== null && input.previousSiblingId === input.nextSiblingId) {
-      throw new SiblingOrderError();
-    }
-
-    const previous = this.readSibling(page, input.parentPageId, input.previousSiblingId);
-    const next = this.readSibling(page, input.parentPageId, input.nextSiblingId);
-
-    if (previous !== null && next !== null && previous.position >= next.position) {
-      throw new SiblingOrderError();
-    }
-
-    if (previous === null && next === null) {
-      const last = this.siblingsOf(page.ownerId, page.projectId, input.parentPageId)
-        .filter((sibling) => sibling.id !== page.id)
-        .at(-1);
-
-      return positionBetween(last?.position ?? null, null);
-    }
-
-    return positionBetween(previous?.position ?? null, next?.position ?? null);
-  }
-
-  private readSibling(
-    page: PageRecord,
-    parentPageId: string | null,
-    siblingId: string | null,
-  ): { position: string } | null {
-    if (siblingId === null) {
-      return null;
-    }
-
-    const sibling = this.pages.get(siblingId);
-
-    if (sibling === undefined || sibling.deletedAt !== null || sibling.ownerId !== page.ownerId) {
-      throw new PageNotFoundError();
-    }
-
-    if (sibling.parentPageId !== parentPageId) {
-      throw new SiblingParentMismatchError();
-    }
-
-    return { position: sibling.position };
   }
 
   private siblingsOf(
@@ -301,49 +224,60 @@ export class InMemoryPagesRepository extends PagesRepository {
       }));
   }
 
-  async softDelete(id: string, ownerId: string): Promise<boolean> {
+  async markSubtreeDeleted(id: string, ownerId: string, deletedAt: Date): Promise<number> {
     const page = this.pages.get(id);
 
     if (page === undefined || page.deletedAt !== null || page.ownerId !== ownerId) {
-      return false;
+      return 0;
     }
-
-    // Одна отметка на всё поддерево — по ней потом отсчитывается срок хранения.
-    const deletedAt = new Date();
 
     page.deletedAt = deletedAt;
     page.deletedOrigin = 'SELF';
 
     // Спуск обрывается на уже удалённых: их поддеревья помечены раньше, и
     // перемечать их нельзя — они остаются самостоятельными корнями корзины.
-    for (const descendant of this.liveDescendantsOf(id)) {
+    const descendants = this.liveDescendantsOf(id);
+
+    for (const descendant of descendants) {
       descendant.deletedAt = deletedAt;
       descendant.deletedOrigin = 'PARENT_PAGE';
     }
 
-    return true;
+    return descendants.length + 1;
   }
 
-  async restore(id: string, ownerId: string, targetProjectId: string | null): Promise<PageRecord> {
+  async findDeletedForOwner(id: string, ownerId: string): Promise<DeletedPageRecord | null> {
     const page = this.pages.get(id);
 
-    if (page === undefined || page.deletedAt === null || page.ownerId !== ownerId) {
-      throw new PageNotFoundError();
-    }
+    return page === undefined || page.deletedAt === null || page.ownerId !== ownerId
+      ? null
+      : {
+          ...this.toRecord(page),
+          deletedAt: page.deletedAt,
+          deletedOrigin: page.deletedOrigin as PageDeletionOrigin,
+        };
+  }
 
-    const destinationProjectId = this.resolveDestinationProject(page, targetProjectId);
-    const movesProject = destinationProjectId !== page.projectId;
+  async moveSubtreeToProject(id: string, projectId: string): Promise<void> {
+    const page = this.pages.get(id);
+
+    if (page === undefined) {
+      return;
+    }
 
     // Всё физическое поддерево меняет проект, включая то, что остаётся
     // удалённым: ребёнок не может лежать в одном проекте с родителем в другом.
-    if (movesProject) {
-      for (const node of [page, ...this.descendantsOf(id, () => true)]) {
-        node.projectId = destinationProjectId;
-      }
+    for (const node of [page, ...this.descendantsOf(id, () => true)]) {
+      node.projectId = projectId;
     }
+  }
 
-    const parent = page.parentPageId === null ? undefined : this.pages.get(page.parentPageId);
-    const raises = movesProject || (page.parentPageId !== null && parent?.deletedAt !== null);
+  async clearSubtreeDeletion(id: string): Promise<void> {
+    const page = this.pages.get(id);
+
+    if (page === undefined) {
+      return;
+    }
 
     page.deletedAt = null;
     page.deletedOrigin = null;
@@ -352,64 +286,59 @@ export class InMemoryPagesRepository extends PagesRepository {
       descendant.deletedAt = null;
       descendant.deletedOrigin = null;
     }
-
-    if (raises) {
-      const last = this.siblingsOf(page.ownerId, destinationProjectId, null)
-        .filter((sibling) => sibling.id !== page.id)
-        .at(-1);
-
-      page.parentPageId = null;
-      page.position = positionBetween(last?.position ?? null, null);
-    }
-
-    return this.toRecord(page);
   }
 
-  private resolveDestinationProject(page: StoredPage, targetProjectId: string | null): string {
-    const own = this.projects.get(page.projectId);
-
-    if (own === undefined || own.deletedAt === null) {
-      if (targetProjectId !== null && targetProjectId !== page.projectId) {
-        throw new PageRestoreTargetProjectRejectedError();
-      }
-
-      return page.projectId;
-    }
-
-    if (targetProjectId === null) {
-      throw new PageRestoreProjectDeletedError();
-    }
-
-    const target = this.projects.get(targetProjectId);
-
-    // Владелец проверяется наравне с отметкой удаления: чужой, удалённый и
-    // несуществующий проект назначения обязаны быть неразличимы.
-    if (target === undefined || target.deletedAt !== null || target.ownerId !== page.ownerId) {
-      throw new ProjectNotFoundError();
-    }
-
-    return targetProjectId;
-  }
-
-  async purge(id: string, ownerId: string, cascade: boolean): Promise<void> {
-    const page = this.pages.get(id);
-
-    if (page === undefined || page.deletedAt === null || page.ownerId !== ownerId) {
-      throw new PageNotFoundError();
-    }
-
+  async findSelfDeletedDescendantTitles(id: string): Promise<string[]> {
     // Спуск по всему физическому поддереву — ровно то, что унесёт FK-каскад.
-    const subtree = this.descendantsOf(id, () => true);
-    const doomed = subtree
+    return this.descendantsOf(id, () => true)
       .filter((descendant) => descendant.deletedOrigin === 'SELF')
       .map((descendant) => descendant.title)
       .sort();
+  }
 
-    if (doomed.length > 0 && !cascade) {
-      throw new PurgeConfirmationRequiredError(doomed);
+  async markProjectPagesDeleted(
+    projectId: string,
+    ownerId: string,
+    deletedAt: Date,
+  ): Promise<void> {
+    for (const page of this.pages.values()) {
+      if (page.projectId === projectId && page.ownerId === ownerId && page.deletedAt === null) {
+        page.deletedAt = deletedAt;
+        page.deletedOrigin = 'PROJECT';
+      }
     }
+  }
 
-    for (const descendant of subtree) {
+  async clearProjectPagesDeleted(projectId: string, ownerId: string): Promise<void> {
+    for (const page of this.pages.values()) {
+      if (
+        page.projectId === projectId &&
+        page.ownerId === ownerId &&
+        page.deletedOrigin === 'PROJECT'
+      ) {
+        page.deletedAt = null;
+        page.deletedOrigin = null;
+      }
+    }
+  }
+
+  async findSelfDeletedTitlesByProjects(
+    projectIds: readonly string[],
+    ownerId: string,
+  ): Promise<string[]> {
+    return [...this.pages.values()]
+      .filter(
+        (page) =>
+          page.ownerId === ownerId &&
+          projectIds.includes(page.projectId) &&
+          page.deletedOrigin === 'SELF',
+      )
+      .map((page) => page.title)
+      .sort();
+  }
+
+  async deleteById(id: string): Promise<void> {
+    for (const descendant of this.descendantsOf(id, () => true)) {
       this.pages.delete(descendant.id);
       this.documents.delete(descendant.id);
     }
@@ -418,7 +347,7 @@ export class InMemoryPagesRepository extends PagesRepository {
     this.documents.delete(id);
   }
 
-  async purgeTrash(ownerId: string): Promise<void> {
+  async deleteAllDeletedByOwner(ownerId: string): Promise<void> {
     for (const page of [...this.pages.values()]) {
       if (page.deletedAt !== null && page.ownerId === ownerId) {
         this.pages.delete(page.id);

@@ -1,5 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { TransactionRunner } from '../database/transaction';
+import { InMemoryTransactionRunner } from '../database/transaction.in-memory';
 import { ProjectNotFoundError } from '../projects/errors';
 import { ProjectsRepository } from '../projects/projects.repository';
 import {
@@ -7,14 +9,21 @@ import {
   type StoredProject,
 } from '../projects/projects.repository.in-memory';
 import { ProjectsService } from '../projects/projects.service';
+import { SoftDeleteProjectUseCase } from '../projects/use-cases/soft-delete-project.use-case';
 import {
   PageNotFoundError,
   PageRestoreProjectDeletedError,
   PageRestoreTargetProjectRejectedError,
 } from './errors';
+import { PageDocumentRepository } from './page-document/page-document.repository';
+import { InMemoryPageDocumentRepository } from './page-document/page-document.repository.in-memory';
+import { PageDocumentService } from './page-document/page-document.service';
 import { PagesRepository } from './pages.repository';
 import { InMemoryPagesRepository, type StoredPage } from './pages.repository.in-memory';
 import { PagesService } from './pages.service';
+import { CreatePageUseCase } from './use-cases/create-page.use-case';
+import { RestorePageUseCase } from './use-cases/restore-page.use-case';
+import { SoftDeletePageUseCase } from './use-cases/soft-delete-page.use-case';
 
 const owner = '11111111-1111-1111-1111-111111111111';
 const stranger = '22222222-2222-2222-2222-222222222222';
@@ -28,12 +37,20 @@ const missingId = '33333333-3333-4333-8333-333333333333';
  */
 describe('PagesService: корзина', () => {
   let service: PagesService;
+  let createPageUseCase: CreatePageUseCase;
+  let softDeletePageUseCase: SoftDeletePageUseCase;
+  let restorePageUseCase: RestorePageUseCase;
+
+  /** Сохраняет позиционный вызов тестов поверх командного контракта юзкейса. */
+  const restorePage = (pageId: string, ownerId: string, targetProjectId: string | null) =>
+    restorePageUseCase.execute({ ownerId, pageId, targetProjectId });
+  let softDeleteProject: SoftDeleteProjectUseCase;
   let pages: InMemoryPagesRepository;
   let projects: InMemoryProjectsRepository;
   let projectId: string;
 
   const createPage = async (overrides: { parentPageId?: string | null; title?: string } = {}) =>
-    service.create({
+    createPageUseCase.execute({
       ownerId: owner,
       parentPageId: overrides.parentPageId ?? null,
       projectId,
@@ -53,12 +70,26 @@ describe('PagesService: корзина', () => {
       providers: [
         PagesService,
         ProjectsService,
+        CreatePageUseCase,
+        PageDocumentService,
+        RestorePageUseCase,
+        SoftDeletePageUseCase,
+        SoftDeleteProjectUseCase,
         { provide: PagesRepository, useValue: pages },
+        {
+          provide: PageDocumentRepository,
+          useValue: new InMemoryPageDocumentRepository(pages.documents, pages.pages),
+        },
         { provide: ProjectsRepository, useValue: projects },
+        { provide: TransactionRunner, useValue: new InMemoryTransactionRunner() },
       ],
     }).compile();
 
     service = moduleRef.get(PagesService);
+    createPageUseCase = moduleRef.get(CreatePageUseCase);
+    softDeletePageUseCase = moduleRef.get(SoftDeletePageUseCase);
+    restorePageUseCase = moduleRef.get(RestorePageUseCase);
+    softDeleteProject = moduleRef.get(SoftDeleteProjectUseCase);
     projectId = (await projects.create({ name: 'Workspace', ownerId: owner })).id;
   });
 
@@ -68,7 +99,7 @@ describe('PagesService: корзина', () => {
       const child = await createPage({ parentPageId: root.id, title: 'child' });
       const grandchild = await createPage({ parentPageId: child.id, title: 'grandchild' });
 
-      await service.softDelete(root.id, owner);
+      await softDeletePageUseCase.execute(root.id, owner);
 
       await expect(service.findTree(owner)).resolves.toEqual([]);
       await expect(service.findById(grandchild.id, owner)).rejects.toBeInstanceOf(
@@ -80,7 +111,7 @@ describe('PagesService: корзина', () => {
       const root = await createPage({ title: 'root' });
       const child = await createPage({ parentPageId: root.id, title: 'child' });
 
-      await service.softDelete(root.id, owner);
+      await softDeletePageUseCase.execute(root.id, owner);
 
       expect(pages.pages.get(root.id)?.deletedOrigin).toBe('SELF');
       expect(pages.pages.get(child.id)?.deletedOrigin).toBe('PARENT_PAGE');
@@ -90,7 +121,7 @@ describe('PagesService: корзина', () => {
       const root = await createPage({ title: 'root' });
       const child = await createPage({ parentPageId: root.id, title: 'child' });
 
-      await service.softDelete(root.id, owner);
+      await softDeletePageUseCase.execute(root.id, owner);
 
       expect(pages.pages.get(child.id)?.deletedAt).toEqual(pages.pages.get(root.id)?.deletedAt);
     });
@@ -99,7 +130,7 @@ describe('PagesService: корзина', () => {
       const first = await createPage({ title: 'first' });
       const second = await createPage({ title: 'second' });
 
-      await service.softDelete(first.id, owner);
+      await softDeletePageUseCase.execute(first.id, owner);
 
       const tree = await service.findTree(owner);
 
@@ -110,10 +141,10 @@ describe('PagesService: корзина', () => {
     it('не перемечает ранее удалённое поддерево', async () => {
       const root = await createPage({ title: 'root' });
       const child = await createPage({ parentPageId: root.id, title: 'child' });
-      await service.softDelete(child.id, owner);
+      await softDeletePageUseCase.execute(child.id, owner);
       const deletedAtBefore = pages.pages.get(child.id)?.deletedAt;
 
-      await service.softDelete(root.id, owner);
+      await softDeletePageUseCase.execute(root.id, owner);
 
       expect(pages.pages.get(child.id)?.deletedOrigin).toBe('SELF');
       expect(pages.pages.get(child.id)?.deletedAt).toBe(deletedAtBefore);
@@ -121,11 +152,13 @@ describe('PagesService: корзина', () => {
 
     it('отвечает одинаково на повторное удаление, чужую и несуществующую страницу', async () => {
       const page = await createPage();
-      await service.softDelete(page.id, owner);
+      await softDeletePageUseCase.execute(page.id, owner);
 
-      const repeated = await service.softDelete(page.id, owner).catch((error) => error);
-      const missing = await service.softDelete(missingId, owner).catch((error) => error);
-      const foreign = await service.softDelete(page.id, stranger).catch((error) => error);
+      const repeated = await softDeletePageUseCase.execute(page.id, owner).catch((error) => error);
+      const missing = await softDeletePageUseCase.execute(missingId, owner).catch((error) => error);
+      const foreign = await softDeletePageUseCase
+        .execute(page.id, stranger)
+        .catch((error) => error);
 
       expect(repeated).toBeInstanceOf(PageNotFoundError);
       expect(missing.message).toBe(repeated.message);
@@ -137,9 +170,9 @@ describe('PagesService: корзина', () => {
     it('возвращает поддерево целиком и на прежнее место', async () => {
       const root = await createPage({ title: 'root' });
       const child = await createPage({ parentPageId: root.id, title: 'child' });
-      await service.softDelete(root.id, owner);
+      await softDeletePageUseCase.execute(root.id, owner);
 
-      await service.restore(root.id, owner, null);
+      await restorePage(root.id, owner, null);
 
       const tree = await service.findTree(owner);
 
@@ -152,10 +185,10 @@ describe('PagesService: корзина', () => {
       const root = await createPage({ title: 'root' });
       const child = await createPage({ parentPageId: root.id, title: 'child' });
       const grandchild = await createPage({ parentPageId: child.id, title: 'grandchild' });
-      await service.softDelete(child.id, owner);
-      await service.softDelete(root.id, owner);
+      await softDeletePageUseCase.execute(child.id, owner);
+      await softDeletePageUseCase.execute(root.id, owner);
 
-      await service.restore(root.id, owner, null);
+      await restorePage(root.id, owner, null);
 
       const tree = await service.findTree(owner);
 
@@ -170,9 +203,9 @@ describe('PagesService: корзина', () => {
       const root = await createPage({ title: 'root' });
       const child = await createPage({ parentPageId: root.id, title: 'child' });
       const grandchild = await createPage({ parentPageId: child.id, title: 'grandchild' });
-      await service.softDelete(root.id, owner);
+      await softDeletePageUseCase.execute(root.id, owner);
 
-      const restored = await service.restore(child.id, owner, null);
+      const restored = await restorePage(child.id, owner, null);
 
       expect(restored.parentPageId).toBeNull();
 
@@ -187,10 +220,10 @@ describe('PagesService: корзина', () => {
     it('не трогает поднятую страницу при последующем восстановлении её прежнего предка', async () => {
       const root = await createPage({ title: 'root' });
       const child = await createPage({ parentPageId: root.id, title: 'child' });
-      await service.softDelete(root.id, owner);
-      await service.restore(child.id, owner, null);
+      await softDeletePageUseCase.execute(root.id, owner);
+      await restorePage(child.id, owner, null);
 
-      await service.restore(root.id, owner, null);
+      await restorePage(root.id, owner, null);
 
       const tree = await service.findTree(owner);
 
@@ -202,10 +235,10 @@ describe('PagesService: корзина', () => {
       const root = await createPage({ title: 'root' });
       const child = await createPage({ parentPageId: root.id, title: 'child' });
       const grandchild = await createPage({ parentPageId: child.id, title: 'grandchild' });
-      await service.softDelete(child.id, owner);
-      await service.softDelete(root.id, owner);
+      await softDeletePageUseCase.execute(child.id, owner);
+      await softDeletePageUseCase.execute(root.id, owner);
 
-      const restored = await service.restore(child.id, owner, null);
+      const restored = await restorePage(child.id, owner, null);
 
       expect(restored.parentPageId).toBeNull();
 
@@ -219,10 +252,10 @@ describe('PagesService: корзина', () => {
       const first = await createPage({ title: 'first' });
       const second = await createPage({ title: 'second' });
       const child = await createPage({ parentPageId: first.id, title: 'child' });
-      await service.softDelete(child.id, owner);
-      await service.softDelete(first.id, owner);
+      await softDeletePageUseCase.execute(child.id, owner);
+      await softDeletePageUseCase.execute(first.id, owner);
 
-      const restored = await service.restore(child.id, owner, null);
+      const restored = await restorePage(child.id, owner, null);
 
       const tree = await service.findTree(owner);
 
@@ -234,11 +267,11 @@ describe('PagesService: корзина', () => {
     it('возвращает страницу под родителя, если тот успел ожить', async () => {
       const parent = await createPage({ title: 'parent' });
       const child = await createPage({ parentPageId: parent.id, title: 'child' });
-      await service.softDelete(child.id, owner);
-      await service.softDelete(parent.id, owner);
-      await service.restore(parent.id, owner, null);
+      await softDeletePageUseCase.execute(child.id, owner);
+      await softDeletePageUseCase.execute(parent.id, owner);
+      await restorePage(parent.id, owner, null);
 
-      const restored = await service.restore(child.id, owner, null);
+      const restored = await restorePage(child.id, owner, null);
 
       expect(restored).toMatchObject({ parentPageId: parent.id, position: child.position });
 
@@ -249,10 +282,10 @@ describe('PagesService: корзина', () => {
 
     it('отказывает, пока проект страницы лежит в корзине', async () => {
       const page = await createPage();
-      await service.softDelete(page.id, owner);
-      await projects.softDelete(projectId, owner);
+      await softDeletePageUseCase.execute(page.id, owner);
+      await softDeleteProject.execute(projectId, owner);
 
-      await expect(service.restore(page.id, owner, null)).rejects.toBeInstanceOf(
+      await expect(restorePage(page.id, owner, null)).rejects.toBeInstanceOf(
         PageRestoreProjectDeletedError,
       );
     });
@@ -260,8 +293,8 @@ describe('PagesService: корзина', () => {
     it('отвечает одинаково на неудалённую и несуществующую страницу', async () => {
       const page = await createPage();
 
-      const alive = await service.restore(page.id, owner, null).catch((error) => error);
-      const missing = await service.restore(missingId, owner, null).catch((error) => error);
+      const alive = await restorePage(page.id, owner, null).catch((error) => error);
+      const missing = await restorePage(missingId, owner, null).catch((error) => error);
 
       expect(alive).toBeInstanceOf(PageNotFoundError);
       expect(missing.message).toBe(alive.message);
@@ -269,11 +302,9 @@ describe('PagesService: корзина', () => {
 
     it('не восстанавливает чужую страницу', async () => {
       const page = await createPage();
-      await service.softDelete(page.id, owner);
+      await softDeletePageUseCase.execute(page.id, owner);
 
-      await expect(service.restore(page.id, stranger, null)).rejects.toBeInstanceOf(
-        PageNotFoundError,
-      );
+      await expect(restorePage(page.id, stranger, null)).rejects.toBeInstanceOf(PageNotFoundError);
       expect(pages.pages.get(page.id)?.deletedAt).not.toBeNull();
     });
 
@@ -283,8 +314,8 @@ describe('PagesService: корзина', () => {
       await createPage({ parentPageId: second.id, title: 'child' });
       const before = await service.findTree(owner);
 
-      await service.softDelete(second.id, owner);
-      await service.restore(second.id, owner, null);
+      await softDeletePageUseCase.execute(second.id, owner);
+      await restorePage(second.id, owner, null);
 
       await expect(service.findTree(owner)).resolves.toEqual(before);
     });
@@ -295,7 +326,7 @@ describe('PagesService: корзина', () => {
       const root = await createPage({ title: 'root' });
       const child = await createPage({ parentPageId: root.id, title: 'child' });
       await createPage({ title: 'alive' });
-      await service.softDelete(root.id, owner);
+      await softDeletePageUseCase.execute(root.id, owner);
 
       const trash = await service.findDeletedTree(owner);
 
@@ -307,8 +338,8 @@ describe('PagesService: корзина', () => {
     it('показывает отдельно удалённое поддерево отдельным корнем', async () => {
       const root = await createPage({ title: 'root' });
       const child = await createPage({ parentPageId: root.id, title: 'child' });
-      await service.softDelete(child.id, owner);
-      await service.softDelete(root.id, owner);
+      await softDeletePageUseCase.execute(child.id, owner);
+      await softDeletePageUseCase.execute(root.id, owner);
 
       const trash = await service.findDeletedTree(owner);
 
@@ -322,8 +353,8 @@ describe('PagesService: корзина', () => {
     it('ставит недавно удалённый корень первым', async () => {
       const older = await createPage({ title: 'older' });
       const newer = await createPage({ title: 'newer' });
-      await service.softDelete(older.id, owner);
-      await service.softDelete(newer.id, owner);
+      await softDeletePageUseCase.execute(older.id, owner);
+      await softDeletePageUseCase.execute(newer.id, owner);
 
       // Отметки задаются явно: `new Date()` внутри одного тика даёт ничью, и
       // тест проверял бы тай-брейк вместо правила «свежее сверху».
@@ -338,8 +369,8 @@ describe('PagesService: корзина', () => {
     it('возвращает одинаковый порядок при двух чтениях подряд', async () => {
       const first = await createPage({ title: 'first' });
       const second = await createPage({ title: 'second' });
-      await service.softDelete(first.id, owner);
-      await service.softDelete(second.id, owner);
+      await softDeletePageUseCase.execute(first.id, owner);
+      await softDeletePageUseCase.execute(second.id, owner);
 
       const [left, right] = await Promise.all([
         service.findDeletedTree(owner),
@@ -353,7 +384,7 @@ describe('PagesService: корзина', () => {
       const root = await createPage({ title: 'root' });
       const child = await createPage({ parentPageId: root.id, title: 'child' });
 
-      await projects.softDelete(projectId, owner);
+      await softDeleteProject.execute(projectId, owner);
 
       const trash = await service.findDeletedTree(owner);
 
@@ -364,7 +395,7 @@ describe('PagesService: корзина', () => {
     it('не показывает ни живых, ни чужих страниц', async () => {
       const mine = await createPage({ title: 'mine' });
       await createPage({ title: 'alive' });
-      await service.softDelete(mine.id, owner);
+      await softDeletePageUseCase.execute(mine.id, owner);
 
       await expect(service.findDeletedTree(stranger)).resolves.toEqual([]);
       await expect(service.findDeletedTree(owner)).resolves.toHaveLength(1);
@@ -380,9 +411,9 @@ describe('PagesService: корзина', () => {
       const root = await createPage({ title: 'root' });
       const child = await createPage({ parentPageId: root.id, title: 'child' });
       const other = await projects.create({ name: 'Other', ownerId: owner });
-      await projects.softDelete(projectId, owner);
+      await softDeleteProject.execute(projectId, owner);
 
-      const restored = await service.restore(root.id, owner, other.id);
+      const restored = await restorePage(root.id, owner, other.id);
 
       expect(restored).toMatchObject({ parentPageId: null, projectId: other.id });
       // Ветка была нарисована вложенной в корзине — возвращается вместе с корнем.
@@ -396,15 +427,15 @@ describe('PagesService: корзина', () => {
     it('ставит перенесённую страницу последней среди root-страниц назначения', async () => {
       const page = await createPage({ title: 'page' });
       const other = await projects.create({ name: 'Other', ownerId: owner });
-      const existing = await service.create({
+      const existing = await createPageUseCase.execute({
         ownerId: owner,
         parentPageId: null,
         projectId: other.id,
         title: 'existing',
       });
-      await projects.softDelete(projectId, owner);
+      await softDeleteProject.execute(projectId, owner);
 
-      const restored = await service.restore(page.id, owner, other.id);
+      const restored = await restorePage(page.id, owner, other.id);
 
       expect(restored.position > existing.position).toBe(true);
       expect(pages.pages.get(existing.id)?.position).toBe(existing.position);
@@ -413,11 +444,11 @@ describe('PagesService: корзина', () => {
     it('уводит удалённое вложенное поддерево за переносимой страницей', async () => {
       const root = await createPage({ title: 'root' });
       const dropped = await createPage({ parentPageId: root.id, title: 'dropped' });
-      await service.softDelete(dropped.id, owner);
+      await softDeletePageUseCase.execute(dropped.id, owner);
       const other = await projects.create({ name: 'Other', ownerId: owner });
-      await projects.softDelete(projectId, owner);
+      await softDeleteProject.execute(projectId, owner);
 
-      await service.restore(root.id, owner, other.id);
+      await restorePage(root.id, owner, other.id);
 
       // Осталась удалённой, но проект сменила: иначе ребёнок лежал бы в одном
       // проекте, а родитель в другом.
@@ -431,12 +462,12 @@ describe('PagesService: корзина', () => {
     it('позволяет восстановить уведённое поддерево уже в новом проекте', async () => {
       const root = await createPage({ title: 'root' });
       const dropped = await createPage({ parentPageId: root.id, title: 'dropped' });
-      await service.softDelete(dropped.id, owner);
+      await softDeletePageUseCase.execute(dropped.id, owner);
       const other = await projects.create({ name: 'Other', ownerId: owner });
-      await projects.softDelete(projectId, owner);
-      await service.restore(root.id, owner, other.id);
+      await softDeleteProject.execute(projectId, owner);
+      await restorePage(root.id, owner, other.id);
 
-      const restored = await service.restore(dropped.id, owner, null);
+      const restored = await restorePage(dropped.id, owner, null);
 
       expect(restored.projectId).toBe(other.id);
     });
@@ -444,9 +475,9 @@ describe('PagesService: корзина', () => {
     it('отклоняет проект назначения, когда собственный проект жив', async () => {
       const page = await createPage({ title: 'page' });
       const other = await projects.create({ name: 'Other', ownerId: owner });
-      await service.softDelete(page.id, owner);
+      await softDeletePageUseCase.execute(page.id, owner);
 
-      await expect(service.restore(page.id, owner, other.id)).rejects.toBeInstanceOf(
+      await expect(restorePage(page.id, owner, other.id)).rejects.toBeInstanceOf(
         PageRestoreTargetProjectRejectedError,
       );
     });
@@ -455,16 +486,12 @@ describe('PagesService: корзина', () => {
       const page = await createPage({ title: 'page' });
       const foreign = await projects.create({ name: 'Foreign', ownerId: stranger });
       const deleted = await projects.create({ name: 'Deleted', ownerId: owner });
-      await projects.softDelete(deleted.id, owner);
-      await projects.softDelete(projectId, owner);
+      await softDeleteProject.execute(deleted.id, owner);
+      await softDeleteProject.execute(projectId, owner);
 
-      const foreignError = await service
-        .restore(page.id, owner, foreign.id)
-        .catch((error) => error);
-      const deletedError = await service
-        .restore(page.id, owner, deleted.id)
-        .catch((error) => error);
-      const missingError = await service.restore(page.id, owner, missingId).catch((error) => error);
+      const foreignError = await restorePage(page.id, owner, foreign.id).catch((error) => error);
+      const deletedError = await restorePage(page.id, owner, deleted.id).catch((error) => error);
+      const missingError = await restorePage(page.id, owner, missingId).catch((error) => error);
 
       expect(foreignError).toBeInstanceOf(ProjectNotFoundError);
       expect(deletedError.message).toBe(foreignError.message);

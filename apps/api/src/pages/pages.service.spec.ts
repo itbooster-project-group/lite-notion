@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
-
+import { TransactionRunner } from '../database/transaction';
+import { InMemoryTransactionRunner } from '../database/transaction.in-memory';
 import { ProjectNotFoundError } from '../projects/errors';
 import { ProjectsRepository } from '../projects/projects.repository';
 import {
@@ -10,15 +11,24 @@ import {
 import { ProjectsService } from '../projects/projects.service';
 import { TIPTAP_SCHEMA_VERSION } from './constants';
 import {
+  NextSiblingNotFoundError,
   PageCycleError,
   PageNotFoundError,
+  PageParentNotFoundError,
   PageProjectMismatchError,
+  PreviousSiblingNotFoundError,
   SiblingOrderError,
   SiblingParentMismatchError,
 } from './errors';
+import { positionBetween } from './helpers';
+import { PageDocumentRepository } from './page-document/page-document.repository';
+import { InMemoryPageDocumentRepository } from './page-document/page-document.repository.in-memory';
+import { PageDocumentService } from './page-document/page-document.service';
 import { PagesRepository } from './pages.repository';
 import { InMemoryPagesRepository, type StoredPage } from './pages.repository.in-memory';
 import { PagesService } from './pages.service';
+import { CreatePageUseCase } from './use-cases/create-page.use-case';
+import { MovePageUseCase } from './use-cases/move-page.use-case';
 
 const owner = '11111111-1111-1111-1111-111111111111';
 const stranger = '22222222-2222-2222-2222-222222222222';
@@ -26,14 +36,17 @@ const missingId = '33333333-3333-4333-8333-333333333333';
 
 describe('PagesService', () => {
   let service: PagesService;
+  let createPageUseCase: CreatePageUseCase;
+  let movePageUseCase: MovePageUseCase;
   let pages: InMemoryPagesRepository;
+  let documents: InMemoryPageDocumentRepository;
   let projects: InMemoryProjectsRepository;
   let projectId: string;
 
   const createPage = async (
     overrides: { parentPageId?: string | null; title?: string; projectId?: string } = {},
   ) =>
-    service.create({
+    createPageUseCase.execute({
       ownerId: owner,
       parentPageId: overrides.parentPageId ?? null,
       projectId: overrides.projectId ?? projectId,
@@ -46,18 +59,26 @@ describe('PagesService', () => {
     const pageStore = new Map<string, StoredPage>();
     const projectStore = new Map<string, StoredProject>();
     pages = new InMemoryPagesRepository(new Map(), projectStore, pageStore);
+    documents = new InMemoryPageDocumentRepository(pages.documents, pages.pages);
     projects = new InMemoryProjectsRepository(pageStore, projectStore);
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         PagesService,
         ProjectsService,
+        CreatePageUseCase,
+        PageDocumentService,
+        MovePageUseCase,
         { provide: PagesRepository, useValue: pages },
+        { provide: PageDocumentRepository, useValue: documents },
         { provide: ProjectsRepository, useValue: projects },
+        { provide: TransactionRunner, useValue: new InMemoryTransactionRunner() },
       ],
     }).compile();
 
     service = moduleRef.get(PagesService);
+    createPageUseCase = moduleRef.get(CreatePageUseCase);
+    movePageUseCase = moduleRef.get(MovePageUseCase);
     projectId = (await projects.create({ name: 'Workspace', ownerId: owner })).id;
   });
 
@@ -103,11 +124,11 @@ describe('PagesService', () => {
       expect(second.position > first.position).toBe(true);
     });
 
-    it('не оставляет страницу, если документ не создался', async () => {
-      pages.failDocumentInsert = true;
+    // Откат проверяется на живой базе: двойник транзакции не воспроизводит.
+    it('отказывает, если документ не создался', async () => {
+      documents.failInsert = true;
 
       await expect(createPage()).rejects.toThrow();
-      await expect(service.findTree(owner)).resolves.toEqual([]);
     });
   });
 
@@ -136,20 +157,20 @@ describe('PagesService', () => {
   describe('родитель при создании', () => {
     it('отвечает одинаково на чужого и на несуществующего родителя', async () => {
       const foreignProject = await projects.create({ name: 'Theirs', ownerId: stranger });
-      const foreignPage = await pages.create({
+      const foreignPage = await pages.insert({
         createdById: stranger,
         ownerId: stranger,
         parentPageId: null,
+        position: positionBetween(null, null),
         projectId: foreignProject.id,
-        tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
         title: 'theirs',
       });
 
       const foreignError = await createPage({ parentPageId: foreignPage.id }).catch((e) => e);
       const missingError = await createPage({ parentPageId: missingId }).catch((e) => e);
 
-      expect(foreignError).toBeInstanceOf(PageNotFoundError);
-      expect(missingError).toBeInstanceOf(PageNotFoundError);
+      expect(foreignError).toBeInstanceOf(PageParentNotFoundError);
+      expect(missingError).toBeInstanceOf(PageParentNotFoundError);
       expect(foreignError.message).toBe(missingError.message);
       await expect(service.findTree(owner)).resolves.toEqual([]);
     });
@@ -175,12 +196,12 @@ describe('PagesService', () => {
 
     it('не показывает страницы другого владельца', async () => {
       const foreignProject = await projects.create({ name: 'Theirs', ownerId: stranger });
-      await pages.create({
+      await pages.insert({
         createdById: stranger,
         ownerId: stranger,
         parentPageId: null,
+        position: positionBetween(null, null),
         projectId: foreignProject.id,
-        tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
         title: 'theirs',
       });
       const mine = await createPage({ title: 'mine' });
@@ -225,12 +246,12 @@ describe('PagesService', () => {
 
     it('отвечает одинаково на чужую, удалённую и несуществующую страницу', async () => {
       const foreignProject = await projects.create({ name: 'Theirs', ownerId: stranger });
-      const foreign = await pages.create({
+      const foreign = await pages.insert({
         createdById: stranger,
         ownerId: stranger,
         parentPageId: null,
+        position: positionBetween(null, null),
         projectId: foreignProject.id,
-        tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
         title: 'theirs',
       });
       const deleted = await createPage();
@@ -281,7 +302,7 @@ describe('PagesService', () => {
       const first = await createPage({ title: 'first' });
       const second = await createPage({ title: 'second' });
 
-      await service.move({
+      await movePageUseCase.execute({
         nextSiblingId: null,
         ownerId: owner,
         pageId: second.id,
@@ -301,7 +322,7 @@ describe('PagesService', () => {
       const leafA = await createPage({ parentPageId: branch.id, title: 'a' });
       const leafB = await createPage({ parentPageId: branch.id, title: 'b' });
 
-      await service.move({
+      await movePageUseCase.execute({
         nextSiblingId: null,
         ownerId: owner,
         pageId: branch.id,
@@ -320,7 +341,7 @@ describe('PagesService', () => {
       const parent = await createPage();
       const child = await createPage({ parentPageId: parent.id });
 
-      const moved = await service.move({
+      const moved = await movePageUseCase.execute({
         nextSiblingId: null,
         ownerId: owner,
         pageId: child.id,
@@ -336,7 +357,7 @@ describe('PagesService', () => {
       const second = await createPage({ title: 'second' });
       const third = await createPage({ title: 'third' });
 
-      const moved = await service.move({
+      const moved = await movePageUseCase.execute({
         nextSiblingId: second.id,
         ownerId: owner,
         pageId: third.id,
@@ -358,7 +379,7 @@ describe('PagesService', () => {
       const first = await createPage({ title: 'first' });
       const second = await createPage({ title: 'second' });
 
-      await service.move({
+      await movePageUseCase.execute({
         nextSiblingId: null,
         ownerId: owner,
         pageId: first.id,
@@ -375,7 +396,7 @@ describe('PagesService', () => {
       const page = await createPage();
 
       await expect(
-        service.move({
+        movePageUseCase.execute({
           nextSiblingId: null,
           ownerId: owner,
           pageId: page.id,
@@ -391,7 +412,7 @@ describe('PagesService', () => {
       const grandchild = await createPage({ parentPageId: child.id });
 
       await expect(
-        service.move({
+        movePageUseCase.execute({
           nextSiblingId: null,
           ownerId: owner,
           pageId: root.id,
@@ -412,7 +433,7 @@ describe('PagesService', () => {
       const there = await createPage({ projectId: other.id });
 
       await expect(
-        service.move({
+        movePageUseCase.execute({
           nextSiblingId: null,
           ownerId: owner,
           pageId: here.id,
@@ -432,7 +453,7 @@ describe('PagesService', () => {
       const second = await createPage({ title: 'second' });
 
       await expect(
-        service.move({
+        movePageUseCase.execute({
           nextSiblingId: first.id,
           ownerId: owner,
           pageId: second.id,
@@ -449,7 +470,7 @@ describe('PagesService', () => {
 
       // Соседи названы в обратном порядке: щели между ними не существует.
       await expect(
-        service.move({
+        movePageUseCase.execute({
           nextSiblingId: first.id,
           ownerId: owner,
           pageId: third.id,
@@ -471,7 +492,7 @@ describe('PagesService', () => {
       }
 
       await expect(
-        service.move({
+        movePageUseCase.execute({
           nextSiblingId: second.id,
           ownerId: owner,
           pageId: third.id,
@@ -487,7 +508,7 @@ describe('PagesService', () => {
       const root = await createPage();
 
       await expect(
-        service.move({
+        movePageUseCase.execute({
           nextSiblingId: null,
           ownerId: owner,
           pageId: root.id,
@@ -497,11 +518,119 @@ describe('PagesService', () => {
       ).rejects.toBeInstanceOf(SiblingParentMismatchError);
     });
 
+    /**
+     * В теле перемещения четыре идентификатора страниц. Отказ обязан называть тот,
+     * который не подошёл, иначе клиенту не из чего понять, что исправлять.
+     */
+    it('различает, какой из идентификаторов не найден', async () => {
+      const page = await createPage();
+      const move = (overrides: {
+        parentPageId?: string | null;
+        previousSiblingId?: string | null;
+        nextSiblingId?: string | null;
+        pageId?: string;
+      }) =>
+        movePageUseCase
+          .execute({
+            nextSiblingId: overrides.nextSiblingId ?? null,
+            ownerId: owner,
+            pageId: overrides.pageId ?? page.id,
+            parentPageId: overrides.parentPageId ?? null,
+            previousSiblingId: overrides.previousSiblingId ?? null,
+          })
+          .catch((error) => error);
+
+      expect(await move({ pageId: missingId })).toBeInstanceOf(PageNotFoundError);
+      expect(await move({ parentPageId: missingId })).toBeInstanceOf(PageParentNotFoundError);
+      expect(await move({ previousSiblingId: missingId })).toBeInstanceOf(
+        PreviousSiblingNotFoundError,
+      );
+      expect(await move({ nextSiblingId: missingId })).toBeInstanceOf(NextSiblingNotFoundError);
+
+      const messages = await Promise.all([
+        move({ pageId: missingId }),
+        move({ parentPageId: missingId }),
+        move({ previousSiblingId: missingId }),
+        move({ nextSiblingId: missingId }),
+      ]);
+
+      expect(new Set(messages.map((error) => error.message)).size).toBe(4);
+    });
+
+    it('называет соседа, лежащего не под целевым родителем', async () => {
+      const parent = await createPage();
+      const child = await createPage({ parentPageId: parent.id });
+      const page = await createPage();
+
+      const previous = await movePageUseCase
+        .execute({
+          nextSiblingId: null,
+          ownerId: owner,
+          pageId: page.id,
+          parentPageId: null,
+          previousSiblingId: child.id,
+        })
+        .catch((error) => error);
+      const next = await movePageUseCase
+        .execute({
+          nextSiblingId: child.id,
+          ownerId: owner,
+          pageId: page.id,
+          parentPageId: null,
+          previousSiblingId: null,
+        })
+        .catch((error) => error);
+
+      expect(previous).toBeInstanceOf(SiblingParentMismatchError);
+      expect(next).toBeInstanceOf(SiblingParentMismatchError);
+      expect(previous.message).not.toBe(next.message);
+    });
+
+    it('оставляет чужую и несуществующую запись неразличимыми в каждом слоте', async () => {
+      const foreignProject = await projects.create({ name: 'Theirs', ownerId: stranger });
+      const foreign = await pages.insert({
+        createdById: stranger,
+        ownerId: stranger,
+        parentPageId: null,
+        position: positionBetween(null, null),
+        projectId: foreignProject.id,
+        title: 'theirs',
+      });
+      const page = await createPage();
+
+      const slotOf = async (overrides: {
+        parentPageId?: string;
+        previousSiblingId?: string;
+        nextSiblingId?: string;
+      }) =>
+        (
+          await movePageUseCase
+            .execute({
+              nextSiblingId: overrides.nextSiblingId ?? null,
+              ownerId: owner,
+              pageId: page.id,
+              parentPageId: overrides.parentPageId ?? null,
+              previousSiblingId: overrides.previousSiblingId ?? null,
+            })
+            .catch((error) => error)
+        ).message;
+
+      expect(await slotOf({ parentPageId: foreign.id })).toBe(
+        await slotOf({ parentPageId: missingId }),
+      );
+      expect(await slotOf({ previousSiblingId: foreign.id })).toBe(
+        await slotOf({ previousSiblingId: missingId }),
+      );
+      expect(await slotOf({ nextSiblingId: foreign.id })).toBe(
+        await slotOf({ nextSiblingId: missingId }),
+      );
+    });
+
     it('отвечает одинаково на чужую и на несуществующую перемещаемую страницу', async () => {
       const page = await createPage();
 
-      const foreignError = await service
-        .move({
+      const foreignError = await movePageUseCase
+        .execute({
           nextSiblingId: null,
           ownerId: stranger,
           pageId: page.id,
@@ -509,8 +638,8 @@ describe('PagesService', () => {
           previousSiblingId: null,
         })
         .catch((error) => error);
-      const missingError = await service
-        .move({
+      const missingError = await movePageUseCase
+        .execute({
           nextSiblingId: null,
           ownerId: stranger,
           pageId: missingId,
@@ -530,7 +659,7 @@ describe('PagesService', () => {
       pages.failAfterReparent = true;
 
       await expect(
-        service.move({
+        movePageUseCase.execute({
           nextSiblingId: null,
           ownerId: owner,
           pageId: second.id,

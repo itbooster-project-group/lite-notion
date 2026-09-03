@@ -1,8 +1,6 @@
 /**
- * Страница не найдена, удалена либо принадлежит другому пользователю. Все три
- * случая намеренно неразличимы: отдельная ошибка «чужая страница» была бы
- * оракулом существования чужих страниц. Перевод в `NotFoundException` делает
- * контроллер — репозиторий и сервис про HTTP не знают.
+ * Страница не найдена, удалена либо чужая. Три случая намеренно неразличимы: иначе
+ * ошибка стала бы оракулом существования чужих страниц.
  */
 export class PageNotFoundError extends Error {
   constructor() {
@@ -23,12 +21,43 @@ export class PageCycleError extends Error {
 }
 
 /**
+ * Родитель, указанный при создании или перемещении, не найден, удалён либо чужой.
+ * Отдельно от `PageNotFoundError`: в теле запроса несколько идентификаторов страниц,
+ * и вызывающий должен понять, какой из них не подошёл.
+ */
+export class PageParentNotFoundError extends Error {
+  constructor() {
+    super('Parent page not found');
+    this.name = 'PageParentNotFoundError';
+  }
+}
+
+/** Предыдущий сосед не найден, удалён либо чужой. */
+export class PreviousSiblingNotFoundError extends Error {
+  constructor() {
+    super('previousSiblingId not found');
+    this.name = 'PreviousSiblingNotFoundError';
+  }
+}
+
+/** Следующий сосед не найден, удалён либо чужой. */
+export class NextSiblingNotFoundError extends Error {
+  constructor() {
+    super('nextSiblingId not found');
+    this.name = 'NextSiblingNotFoundError';
+  }
+}
+
+/**
  * Сосед существует и доступен вызывающему, но лежит не под целевым родителем.
  * Запрос внутренне противоречив — контроллер переводит это в `400`.
+ *
+ * Слот приходит параметром, а не отдельным классом на каждого соседа: причина у
+ * обоих одна, различается только идентификатор из тела запроса.
  */
 export class SiblingParentMismatchError extends Error {
-  constructor() {
-    super('Sibling belongs to a different parent');
+  constructor(readonly slot: 'previousSiblingId' | 'nextSiblingId') {
+    super(`${slot} belongs to a different parent`);
     this.name = 'SiblingParentMismatchError';
   }
 }
@@ -57,16 +86,10 @@ export class SiblingOrderError extends Error {
 }
 
 /**
- * Проект восстанавливаемой страницы сам лежит в корзине. Живая страница в
- * удалённом проекте невозможна, а подъём в корень не помогает: корень принадлежит
- * тому же удалённому проекту.
+ * Проект страницы сам в корзине: живой страницы в удалённом проекте не бывает, а
+ * подъём в корень не помогает — корень в том же проекте.
  *
- * `409`, а не `404`: страница вызывающему видна — корзина её показывает, — поэтому
- * скрывать нечего, и запрос противоречит состоянию, а не правам.
- *
- * Единственный отказ восстановления по состоянию. Источник удаления восстановление
- * не гоняет: вложенная страница не отклоняется, а поднимается в корень своего
- * проекта.
+ * `409`, а не `404`: корзина страницу показывает, скрывать нечего.
  */
 export class PageRestoreProjectDeletedError extends Error {
   constructor() {
@@ -78,12 +101,9 @@ export class PageRestoreProjectDeletedError extends Error {
 }
 
 /**
- * Проект назначения указан, а собственный проект страницы жив — переносить её
- * незачем и некуда. Принять параметр здесь значило бы завести перенос между
- * проектами чёрным ходом, минуя требование `specs/page-tree`.
- *
- * `400`, а не `409`: запрос внутренне противоречив, и обе записи вызывающему
- * видны, поэтому раскрытия чужих данных нет.
+ * Проект назначения указан при живом собственном проекте. Принять его значило бы
+ * завести перенос между проектами в обход `specs/page-tree`. `400`, а не `409`:
+ * запрос внутренне противоречив.
  */
 export class PageRestoreTargetProjectRejectedError extends Error {
   constructor() {

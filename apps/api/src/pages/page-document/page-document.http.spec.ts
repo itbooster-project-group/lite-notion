@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { createHttpTestContext, type HttpTestContext } from '../../testing/http-application';
 import { DOCUMENT_MAX_BYTES, TIPTAP_SCHEMA_VERSION } from '../constants';
+import { positionBetween } from '../helpers';
 
 const owner = '11111111-1111-1111-1111-111111111111';
 
@@ -18,14 +19,15 @@ describe('page document HTTP contract', () => {
     authorization = `Bearer ${await context.signAccessToken(owner)}`;
 
     const project = await context.projects.create({ name: 'Workspace', ownerId: owner });
-    const page = await context.pages.create({
+    const page = await context.pages.insert({
       createdById: owner,
       ownerId: owner,
       parentPageId: null,
+      position: positionBetween(null, null),
       projectId: project.id,
-      tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
       title: 'page',
     });
+    await context.documents.insertEmpty(page.id, TIPTAP_SCHEMA_VERSION);
 
     pageId = page.id;
   });

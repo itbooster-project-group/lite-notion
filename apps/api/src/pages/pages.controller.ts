@@ -42,6 +42,12 @@ import { RenamePageDto } from './dto/rename-page.dto';
 import { RestorePageDto } from './dto/restore-page.dto';
 import { toHttpException } from './helpers';
 import { PagesService } from './pages.service';
+import { CreatePageUseCase } from './use-cases/create-page.use-case';
+import { MovePageUseCase } from './use-cases/move-page.use-case';
+import { PurgePageUseCase } from './use-cases/purge-page.use-case';
+import { PurgePagesTrashUseCase } from './use-cases/purge-pages-trash.use-case';
+import { RestorePageUseCase } from './use-cases/restore-page.use-case';
+import { SoftDeletePageUseCase } from './use-cases/soft-delete-page.use-case';
 
 @ApiTags('pages')
 @ApiBearerAuth()
@@ -56,7 +62,15 @@ import { PagesService } from './pages.service';
 })
 @Controller('pages')
 export class PagesController {
-  constructor(@Inject(PagesService) private readonly pages: PagesService) {}
+  constructor(
+    @Inject(PagesService) private readonly pages: PagesService,
+    @Inject(CreatePageUseCase) private readonly createPage: CreatePageUseCase,
+    @Inject(MovePageUseCase) private readonly movePage: MovePageUseCase,
+    @Inject(SoftDeletePageUseCase) private readonly softDeletePage: SoftDeletePageUseCase,
+    @Inject(RestorePageUseCase) private readonly restorePage: RestorePageUseCase,
+    @Inject(PurgePageUseCase) private readonly purgePage: PurgePageUseCase,
+    @Inject(PurgePagesTrashUseCase) private readonly purgePagesTrash: PurgePagesTrashUseCase,
+  ) {}
 
   @Post()
   @ApiBody({ type: CreatePageDto })
@@ -67,7 +81,7 @@ export class PagesController {
     @Body() body: CreatePageDto,
   ): Promise<PageDto> {
     const page = await toHttpException(() =>
-      this.pages.create({
+      this.createPage.execute({
         ownerId: user.id,
         parentPageId: body.parentPageId ?? null,
         projectId: body.projectId,
@@ -138,7 +152,7 @@ export class PagesController {
     @Body() body: MovePageDto,
   ): Promise<PageDto> {
     const page = await toHttpException(() =>
-      this.pages.move({
+      this.movePage.execute({
         nextSiblingId: body.nextSiblingId ?? null,
         ownerId: user.id,
         pageId,
@@ -158,7 +172,7 @@ export class PagesController {
   })
   @ApiNoContentResponse({ description: 'Page trash emptied' })
   async purgeTrash(@CurrentUser() user: AuthenticatedUser): Promise<void> {
-    await this.pages.purgeTrash(user.id);
+    await this.purgePagesTrash.execute(user.id);
   }
 
   @Delete('trash/:pageId')
@@ -185,7 +199,7 @@ export class PagesController {
     @Param('pageId', ParseUUIDPipe) pageId: string,
     @Query() query: CascadeQueryDto,
   ): Promise<void> {
-    await toHttpException(() => this.pages.purge(pageId, user.id, query.cascade ?? false));
+    await toHttpException(() => this.purgePage.execute(pageId, user.id, query.cascade ?? false));
   }
 
   @Delete(':pageId')
@@ -197,7 +211,7 @@ export class PagesController {
     @CurrentUser() user: AuthenticatedUser,
     @Param('pageId', ParseUUIDPipe) pageId: string,
   ): Promise<void> {
-    await toHttpException(() => this.pages.softDelete(pageId, user.id));
+    await toHttpException(() => this.softDeletePage.execute(pageId, user.id));
   }
 
   @Post(':pageId/restore')
@@ -217,7 +231,11 @@ export class PagesController {
     @Body() body: RestorePageDto,
   ): Promise<PageDto> {
     const page = await toHttpException(() =>
-      this.pages.restore(pageId, user.id, body.projectId ?? null),
+      this.restorePage.execute({
+        ownerId: user.id,
+        pageId,
+        targetProjectId: body.projectId ?? null,
+      }),
     );
 
     return PageDto.fromRecord(page);

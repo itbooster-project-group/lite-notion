@@ -4,6 +4,7 @@ import { IS_PUBLIC_KEY } from '../common/decorators/public.decorator';
 import { ProjectsController } from '../projects/projects.controller';
 import { createHttpTestContext, type HttpTestContext } from '../testing/http-application';
 import { TIPTAP_SCHEMA_VERSION } from './constants';
+import { positionBetween } from './helpers';
 import { PageDocumentController } from './page-document/page-document.controller';
 import { PagesController } from './pages.controller';
 
@@ -24,14 +25,15 @@ describe('изоляция по владельцу и защита маршру�
     const foreignProject = await context.projects.create({ name: 'Theirs', ownerId: stranger });
     foreignProjectId = foreignProject.id;
 
-    const foreignPage = await context.pages.create({
+    const foreignPage = await context.pages.insert({
       createdById: stranger,
       ownerId: stranger,
       parentPageId: null,
+      position: positionBetween(null, null),
       projectId: foreignProject.id,
-      tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
       title: 'theirs',
     });
+    await context.documents.insertEmpty(foreignPage.id, TIPTAP_SCHEMA_VERSION);
     foreignPageId = foreignPage.id;
   });
 
