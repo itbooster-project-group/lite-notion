@@ -54,3 +54,9 @@
 - [x] 6.3 Выполнить `pnpm --filter @lite-notion/web test`; проверка — команда завершается успешно.
 - [x] 6.4 Выполнить `pnpm --filter @lite-notion/web build`; проверка — команда завершается успешно.
 - [x] 6.5 Выполнить `openspec validate add-workspace-delete-actions --strict`; проверка — команда завершается успешно перед объявлением change готовым к implementation review.
+
+## 7. Review fixes
+
+- [x] 7.1 Для affected page delete отменять in-flight `getGetPageTreeQueryKey()` перед DELETE, чтобы refetch не мог убрать active page из cache до commit нового route; проверка — regression test запускает delayed refetch, подтверждает active page delete, завершает refetch данными без deleted page и не видит `Ничего не найдено`.
+- [x] 7.2 Для affected project delete отменять in-flight `getGetPageTreeQueryKey()` и `getListProjectsQueryKey()` перед DELETE, чтобы refetch не мог убрать active project/page из cache до commit нового route; проверка — regression test запускает delayed projects/page-tree refetch, подтверждает affected project delete, завершает refetch данными без deleted project/pages и не видит `Ничего не найдено`.
+- [x] 7.3 Сделать `DeleteConfirmationDialog` устойчивым к очистке intent при закрытии: final focus берётся из последнего сохранённого `returnFocus`; проверка — Cancel и Escape реально закрывают controlled dialog и возвращают focus на trigger.

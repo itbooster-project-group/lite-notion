@@ -102,6 +102,10 @@ export function usePageManagement(routeContext: WorkspaceRouteContext) {
     const affectsCurrentRoute =
       routeContext.type === 'page' && isPageInSubtree(normalizedTree, pageId, routeContext.pageId);
 
+    if (affectsCurrentRoute) {
+      await queryClient.cancelQueries({ queryKey });
+    }
+
     await deleteMutation.mutateAsync({ pageId });
 
     if (affectsCurrentRoute) {

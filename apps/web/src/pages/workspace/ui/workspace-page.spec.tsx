@@ -3,7 +3,12 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { delay, HttpResponse, http } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { PageDto, PageTreeNodeDto } from '@/shared/api';
+import {
+  getGetPageTreeQueryKey,
+  getListProjectsQueryKey,
+  type PageDto,
+  type PageTreeNodeDto,
+} from '@/shared/api';
 import { server } from '@/shared/api/mocks/server';
 
 import { WorkspacePage, type WorkspaceRouteContext } from './workspace-page';
@@ -73,11 +78,22 @@ afterEach(() => {
 
 function renderWorkspace(route: WorkspaceRouteContext) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const view = render(
     <QueryClientProvider client={queryClient}>
       <WorkspacePage route={route} />
     </QueryClientProvider>,
   );
+
+  return { queryClient, ...view };
+}
+
+function createDeferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((innerResolve) => {
+    resolve = innerResolve;
+  });
+
+  return { promise, resolve };
 }
 
 describe('workspace page', () => {
@@ -352,6 +368,45 @@ describe('workspace page', () => {
     expect(screen.queryByRole('heading', { name: 'Ничего не найдено' })).not.toBeInTheDocument();
   });
 
+  it('отменяет in-flight page tree refetch перед affected page delete', async () => {
+    const deleteRequests = vi.fn();
+    const refetch = createDeferred();
+    let pageTreeRequests = 0;
+    server.use(
+      http.get('*/api/v1/pages', async () => {
+        pageTreeRequests += 1;
+        if (pageTreeRequests === 1) return HttpResponse.json(currentTree);
+
+        await refetch.promise;
+        return HttpResponse.json([page('beta', 'project-a', null, 'Beta page')]);
+      }),
+      http.delete('*/api/v1/pages/:pageId', ({ params }) => {
+        deleteRequests(params.pageId);
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    const { queryClient } = renderWorkspace({ pageId: 'child', type: 'page' });
+    await screen.findByRole('heading', { name: 'Child page' });
+
+    const refetchPromise = queryClient.invalidateQueries({ queryKey: getGetPageTreeQueryKey() });
+    await waitFor(() => expect(pageTreeRequests).toBe(2));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Действия для Child page' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
+
+    await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('child'));
+    expect(navigation.replace).toHaveBeenCalledWith('/projects/project-a');
+
+    refetch.resolve();
+    await refetchPromise;
+
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: 'Ничего не найдено' })).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole('heading', { name: 'Child page' })).toBeInTheDocument();
+  });
+
   it('удаление ancestor active page начинает replace-navigation на project root', async () => {
     const deleteRequests = vi.fn();
     server.use(
@@ -513,6 +568,61 @@ describe('workspace page', () => {
     expect(navigation.replace).toHaveBeenCalledWith('/');
     expect(navigation.push).not.toHaveBeenCalled();
     expect(screen.queryByRole('heading', { name: 'Ничего не найдено' })).not.toBeInTheDocument();
+  });
+
+  it('отменяет in-flight projects/page tree refetch перед affected project delete', async () => {
+    const deleteRequests = vi.fn();
+    const projectsRefetch = createDeferred();
+    const pageTreeRefetch = createDeferred();
+    let projectRequests = 0;
+    let pageTreeRequests = 0;
+    server.use(
+      http.get('*/api/v1/projects', async () => {
+        projectRequests += 1;
+        if (projectRequests === 1) return HttpResponse.json(currentProjects);
+
+        await projectsRefetch.promise;
+        return HttpResponse.json([{ id: 'project-b', name: 'Project Beta', ownerId: 'user-1' }]);
+      }),
+      http.get('*/api/v1/pages', async () => {
+        pageTreeRequests += 1;
+        if (pageTreeRequests === 1) return HttpResponse.json(currentTree);
+
+        await pageTreeRefetch.promise;
+        return HttpResponse.json([page('other', 'project-b', null, 'Other project page')]);
+      }),
+      http.delete('*/api/v1/projects/:projectId', ({ params }) => {
+        deleteRequests(params.projectId);
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    const { queryClient } = renderWorkspace({ projectId: 'project-a', type: 'project' });
+    await screen.findByRole('heading', { name: 'Project Alpha' });
+
+    const projectsRefetchPromise = queryClient.invalidateQueries({
+      queryKey: getListProjectsQueryKey(),
+    });
+    const pageTreeRefetchPromise = queryClient.invalidateQueries({
+      queryKey: getGetPageTreeQueryKey(),
+    });
+    await waitFor(() => expect(projectRequests).toBe(2));
+    await waitFor(() => expect(pageTreeRequests).toBe(2));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Действия для проекта Project Alpha' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить проект' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
+
+    await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('project-a'));
+    expect(navigation.replace).toHaveBeenCalledWith('/');
+
+    projectsRefetch.resolve();
+    pageTreeRefetch.resolve();
+    await Promise.all([projectsRefetchPromise, pageTreeRefetchPromise]);
+
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: 'Ничего не найдено' })).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole('heading', { name: 'Project Alpha' })).toBeInTheDocument();
   });
 
   it('удаление project текущей page начинает replace-navigation на workspace root', async () => {

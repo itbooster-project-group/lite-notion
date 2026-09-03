@@ -25,11 +25,17 @@ export function useProjectDeletion(routeContext: WorkspaceRouteContext) {
     const pageTreeQueryKey = getGetPageTreeQueryKey();
     const pageTreeSnapshot = queryClient.getQueryData<PageTreeNodeDto[]>(pageTreeQueryKey) ?? [];
     const normalizedTree = normalizePageTree(pageTreeSnapshot);
+    const projectsQueryKey = getListProjectsQueryKey();
     const affectsCurrentRoute =
       routeContext.type === 'project'
         ? routeContext.projectId === projectId
         : routeContext.type === 'page' &&
           selectPage(normalizedTree, routeContext.pageId)?.projectId === projectId;
+
+    if (affectsCurrentRoute) {
+      await queryClient.cancelQueries({ queryKey: pageTreeQueryKey });
+      await queryClient.cancelQueries({ queryKey: projectsQueryKey });
+    }
 
     await deleteMutation.mutateAsync({ projectId });
 
@@ -43,7 +49,6 @@ export function useProjectDeletion(routeContext: WorkspaceRouteContext) {
       return;
     }
 
-    const projectsQueryKey = getListProjectsQueryKey();
     queryClient.setQueryData<ProjectDto[]>(projectsQueryKey, (current) =>
       (current ?? []).filter((project) => project.id !== projectId),
     );

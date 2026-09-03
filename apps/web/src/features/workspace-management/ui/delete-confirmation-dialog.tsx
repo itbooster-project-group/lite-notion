@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import {
   Button,
   Dialog,
@@ -37,6 +38,14 @@ export function DeleteConfirmationDialog({
   onCancel,
   onConfirm,
 }: DeleteConfirmationDialogProps) {
+  const returnFocusRef = useRef<HTMLElement | undefined>(undefined);
+
+  useEffect(() => {
+    if (intent) {
+      returnFocusRef.current = intent.returnFocus;
+    }
+  }, [intent]);
+
   return (
     <Dialog
       open={Boolean(intent)}
@@ -44,7 +53,7 @@ export function DeleteConfirmationDialog({
         if (!open && !pending) onCancel();
       }}
     >
-      <DialogContent finalFocus={() => intent?.returnFocus ?? true} showCloseButton={false}>
+      <DialogContent finalFocus={() => returnFocusRef.current ?? true} showCloseButton={false}>
         <DialogTitle>
           {intent?.kind === 'project' ? 'Удалить проект?' : 'Удалить страницу?'}
         </DialogTitle>

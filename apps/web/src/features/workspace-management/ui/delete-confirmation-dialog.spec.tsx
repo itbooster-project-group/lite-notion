@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -67,35 +68,32 @@ describe('DeleteConfirmationDialog', () => {
     expect(screen.queryByText(/First page/)).not.toBeInTheDocument();
   });
 
-  it('до confirm закрывается через Cancel и Escape без DELETE', async () => {
-    const trigger = document.createElement('button');
-    document.body.append(trigger);
-    trigger.focus();
-    const { onCancel, onConfirm } = renderDialog({
-      kind: 'page',
-      returnFocus: trigger,
-      title: 'Draft page',
-    });
+  it('до confirm закрывается через Cancel без DELETE и возвращает focus', async () => {
+    const onConfirm = vi.fn();
+    render(<ControlledDialog onConfirm={onConfirm} />);
 
+    const trigger = screen.getByRole('button', { name: 'Open delete' });
+    fireEvent.click(trigger);
     expect(await screen.findByRole('dialog', { name: 'Удалить страницу?' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Отмена' }));
 
-    expect(onCancel).toHaveBeenCalledOnce();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(trigger).toHaveFocus();
     expect(onConfirm).not.toHaveBeenCalled();
+  });
 
-    cleanup();
-    trigger.focus();
-    const escapeHandlers = renderDialog({
-      kind: 'page',
-      returnFocus: trigger,
-      title: 'Draft page',
-    });
+  it('до confirm закрывается через Escape без DELETE и возвращает focus', async () => {
+    const onConfirm = vi.fn();
+    render(<ControlledDialog onConfirm={onConfirm} />);
 
+    const trigger = screen.getByRole('button', { name: 'Open delete' });
+    fireEvent.click(trigger);
     expect(await screen.findByRole('dialog', { name: 'Удалить страницу?' })).toBeInTheDocument();
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
 
-    await waitFor(() => expect(escapeHandlers.onCancel).toHaveBeenCalledOnce());
-    expect(escapeHandlers.onConfirm).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(trigger).toHaveFocus();
+    expect(onConfirm).not.toHaveBeenCalled();
   });
 
   it('во время pending блокирует повторный submit и dismiss events', async () => {
@@ -147,3 +145,31 @@ describe('DeleteConfirmationDialog', () => {
     expect(onCancel).toHaveBeenCalledOnce();
   });
 });
+
+function ControlledDialog({ onConfirm }: Readonly<{ onConfirm: () => void }>) {
+  const [intent, setIntent] = useState<DeleteConfirmationIntent>();
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={(event) =>
+          setIntent({
+            kind: 'page',
+            returnFocus: event.currentTarget,
+            title: 'Draft page',
+          })
+        }
+      >
+        Open delete
+      </button>
+      <DeleteConfirmationDialog
+        error={undefined}
+        intent={intent}
+        pending={false}
+        onCancel={() => setIntent(undefined)}
+        onConfirm={onConfirm}
+      />
+    </>
+  );
+}

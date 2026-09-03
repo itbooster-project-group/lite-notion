@@ -109,6 +109,7 @@ Root workspace project cards получают тот же `onDeleteProject` call
 Page delete:
 
 - до mutation взять `getGetPageTreeQueryKey()`, текущий cached tree, normalized tree, delete context и redirect target;
+- если текущий route относится к удаляемому subtree, перед DELETE отменить in-flight `getGetPageTreeQueryKey()` через `queryClient.cancelQueries`, чтобы уже запущенный refetch не мог обновить cache деревом без удалённой active страницы до commit нового route;
 - если текущий route относится к удаляемому subtree, после success вызвать `router.replace(workspaceProjectPath(projectId))`, закрыть dialog и передать в persistent cleanup coordinator pending cleanup record с deleted subtree ids, project id и old affected route identity;
 - coordinator наблюдает route context, который сообщает текущий `WorkspacePage`; когда context больше не является старой active page route внутри удалённого subtree, coordinator удаляет page subtree из cached `PageTreeNodeDto[]`, запускает targeted invalidation page tree query и сбрасывает record;
 - navigation не ждёт network refetch, потому что cleanup/invalidation происходят после observable route context change и не являются условием вызова `router.replace`.
@@ -118,6 +119,7 @@ Unrelated page delete не вызывает navigation: после success то�
 Project delete:
 
 - до mutation определить, относится ли текущий route к удаляемому project;
+- если текущий route относится к удаляемому project, перед DELETE отменить in-flight `getGetPageTreeQueryKey()` и `getListProjectsQueryKey()` через `queryClient.cancelQueries`, чтобы refetch не мог убрать active project/page из cache до commit нового route;
 - если текущий route относится к удаляемому project, после success вызвать `router.replace(workspaceRootPath())`, закрыть dialog и передать в persistent cleanup coordinator pending cleanup record с deleted project id и old affected route identity;
 - coordinator наблюдает route context, который сообщает текущий `WorkspacePage`; когда context больше не является route удалённого проекта или page route внутри него, coordinator удаляет project из `getListProjectsQueryKey()`, удаляет все страницы проекта из `getGetPageTreeQueryKey()`, запускает targeted invalidation projects list и page tree queries и сбрасывает record;
 - navigation не ждёт network refetch.
@@ -183,6 +185,7 @@ Dialog хранит local error message и pending state. При ошибке ra
 
 - **Stale tree context между открытием dialog и подтверждением** → delete callback перед отправкой повторно сверяет resource в текущем normalized tree; при отсутствии context показывает локальную ошибку и не меняет route/cache.
 - **Route transition может задержаться после `router.replace`** → deferred affected cache removal сохраняет данные старого route до observable смены `routeContext`; tests должны имитировать delayed route transition и проверять отсутствие `Ничего не найдено`.
+- **In-flight refetch может завершиться между successful DELETE и route commit** → affected delete перед mutation отменяет relevant active queries; tests должны запускать delayed refetch, завершать его после DELETE и проверять отсутствие `Ничего не найдено` на старом route.
 - **`WorkspacePage`/feature hook может remount'иться во время navigation** → pending cleanup record хранится в persistent workspace route-group layout provider, а не в route-scoped hook instance; tests должны имитировать unmount/remount и проверять, что cleanup всё равно завершается.
 - **Два project action surfaces могут разойтись** → оба вызывают один `onRequestDeleteProject` и один confirmation dialog, тесты покрывают navigation и root cards.
 - **Success-only cache update медленнее optimistic removal** → для destructive action корректность и отсутствие rollback важнее мгновенного исчезновения до ответа.
