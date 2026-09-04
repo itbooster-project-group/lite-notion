@@ -53,7 +53,7 @@ export function DeleteConfirmationDialog({
         if (!open && !pending) onCancel();
       }}
     >
-      <DialogContent finalFocus={() => returnFocusRef.current ?? true} showCloseButton={false}>
+      <DialogContent finalFocus={() => returnFocusRef.current ?? true} showCloseButton={!pending}>
         <DialogTitle>
           {intent?.kind === 'project' ? 'Удалить проект?' : 'Удалить страницу?'}
         </DialogTitle>
