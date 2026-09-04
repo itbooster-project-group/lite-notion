@@ -4,14 +4,9 @@ import type { DeletedPageRecord } from '../pages.repository';
 import type { DeletedPageTreeNode } from '../pages.service';
 
 /**
- * Страница в корзине. Отдельный DTO, а не `PageDto` с nullable-полем: у живой
- * страницы `deletedAt` всегда `null`, и такое поле в основном контракте было бы
- * шумом для каждого клиента.
- *
- * `deletedOrigin` наружу не публикуется намеренно: вложенность ответа уже несёт
- * всё, что он кодирует, а `projectId` позволяет клиенту сопоставить узел со
- * списком удалённых проектов и заранее понять, что отдельно такая страница не
- * восстанавливается.
+ * Отдельный DTO, а не `PageDto` с nullable-полем: у живой страницы `deletedAt`
+ * всегда `null`. `deletedOrigin` не публикуется — вложенность ответа уже несёт всё,
+ * что он кодирует.
  */
 export class DeletedPageDto {
   @ApiProperty({ example: '4c8f1b1a-0f6d-4a5e-9f6d-0f6d4a5e9f6d', format: 'uuid', type: String })

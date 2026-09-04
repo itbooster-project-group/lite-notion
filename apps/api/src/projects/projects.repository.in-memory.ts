@@ -1,23 +1,19 @@
 import { randomUUID } from 'node:crypto';
 
-import { PurgeConfirmationRequiredError } from '../common/errors';
+import type { TransactionScope } from '../database/transaction';
 import type { PageDeletionOrigin } from '../generated/prisma/enums';
-import { ProjectNotFoundError } from './errors';
 import {
   type CreateProjectInput,
   type DeletedProjectRecord,
+  type ProjectLifetime,
   type ProjectRecord,
   ProjectsRepository,
 } from './projects.repository';
 
 /**
- * Минимальная форма строки страницы, которой достаточно каскаду проекта.
- *
- * Объявлена структурно, а не импортом из `pages`: каскад проекта не знает про
- * дерево, ему хватает `projectId` и пары отметок, а импорт развернул бы
- * зависимость модулей задом наперёд — сейчас `pages` зависит от `projects`.
- * Хранилище `InMemoryPagesRepository` этой форме удовлетворяет, и тест передаёт
- * сюда ту же самую Map, что и туда: в базе это одна таблица.
+ * Форма строки страницы, которой достаточно каскаду проекта. Объявлена структурно, а
+ * не импортом из `pages`: импорт развернул бы зависимость модулей задом наперёд.
+ * Тест передаёт сюда ту же Map, что и в `InMemoryPagesRepository`.
  */
 export interface CascadablePage {
   id: string;
@@ -28,7 +24,6 @@ export interface CascadablePage {
   deletedOrigin: PageDeletionOrigin | null;
 }
 
-/** Строка таблицы проектов. `deletedAt` — та же отметка мягкого удаления, что в базе. */
 export interface StoredProject extends ProjectRecord {
   deletedAt: Date | null;
 }
@@ -40,12 +35,9 @@ export interface StoredProject extends ProjectRecord {
  */
 export class InMemoryProjectsRepository extends ProjectsRepository {
   /**
-   * Хранилища передаются снаружи: в базе это отдельные таблицы, и тест,
-   * удаливший проект, обязан увидеть последствия через репозиторий страниц.
-   *
-   * Документы здесь типизированы как `Map<string, unknown>`: каскаду нужно
-   * только удалить строку по `pageId`, а знать её форму значило бы завести
-   * импорт из `pages` и развернуть зависимость модулей задом наперёд.
+   * Хранилища передаются снаружи: тест, удаливший проект, обязан увидеть последствия
+   * через репозиторий страниц. Документы — `Map<string, unknown>`: каскаду нужно лишь
+   * удалить строку по `pageId`, а её форма пришла бы импортом из `pages`.
    */
   constructor(
     readonly pages: Map<string, CascadablePage> = new Map(),
@@ -53,6 +45,11 @@ export class InMemoryProjectsRepository extends ProjectsRepository {
     readonly documents: Map<string, unknown> = new Map(),
   ) {
     super();
+  }
+
+  /** Хранилище одно на все скоупы: соединения, которое выбирает `bind`, здесь нет. */
+  bind(_scope: TransactionScope): InMemoryProjectsRepository {
+    return this;
   }
 
   async create(input: CreateProjectInput): Promise<ProjectRecord> {
@@ -94,89 +91,58 @@ export class InMemoryProjectsRepository extends ProjectsRepository {
       .map((project) => ({ ...this.toRecord(project), deletedAt: project.deletedAt as Date }));
   }
 
-  async softDelete(id: string, ownerId: string): Promise<boolean> {
+  async markDeleted(id: string, ownerId: string, deletedAt: Date): Promise<boolean> {
     const project = this.records.get(id);
 
     if (project === undefined || project.deletedAt !== null || project.ownerId !== ownerId) {
       return false;
     }
 
-    const deletedAt = new Date();
-
     project.deletedAt = deletedAt;
-
-    for (const page of this.pages.values()) {
-      if (page.projectId === id && page.deletedAt === null) {
-        page.deletedAt = deletedAt;
-        page.deletedOrigin = 'PROJECT';
-      }
-    }
 
     return true;
   }
 
-  async restore(id: string, ownerId: string): Promise<ProjectRecord | null> {
+  async clearDeleted(id: string, ownerId: string): Promise<boolean> {
     const project = this.records.get(id);
 
     if (project === undefined || project.deletedAt === null || project.ownerId !== ownerId) {
-      return null;
+      return false;
     }
 
     project.deletedAt = null;
 
-    for (const page of this.pages.values()) {
-      if (page.projectId === id && page.deletedOrigin === 'PROJECT') {
-        page.deletedAt = null;
-        page.deletedOrigin = null;
-      }
-    }
-
-    return this.toRecord(project);
+    return true;
   }
 
-  async purge(id: string, ownerId: string, cascade: boolean): Promise<void> {
+  async findAnyByIdForOwner(id: string, ownerId: string): Promise<ProjectLifetime | null> {
     const project = this.records.get(id);
 
-    if (project === undefined || project.deletedAt === null || project.ownerId !== ownerId) {
-      throw new ProjectNotFoundError();
-    }
+    return project === undefined || project.ownerId !== ownerId
+      ? null
+      : { deletedAt: project.deletedAt, id: project.id };
+  }
 
-    this.assertConfirmed([id], ownerId, cascade);
+  async findDeletedByIdForOwner(id: string, ownerId: string): Promise<ProjectRecord | null> {
+    const project = this.records.get(id);
+
+    return project === undefined || project.deletedAt === null || project.ownerId !== ownerId
+      ? null
+      : this.toRecord(project);
+  }
+
+  async findDeletedIdsByOwner(ownerId: string): Promise<string[]> {
+    return [...this.records.values()]
+      .filter((project) => project.deletedAt !== null && project.ownerId === ownerId)
+      .map((project) => project.id);
+  }
+
+  async deleteById(id: string): Promise<void> {
     this.deleteProjects([id]);
   }
 
-  async purgeTrash(ownerId: string, cascade: boolean): Promise<void> {
-    const ids = [...this.records.values()]
-      .filter((project) => project.deletedAt !== null && project.ownerId === ownerId)
-      .map((project) => project.id);
-
-    if (ids.length === 0) {
-      return;
-    }
-
-    this.assertConfirmed(ids, ownerId, cascade);
-    this.deleteProjects(ids);
-  }
-
-  /** Собираются только `SELF`-страницы — корни корзины; их ветки нарисованы под ними. */
-  private assertConfirmed(projectIds: string[], ownerId: string, cascade: boolean): void {
-    if (cascade) {
-      return;
-    }
-
-    const doomed = [...this.pages.values()]
-      .filter(
-        (page) =>
-          page.ownerId === ownerId &&
-          projectIds.includes(page.projectId) &&
-          page.deletedOrigin === 'SELF',
-      )
-      .map((page) => page.title)
-      .sort();
-
-    if (doomed.length > 0) {
-      throw new PurgeConfirmationRequiredError(doomed);
-    }
+  async deleteManyByIds(ids: readonly string[], _ownerId: string): Promise<void> {
+    this.deleteProjects([...ids]);
   }
 
   /**

@@ -7,6 +7,8 @@ import { configureApplication } from '../application';
 import { TokenService } from '../auth/crypto/token.service';
 import { NodeEnvironment } from '../config/environment';
 import { PrismaService } from '../database/prisma.service';
+import { TransactionRunner } from '../database/transaction';
+import { InMemoryTransactionRunner } from '../database/transaction.in-memory';
 import { PageDocumentRepository } from '../pages/page-document/page-document.repository';
 import { InMemoryPageDocumentRepository } from '../pages/page-document/page-document.repository.in-memory';
 import { PagesRepository } from '../pages/pages.repository';
@@ -26,6 +28,8 @@ export interface HttpTestContext {
   pages: InMemoryPagesRepository;
   documents: InMemoryPageDocumentRepository;
   projects: InMemoryProjectsRepository;
+  /** Позволяет тесту проверить, какие локи взяла операция. */
+  transactions: InMemoryTransactionRunner;
   /** Подписывает настоящий access-токен: guard проверяет подпись, а не мок. */
   signAccessToken: (userId: string) => Promise<string>;
 }
@@ -47,9 +51,13 @@ export async function createHttpTestContext(): Promise<HttpTestContext> {
   const documents = new InMemoryPageDocumentRepository(documentStore, pageStore);
   const projects = new InMemoryProjectsRepository(pageStore, projectStore, documentStore);
 
+  const transactions = new InMemoryTransactionRunner();
+
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(PrismaService)
     .useValue({ checkConnection: vi.fn(async () => undefined) })
+    .overrideProvider(TransactionRunner)
+    .useValue(transactions)
     .overrideProvider(PagesRepository)
     .useValue(pages)
     .overrideProvider(PageDocumentRepository)
@@ -75,6 +83,7 @@ export async function createHttpTestContext(): Promise<HttpTestContext> {
     documents,
     pages,
     projects,
+    transactions,
     signAccessToken: (userId: string) =>
       tokens.signAccessToken({ sid: '99999999-9999-9999-9999-999999999999', sub: userId }),
   };

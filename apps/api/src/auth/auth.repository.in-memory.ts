@@ -14,11 +14,9 @@ import {
 import { EmailAlreadyRegisteredError } from './errors';
 
 /**
- * Тестовая реализация. Воспроизводит наблюдаемый контракт Prisma-версии, включая
- * инвариант «в цепочке не более одной строки с revokedAt = null» (в базе его
- * держит `SELECT ... FOR UPDATE`, здесь — однопоточность JavaScript) и
- * атомарность регистрации: записи фиксируются только после того, как обе
- * вставки прошли.
+ * Тестовая реализация контракта Prisma-версии: инвариант «в цепочке не более одной
+ * строки с revokedAt = null» (в базе — `FOR UPDATE`, здесь — однопоточность) и
+ * атомарность регистрации.
  */
 export class InMemoryAuthRepository extends AuthRepository {
   readonly records = new Map<string, SessionRecord>();
