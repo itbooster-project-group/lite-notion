@@ -36,6 +36,10 @@ import { DeletedProjectDto } from './dto/deleted-project.dto';
 import { ProjectDto } from './dto/project.dto';
 import { toHttpException } from './helpers';
 import { ProjectsService } from './projects.service';
+import { PurgeProjectUseCase } from './use-cases/purge-project.use-case';
+import { PurgeProjectsTrashUseCase } from './use-cases/purge-projects-trash.use-case';
+import { RestoreProjectUseCase } from './use-cases/restore-project.use-case';
+import { SoftDeleteProjectUseCase } from './use-cases/soft-delete-project.use-case';
 
 @ApiTags('projects')
 @ApiBearerAuth()
@@ -50,7 +54,14 @@ import { ProjectsService } from './projects.service';
 })
 @Controller('projects')
 export class ProjectsController {
-  constructor(@Inject(ProjectsService) private readonly projects: ProjectsService) {}
+  constructor(
+    @Inject(ProjectsService) private readonly projects: ProjectsService,
+    @Inject(SoftDeleteProjectUseCase) private readonly softDeleteProject: SoftDeleteProjectUseCase,
+    @Inject(RestoreProjectUseCase) private readonly restoreProject: RestoreProjectUseCase,
+    @Inject(PurgeProjectUseCase) private readonly purgeProject: PurgeProjectUseCase,
+    @Inject(PurgeProjectsTrashUseCase)
+    private readonly purgeProjectsTrash: PurgeProjectsTrashUseCase,
+  ) {}
 
   @Post()
   @ApiBody({ type: CreateProjectDto })
@@ -109,7 +120,7 @@ export class ProjectsController {
     @CurrentUser() user: AuthenticatedUser,
     @Query() query: CascadeQueryDto,
   ): Promise<void> {
-    await toHttpException(() => this.projects.purgeTrash(user.id, query.cascade ?? false));
+    await toHttpException(() => this.purgeProjectsTrash.execute(user.id, query.cascade ?? false));
   }
 
   @Delete('trash/:projectId')
@@ -136,7 +147,9 @@ export class ProjectsController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
     @Query() query: CascadeQueryDto,
   ): Promise<void> {
-    await toHttpException(() => this.projects.purge(projectId, user.id, query.cascade ?? false));
+    await toHttpException(() =>
+      this.purgeProject.execute(projectId, user.id, query.cascade ?? false),
+    );
   }
 
   @Delete(':projectId')
@@ -151,7 +164,7 @@ export class ProjectsController {
     @CurrentUser() user: AuthenticatedUser,
     @Param('projectId', ParseUUIDPipe) projectId: string,
   ): Promise<void> {
-    await toHttpException(() => this.projects.softDelete(projectId, user.id));
+    await toHttpException(() => this.softDeleteProject.execute(projectId, user.id));
   }
 
   @Post(':projectId/restore')
@@ -164,7 +177,7 @@ export class ProjectsController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
   ): Promise<ProjectDto> {
     return ProjectDto.fromRecord(
-      await toHttpException(() => this.projects.restore(projectId, user.id)),
+      await toHttpException(() => this.restoreProject.execute(projectId, user.id)),
     );
   }
 }

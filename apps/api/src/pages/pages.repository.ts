@@ -1,23 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import { PurgeConfirmationRequiredError } from '../common/errors';
 import { PrismaService } from '../database/prisma.service';
-import type { Prisma } from '../generated/prisma/client';
-import { PageDeletionOrigin } from '../generated/prisma/enums';
-import { ProjectNotFoundError } from '../projects/errors';
 import {
-  PageCycleError,
-  PageNotFoundError,
-  PageProjectMismatchError,
-  PageRestoreProjectDeletedError,
-  PageRestoreTargetProjectRejectedError,
-  SiblingOrderError,
-  SiblingParentMismatchError,
-} from './errors';
-import { positionBetween, siblingLevelLockKey } from './helpers';
-
-/** Клиент внутри `$transaction`: те же модели, но без вложенных транзакций. */
-type TransactionClient = Prisma.TransactionClient;
+  type DatabaseClient,
+  databaseClientOf,
+  type TransactionScope,
+} from '../database/transaction';
+import { PageDeletionOrigin } from '../generated/prisma/enums';
 
 /**
  * Prisma отдаёт и принимает колонку `Bytes` как Uint8Array поверх обычного
@@ -43,21 +32,40 @@ export interface DeletedPageRecord extends PageRecord {
   deletedOrigin: PageDeletionOrigin;
 }
 
-export interface CreatePageInput {
+export interface InsertPageInput {
   ownerId: string;
   projectId: string;
   parentPageId: string | null;
   createdById: string;
   title: string;
-  tiptapSchemaVersion: number;
+  position: string;
 }
 
-export interface MovePageInput {
-  pageId: string;
+/**
+ * Щель между двумя соседями одного уровня. Порядок братьев — по рангу, затем по
+ * `id`, поэтому границы задаются парой полей, а не одним рангом: ранги не уникальны.
+ */
+export interface SiblingGap {
   ownerId: string;
+  projectId: string;
   parentPageId: string | null;
-  previousSiblingId: string | null;
-  nextSiblingId: string | null;
+  excludedId: string;
+  previous: { id: string; position: string };
+  next: { id: string; position: string };
+}
+
+/** Уровень дерева: страницы одного проекта под одним родителем. */
+export interface SiblingLevel {
+  ownerId: string;
+  projectId: string;
+  parentPageId: string | null;
+  /** Исключается из выборки: перемещаемая страница не сравнивается сама с собой. */
+  excludedId?: string;
+}
+
+export interface SiblingRecord {
+  parentPageId: string | null;
+  position: string;
 }
 
 const PAGE_FIELDS = {
@@ -75,65 +83,124 @@ const PAGE_FIELDS = {
 const DELETED_PAGE_FIELDS = { ...PAGE_FIELDS, deletedAt: true, deletedOrigin: true } as const;
 
 /**
- * Узкий доступ к дереву страниц. Абстрактный класс, а не интерфейс: он же служит
- * DI-токеном, и тесты подставляют вместо него in-memory реализацию.
+ * Доступ к таблице страниц. Абстрактный класс служит DI-токеном; тесты подставляют
+ * in-memory реализацию. Решений здесь нет — они в юзкейсах модуля.
  *
- * Каждый метод принимает `ownerId` и фильтрует по нему вместе с `deletedAt: null`.
- * Метода «найти страницу по id без владельца» здесь нет намеренно.
- *
- * Репозиторий не покидает модуль: снаружи с деревом работают только через
- * `PagesService`, где лежат бизнес-правила. Содержимое документа сюда не
- * относится — им владеет `PageDocumentRepository`.
+ * Метода «найти страницу по id без владельца» нет намеренно.
  */
 @Injectable()
 export abstract class PagesRepository {
+  /**
+   * Копия репозитория на соединении транзакции. Новый экземпляр, а не мутация:
+   * провайдер Nest — синглтон, и мутация увела бы чужой запрос в эту транзакцию.
+   */
+  abstract bind(scope: TransactionScope): PagesRepository;
+
   abstract findAllByOwner(ownerId: string): Promise<PageRecord[]>;
 
   abstract findByIdForOwner(id: string, ownerId: string): Promise<PageRecord | null>;
 
-  abstract create(input: CreatePageInput): Promise<PageRecord>;
+  abstract insert(input: InsertPageInput): Promise<PageRecord>;
+
+  /** Ранг последней страницы уровня. `null`, когда уровень пуст. */
+  abstract findLastPositionAtLevel(level: SiblingLevel): Promise<string | null>;
 
   abstract rename(id: string, ownerId: string, title: string): Promise<PageRecord | null>;
 
-  abstract move(input: MovePageInput): Promise<PageRecord>;
+  /**
+   * Идентификаторы всех предков узла, включая его самого. Подъём по дереву —
+   * рекурсивный CTE в базе; решение о цикле принимает вызывающий.
+   */
+  abstract findAncestorIds(pageId: string): Promise<string[]>;
+
+  /**
+   * Сколько живых братьев стоит строго между границами щели. `0` означает, что
+   * соседи смежны и вставить между ними действительно есть куда.
+   */
+  abstract countSiblingsBetween(gap: SiblingGap): Promise<number>;
+
+  /** `null`, когда соседа нет, он в другом проекте или чужой. */
+  abstract findSiblingForOwner(
+    siblingId: string,
+    projectId: string,
+    ownerId: string,
+  ): Promise<SiblingRecord | null>;
+
+  /**
+   * Меняет родителя и ранг. `projectId` и `ownerId` не обновляются: тройной FK
+   * всё равно отверг бы смену, не согласованную со всем поддеревом.
+   */
+  abstract reparent(id: string, parentPageId: string | null, position: string): Promise<PageRecord>;
 
   /** Все удалённые страницы владельца, без исключений по источнику. */
   abstract findDeletedByOwner(ownerId: string): Promise<DeletedPageRecord[]>;
 
-  /** `false`, когда страница не найдена, чужая или уже удалена. */
-  abstract softDelete(id: string, ownerId: string): Promise<boolean>;
+  /** Помечает страницу и её живое поддерево. `0` — страницы нет, она чужая или удалена. */
+  abstract markSubtreeDeleted(id: string, ownerId: string, deletedAt: Date): Promise<number>;
+
+  /** Удалённая страница владельца. `null`, когда она жива, чужая или не существует. */
+  abstract findDeletedForOwner(id: string, ownerId: string): Promise<DeletedPageRecord | null>;
 
   /**
-   * `targetProjectId` принимается только когда собственный проект страницы лежит
-   * в корзине: восстановить её на место некуда, и клиент выбирает живой проект.
+   * Переносит физическое поддерево в другой проект одним statement'ом: тройной FK с
+   * `onUpdate: NoAction` требует менять предка и потомков вместе.
    */
-  abstract restore(
-    id: string,
+  abstract moveSubtreeToProject(id: string, projectId: string): Promise<void>;
+
+  /**
+   * Снимает отметку с узла и потомков, которых корзина показывала вложенными.
+   * Условие спуска — «удалён не самостоятельно», а не `PARENT_PAGE`.
+   */
+  abstract clearSubtreeDeletion(id: string): Promise<void>;
+
+  /**
+   * Заголовки потомков, которых корзина показывала отдельными корнями. Спуск идёт по
+   * всему физическому поддереву — ровно по тому, что унесёт FK-каскад.
+   */
+  abstract findSelfDeletedDescendantTitles(id: string): Promise<string[]>;
+
+  /**
+   * Помечает живые страницы проекта источником `PROJECT`. Уже удалённые сохраняют
+   * свой источник и остаются самостоятельными корнями корзины.
+   */
+  abstract markProjectPagesDeleted(
+    projectId: string,
     ownerId: string,
-    targetProjectId: string | null,
-  ): Promise<PageRecord>;
+    deletedAt: Date,
+  ): Promise<void>;
+
+  /** Снимает отметку с тех страниц, которые пометило удаление этого проекта. */
+  abstract clearProjectPagesDeleted(projectId: string, ownerId: string): Promise<void>;
 
   /**
-   * Безвозвратно удаляет страницу и всё её физическое поддерево. `cascade`
-   * подтверждает уничтожение страниц, которые корзина показывала отдельными
-   * корнями; без него такой запрос отклоняется их перечнем.
+   * Заголовки страниц перечисленных проектов, удалённых раньше самостоятельно.
+   * Только `SELF` — корни корзины; их ветки нарисованы под ними.
    */
-  abstract purge(id: string, ownerId: string, cascade: boolean): Promise<void>;
+  abstract findSelfDeletedTitlesByProjects(
+    projectIds: readonly string[],
+    ownerId: string,
+  ): Promise<string[]>;
 
-  /** Безвозвратно удаляет всю корзину владельца. Подтверждения не требует. */
-  abstract purgeTrash(ownerId: string): Promise<void>;
+  /** Безвозвратно удаляет страницу. Поддерево и документы уносят FK-каскады. */
+  abstract deleteById(id: string): Promise<void>;
+
+  abstract deleteAllDeletedByOwner(ownerId: string): Promise<void>;
 }
 
 @Injectable()
 export class PrismaPagesRepository extends PagesRepository {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {
+  constructor(@Inject(PrismaService) private readonly client: DatabaseClient) {
     super();
+  }
+
+  bind(scope: TransactionScope): PrismaPagesRepository {
+    return new PrismaPagesRepository(databaseClientOf(scope));
   }
 
   findAllByOwner(ownerId: string): Promise<PageRecord[]> {
     // Плоский список: вложенность собирает сервис. Рекурсивный CTE выбрал бы те
     // же строки, но не избавил бы от сборки дерева в приложении.
-    return this.prisma.page.findMany({
+    return this.client.page.findMany({
       orderBy: [{ parentPageId: 'asc' }, { position: 'asc' }, { id: 'asc' }],
       select: PAGE_FIELDS,
       where: { deletedAt: null, ownerId },
@@ -141,97 +208,44 @@ export class PrismaPagesRepository extends PagesRepository {
   }
 
   findByIdForOwner(id: string, ownerId: string): Promise<PageRecord | null> {
-    return this.prisma.page.findFirst({
+    return this.client.page.findFirst({
       select: PAGE_FIELDS,
       where: { deletedAt: null, id, ownerId },
     });
   }
 
-  async create(input: CreatePageInput): Promise<PageRecord> {
-    return this.prisma.$transaction(async (tx) => {
-      // Блокировка владельца первой, до уровневой: тот же порядок, что у `move` и
-      // восстановления. Покрывает узкий кейс проверки между созданием и мягким удалением
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.ownerId}))`;
-      await tx.$executeRaw`
-        SELECT pg_advisory_xact_lock(
-          hashtext(${siblingLevelLockKey(input.projectId, input.parentPageId)})
-        )`;
-
-      // Проверки сервиса шли до транзакции и к этому моменту могли устареть.
-      // Повторяются здесь, под блокировкой, и только здесь они окончательны.
-      await this.assertDestinationAlive(tx, input);
-
-      const last = await tx.page.findFirst({
-        orderBy: [{ position: 'desc' }, { id: 'desc' }],
-        select: { position: true },
-        where: {
-          deletedAt: null,
-          ownerId: input.ownerId,
-          parentPageId: input.parentPageId,
-          projectId: input.projectId,
-        },
-      });
-
-      const page = await tx.page.create({
-        data: {
-          createdById: input.createdById,
-          ownerId: input.ownerId,
-          parentPageId: input.parentPageId,
-          position: positionBetween(last?.position ?? null, null),
-          projectId: input.projectId,
-          title: input.title,
-        },
-        select: PAGE_FIELDS,
-      });
-
-      // Документ создаётся в той же транзакции: связь 1..1 должна выполняться с
-      // первой строки, иначе чтение документа пришлось бы делать ленивым.
-      await tx.pageDocument.create({
-        data: {
-          pageId: page.id,
-          tiptapSchemaVersion: input.tiptapSchemaVersion,
-          yjsState: new Uint8Array(),
-        },
-      });
-
-      return page;
+  insert(input: InsertPageInput): Promise<PageRecord> {
+    return this.client.page.create({
+      data: {
+        createdById: input.createdById,
+        ownerId: input.ownerId,
+        parentPageId: input.parentPageId,
+        position: input.position,
+        projectId: input.projectId,
+        title: input.title,
+      },
+      select: PAGE_FIELDS,
     });
   }
 
-  /**
-   * Проект и родитель обязаны быть живы на момент вставки, а не на момент
-   * проверки в сервисе. Ошибки те же, что отдал бы сервис: гонка неотличима от
-   * «родителя не существует», и раскрывать её вызывающему незачем.
-   */
-  private async assertDestinationAlive(
-    tx: TransactionClient,
-    input: CreatePageInput,
-  ): Promise<void> {
-    const project = await tx.project.findFirst({
-      select: { id: true },
-      where: { deletedAt: null, id: input.projectId, ownerId: input.ownerId },
+  async findLastPositionAtLevel(level: SiblingLevel): Promise<string | null> {
+    const last = await this.client.page.findFirst({
+      orderBy: [{ position: 'desc' }, { id: 'desc' }],
+      select: { position: true },
+      where: {
+        deletedAt: null,
+        ownerId: level.ownerId,
+        parentPageId: level.parentPageId,
+        projectId: level.projectId,
+        ...(level.excludedId === undefined ? {} : { id: { not: level.excludedId } }),
+      },
     });
 
-    if (project === null) {
-      throw new ProjectNotFoundError();
-    }
-
-    if (input.parentPageId === null) {
-      return;
-    }
-
-    const parent = await tx.page.findFirst({
-      select: { id: true },
-      where: { deletedAt: null, id: input.parentPageId, ownerId: input.ownerId },
-    });
-
-    if (parent === null) {
-      throw new PageNotFoundError();
-    }
+    return last?.position ?? null;
   }
 
   async rename(id: string, ownerId: string, title: string): Promise<PageRecord | null> {
-    const { count } = await this.prisma.page.updateMany({
+    const { count } = await this.client.page.updateMany({
       data: { title },
       where: { deletedAt: null, id, ownerId },
     });
@@ -239,404 +253,198 @@ export class PrismaPagesRepository extends PagesRepository {
     return count === 0 ? null : this.findByIdForOwner(id, ownerId);
   }
 
-  async move(input: MovePageInput): Promise<PageRecord> {
-    return this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.ownerId}))`;
-
-      const page = await tx.page.findFirst({
-        select: PAGE_FIELDS,
-        where: { deletedAt: null, id: input.pageId, ownerId: input.ownerId },
-      });
-
-      if (page === null) {
-        throw new PageNotFoundError();
-      }
-
-      // Вторая блокировка — на уровень назначения, тем же ключом, что берёт
-      // `create`: перемещение в конец уровня читает того же «последнего брата».
-      // Порядок «владелец → уровень» соблюдается везде, поэтому взаимной
-      // блокировки не возникает: `create` берёт только уровень и никогда не
-      // ждёт владельца.
-      await tx.$executeRaw`
-        SELECT pg_advisory_xact_lock(
-          hashtext(${siblingLevelLockKey(page.projectId, input.parentPageId)})
-        )`;
-
-      if (input.parentPageId !== null) {
-        await this.assertParentAccepts(tx, page, input.parentPageId);
-      }
-
-      const position = await this.resolvePosition(tx, page, input);
-
-      return tx.page.update({
-        // projectId и ownerId не обновляются: тройной FK всё равно отверг бы
-        // смену, не согласованную со всем поддеревом.
-        data: { parentPageId: input.parentPageId, position },
-        select: PAGE_FIELDS,
-        where: { id: page.id },
-      });
-    });
-  }
-
-  /**
-   * Новый родитель должен принадлежать тому же владельцу, лежать в том же
-   * проекте и не быть потомком перемещаемой страницы. Подъём по предкам делается
-   * рекурсивным CTE внутри той же транзакции, что и запись.
-   */
-  private async assertParentAccepts(
-    tx: TransactionClient,
-    page: PageRecord,
-    parentPageId: string,
-  ): Promise<void> {
-    if (parentPageId === page.id) {
-      throw new PageCycleError();
-    }
-
-    const parent = await tx.page.findFirst({
-      select: { id: true, projectId: true },
-      where: { deletedAt: null, id: parentPageId, ownerId: page.ownerId },
-    });
-
-    if (parent === null) {
-      throw new PageNotFoundError();
-    }
-
-    if (parent.projectId !== page.projectId) {
-      throw new PageProjectMismatchError();
-    }
-
-    const ancestors = await tx.$queryRaw<{ id: string }[]>`
+  async findAncestorIds(pageId: string): Promise<string[]> {
+    const ancestors = await this.client.$queryRaw<{ id: string }[]>`
       WITH RECURSIVE ancestors AS (
-        SELECT "id", "parentPageId" FROM "Page" WHERE "id" = ${parentPageId}::uuid
+        SELECT "id", "parentPageId" FROM "Page" WHERE "id" = ${pageId}::uuid
         UNION ALL
         SELECT parent."id", parent."parentPageId"
         FROM "Page" parent
         JOIN ancestors child ON child."parentPageId" = parent."id"
       )
-      SELECT "id" FROM ancestors WHERE "id" = ${page.id}::uuid
+      SELECT "id" FROM ancestors
     `;
 
-    if (ancestors.length > 0) {
-      throw new PageCycleError();
-    }
+    return ancestors.map((row) => row.id);
   }
 
-  /** Соседи задают щель; их ранги читаются в той же транзакции, что и запись. */
-  private async resolvePosition(
-    tx: TransactionClient,
-    page: PageRecord,
-    input: MovePageInput,
-  ): Promise<string> {
-    if (input.previousSiblingId !== null && input.previousSiblingId === input.nextSiblingId) {
-      throw new SiblingOrderError();
-    }
+  async countSiblingsBetween(gap: SiblingGap): Promise<number> {
+    // Сравнение по паре `(position, id)`: ранги не уникальны, и порядок братьев
+    // разрешает ничью по `id` — тем же правилом, что `compareSiblings`.
+    const rows = await this.client.$queryRaw<{ count: bigint }[]>`
+      SELECT count(*) AS count
+      FROM "Page"
+      WHERE "deletedAt" IS NULL
+        AND "ownerId" = ${gap.ownerId}::uuid
+        AND "projectId" = ${gap.projectId}::uuid
+        AND "parentPageId" IS NOT DISTINCT FROM ${gap.parentPageId}::uuid
+        AND "id" <> ${gap.excludedId}::uuid
+        AND (
+          "position" > ${gap.previous.position}
+          OR ("position" = ${gap.previous.position} AND "id" > ${gap.previous.id}::uuid)
+        )
+        AND (
+          "position" < ${gap.next.position}
+          OR ("position" = ${gap.next.position} AND "id" < ${gap.next.id}::uuid)
+        )
+    `;
 
-    const previous = await this.readSibling(tx, page, input.parentPageId, input.previousSiblingId);
-    const next = await this.readSibling(tx, page, input.parentPageId, input.nextSiblingId);
-
-    // Щель должна существовать: перевёрнутая пара соседей и пара с одинаковым
-    // рангом иначе дошли бы до генератора и упали внутренней ошибкой.
-    if (previous !== null && next !== null && previous.position >= next.position) {
-      throw new SiblingOrderError();
-    }
-
-    if (previous === null && next === null) {
-      const last = await tx.page.findFirst({
-        orderBy: [{ position: 'desc' }, { id: 'desc' }],
-        select: { position: true },
-        where: {
-          deletedAt: null,
-          id: { not: page.id },
-          ownerId: page.ownerId,
-          parentPageId: input.parentPageId,
-          projectId: page.projectId,
-        },
-      });
-
-      return positionBetween(last?.position ?? null, null);
-    }
-
-    return positionBetween(previous?.position ?? null, next?.position ?? null);
+    return Number(rows[0]?.count ?? 0);
   }
 
-  private async readSibling(
-    tx: TransactionClient,
-    page: PageRecord,
-    parentPageId: string | null,
-    siblingId: string | null,
-  ): Promise<{ position: string } | null> {
-    if (siblingId === null) {
-      return null;
-    }
-
-    const sibling = await tx.page.findFirst({
+  findSiblingForOwner(
+    siblingId: string,
+    projectId: string,
+    ownerId: string,
+  ): Promise<SiblingRecord | null> {
+    return this.client.page.findFirst({
       select: { parentPageId: true, position: true },
-      where: { deletedAt: null, id: siblingId, projectId: page.projectId, ownerId: page.ownerId },
+      where: { deletedAt: null, id: siblingId, ownerId, projectId },
     });
+  }
 
-    if (sibling === null) {
-      throw new PageNotFoundError();
-    }
-
-    if (sibling.parentPageId !== parentPageId) {
-      throw new SiblingParentMismatchError();
-    }
-
-    return { position: sibling.position };
+  reparent(id: string, parentPageId: string | null, position: string): Promise<PageRecord> {
+    return this.client.page.update({
+      data: { parentPageId, position },
+      select: PAGE_FIELDS,
+      where: { id },
+    });
   }
 
   findDeletedByOwner(ownerId: string): Promise<DeletedPageRecord[]> {
     // Плоский список: вложенность корзины собирает сервис, и собирает он её не по
     // `parentPageId`, а по источнику удаления — см. `PagesService`.
-    return this.prisma.page.findMany({
+    return this.client.page.findMany({
       orderBy: [{ deletedAt: 'desc' }, { position: 'asc' }, { id: 'asc' }],
       select: DELETED_PAGE_FIELDS,
       where: { deletedAt: { not: null }, ownerId },
     }) as Promise<DeletedPageRecord[]>;
   }
 
-  async softDelete(id: string, ownerId: string): Promise<boolean> {
-    return this.prisma.$transaction(async (tx) => {
-      // Тот же ключ и то же место, что у `move`: иначе перемещение успело бы
-      // вставить живое поддерево под страницу, которую мы в этот момент помечаем,
-      // и живая страница осталась бы под удалённым предком, не нарушив ни одного FK.
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${ownerId}))`;
-
-      // Спуск не проходит сквозь уже удалённые узлы: их поддеревья помечены
-      // раньше, и перемечать их нельзя — иначе страница, удалённая отдельно,
-      // перестала бы быть самостоятельным корнем корзины.
-      const deletedAt = new Date();
-      const updated = await tx.$executeRaw`
-        WITH RECURSIVE subtree AS (
-          SELECT "id"
-          FROM "Page"
-          WHERE "id" = ${id}::uuid AND "ownerId" = ${ownerId}::uuid AND "deletedAt" IS NULL
-          UNION ALL
-          SELECT child."id"
-          FROM "Page" child
-          JOIN subtree ON child."parentPageId" = subtree."id"
-          WHERE child."deletedAt" IS NULL
-        )
-        UPDATE "Page"
-        SET "deletedAt" = ${deletedAt},
-            "deletedOrigin" = CASE
-              WHEN "id" = ${id}::uuid THEN 'SELF'::"PageDeletionOrigin"
-              ELSE 'PARENT_PAGE'::"PageDeletionOrigin"
-            END
-        WHERE "id" IN (SELECT "id" FROM subtree)
-      `;
-
-      return updated > 0;
-    });
+  async markSubtreeDeleted(id: string, ownerId: string, deletedAt: Date): Promise<number> {
+    // Спуск не проходит сквозь уже удалённые: они остаются корнями корзины.
+    return this.client.$executeRaw`
+      WITH RECURSIVE subtree AS (
+        SELECT "id"
+        FROM "Page"
+        WHERE "id" = ${id}::uuid AND "ownerId" = ${ownerId}::uuid AND "deletedAt" IS NULL
+        UNION ALL
+        SELECT child."id"
+        FROM "Page" child
+        JOIN subtree ON child."parentPageId" = subtree."id"
+        WHERE child."deletedAt" IS NULL
+      )
+      UPDATE "Page"
+      SET "deletedAt" = ${deletedAt},
+          "deletedOrigin" = CASE
+            WHEN "id" = ${id}::uuid THEN 'SELF'::"PageDeletionOrigin"
+            ELSE 'PARENT_PAGE'::"PageDeletionOrigin"
+          END
+      WHERE "id" IN (SELECT "id" FROM subtree)
+    `;
   }
 
-  async restore(id: string, ownerId: string, targetProjectId: string | null): Promise<PageRecord> {
-    return this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${ownerId}))`;
-
-      // Источник удаления восстановление не проверяет: вложенная страница не
-      // отклоняется, а поднимается в корень — её прежний родитель остался в
-      // корзине, и вернуть её на место некуда.
-      const page = await tx.page.findFirst({
-        select: PAGE_FIELDS,
-        where: { deletedAt: { not: null }, id, ownerId },
-      });
-
-      if (page === null) {
-        throw new PageNotFoundError();
-      }
-
-      const destinationProjectId = await this.resolveDestinationProject(
-        tx,
-        page,
-        ownerId,
-        targetProjectId,
-      );
-      const movesProject = destinationProjectId !== page.projectId;
-
-      // Перенос идёт до снятия отметки и отдельным statement'ом: `onUpdate:
-      // NoAction` у тройного FK означает, что база не протянет смену `projectId`
-      // сама, а проверяет ограничения в конце statement'а. Предок и потомки
-      // обязаны меняться одним запросом, иначе FK отвергнет первый же.
-      //
-      // Переносится всё физическое поддерево, включая вложенные поддеревья,
-      // которые остаются удалёнными: ребёнок не может лежать в одном проекте с
-      // родителем в другом, и оставить его позади нельзя.
-      if (movesProject) {
-        await tx.$executeRaw`
-          WITH RECURSIVE subtree AS (
-            SELECT "id" FROM "Page" WHERE "id" = ${id}::uuid
-            UNION ALL
-            SELECT child."id"
-            FROM "Page" child
-            JOIN subtree ON child."parentPageId" = subtree."id"
-          )
-          UPDATE "Page"
-          SET "projectId" = ${destinationProjectId}::uuid
-          WHERE "id" IN (SELECT "id" FROM subtree)
-        `;
-      }
-
-      const raises = movesProject || (await this.parentIsGone(tx, page, ownerId));
-
-      // Условие спуска — то же «удалена не самостоятельно», которым корзина
-      // подвешивает узел к родителю: восстанавливается ровно то, что корзина
-      // показывала вложенным. Проверка на `PARENT_PAGE` не забрала бы детей,
-      // помеченных `PROJECT`, и вернула бы одинокий узел.
-      await tx.$executeRaw`
-        WITH RECURSIVE subtree AS (
-          SELECT "id" FROM "Page" WHERE "id" = ${id}::uuid
-          UNION ALL
-          SELECT child."id"
-          FROM "Page" child
-          JOIN subtree ON child."parentPageId" = subtree."id"
-          WHERE child."deletedOrigin" <> 'SELF'::"PageDeletionOrigin"
-        )
-        UPDATE "Page"
-        SET "deletedAt" = NULL, "deletedOrigin" = NULL
-        WHERE "id" IN (SELECT "id" FROM subtree)
-      `;
-
-      if (raises && (movesProject || page.parentPageId !== null)) {
-        // Прежний ранг не переиспользуется: он считался среди братьев другого
-        // уровня и мог бы совпасть с рангом существующей root-страницы.
-        return tx.page.update({
-          data: {
-            parentPageId: null,
-            position: await this.lastRootPosition(tx, destinationProjectId, ownerId, page.id),
-          },
-          select: PAGE_FIELDS,
-          where: { id },
-        });
-      }
-
-      return tx.page.findFirstOrThrow({ select: PAGE_FIELDS, where: { id } });
-    });
+  findDeletedForOwner(id: string, ownerId: string): Promise<DeletedPageRecord | null> {
+    return this.client.page.findFirst({
+      select: DELETED_PAGE_FIELDS,
+      where: { deletedAt: { not: null }, id, ownerId },
+    }) as Promise<DeletedPageRecord | null>;
   }
 
-  /**
-   * Живой собственный проект означает восстановление на место; удалённый —
-   * обязательный проект назначения, потому что живой страницы в удалённом
-   * проекте не бывает, а подъём в корень не помогает: корень принадлежит тому же
-   * проекту.
-   */
-  private async resolveDestinationProject(
-    tx: TransactionClient,
-    page: PageRecord,
-    ownerId: string,
-    targetProjectId: string | null,
-  ): Promise<string> {
-    const own = await tx.project.findFirst({
-      select: { deletedAt: true },
-      where: { id: page.projectId, ownerId },
-    });
-
-    if (own !== null && own.deletedAt === null) {
-      if (targetProjectId !== null && targetProjectId !== page.projectId) {
-        throw new PageRestoreTargetProjectRejectedError();
-      }
-
-      return page.projectId;
-    }
-
-    if (targetProjectId === null) {
-      throw new PageRestoreProjectDeletedError();
-    }
-
-    const target = await tx.project.findFirst({
-      select: { id: true },
-      where: { deletedAt: null, id: targetProjectId, ownerId },
-    });
-
-    if (target === null) {
-      throw new ProjectNotFoundError();
-    }
-
-    return target.id;
+  async moveSubtreeToProject(id: string, projectId: string): Promise<void> {
+    // Переносится и то, что остаётся удалённым: ребёнок не может лежать в другом
+    // проекте, чем родитель.
+    await this.client.$executeRaw`
+      WITH RECURSIVE subtree AS (
+        SELECT "id" FROM "Page" WHERE "id" = ${id}::uuid
+        UNION ALL
+        SELECT child."id"
+        FROM "Page" child
+        JOIN subtree ON child."parentPageId" = subtree."id"
+      )
+      UPDATE "Page"
+      SET "projectId" = ${projectId}::uuid
+      WHERE "id" IN (SELECT "id" FROM subtree)
+    `;
   }
 
-  private async parentIsGone(
-    tx: TransactionClient,
-    page: PageRecord,
-    ownerId: string,
-  ): Promise<boolean> {
-    if (page.parentPageId === null) {
-      return false;
-    }
-
-    const parent = await tx.page.findFirst({
-      select: { id: true },
-      where: { deletedAt: null, id: page.parentPageId, ownerId },
-    });
-
-    return parent === null;
+  async clearSubtreeDeletion(id: string): Promise<void> {
+    await this.client.$executeRaw`
+      WITH RECURSIVE subtree AS (
+        SELECT "id" FROM "Page" WHERE "id" = ${id}::uuid
+        UNION ALL
+        SELECT child."id"
+        FROM "Page" child
+        JOIN subtree ON child."parentPageId" = subtree."id"
+        WHERE child."deletedOrigin" <> 'SELF'::"PageDeletionOrigin"
+      )
+      UPDATE "Page"
+      SET "deletedAt" = NULL, "deletedOrigin" = NULL
+      WHERE "id" IN (SELECT "id" FROM subtree)
+    `;
   }
 
-  async purge(id: string, ownerId: string, cascade: boolean): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${ownerId}))`;
+  async findSelfDeletedDescendantTitles(id: string): Promise<string[]> {
+    // Только `SELF`-потомки — корни корзины; их ветки нарисованы под ними.
+    const doomed = await this.client.$queryRaw<{ title: string }[]>`
+      WITH RECURSIVE subtree AS (
+        SELECT "id", "title", "deletedOrigin" FROM "Page" WHERE "id" = ${id}::uuid
+        UNION ALL
+        SELECT child."id", child."title", child."deletedOrigin"
+        FROM "Page" child
+        JOIN subtree ON child."parentPageId" = subtree."id"
+      )
+      SELECT "title"
+      FROM subtree
+      WHERE "id" <> ${id}::uuid AND "deletedOrigin" = 'SELF'::"PageDeletionOrigin"
+      ORDER BY "title" ASC, "id" ASC
+    `;
 
-      const page = await tx.page.findFirst({
-        select: { id: true },
-        where: { deletedAt: { not: null }, id, ownerId },
-      });
-
-      if (page === null) {
-        throw new PageNotFoundError();
-      }
-
-      // Спуск идёт по всему физическому поддереву, а не только по удалённым: это
-      // ровно то, что унесёт FK-каскад. Собираются только `SELF`-потомки —
-      // корни корзины; их собственные ветки нарисованы под ними и отдельного
-      // упоминания не требуют.
-      const doomed = await tx.$queryRaw<{ title: string }[]>`
-        WITH RECURSIVE subtree AS (
-          SELECT "id", "title", "deletedOrigin" FROM "Page" WHERE "id" = ${id}::uuid
-          UNION ALL
-          SELECT child."id", child."title", child."deletedOrigin"
-          FROM "Page" child
-          JOIN subtree ON child."parentPageId" = subtree."id"
-        )
-        SELECT "title"
-        FROM subtree
-        WHERE "id" <> ${id}::uuid AND "deletedOrigin" = 'SELF'::"PageDeletionOrigin"
-        ORDER BY "title" ASC, "id" ASC
-      `;
-
-      // Сбор и удаление — одна транзакция: иначе между ними вклинилась бы чужая
-      // запись, и уничтожено было бы не то, что подтвердил вызывающий.
-      if (doomed.length > 0 && !cascade) {
-        throw new PurgeConfirmationRequiredError(doomed.map((row) => row.title));
-      }
-
-      // Поддерево и документы уносят физические FK-каскады — обходить нечего.
-      await tx.page.delete({ where: { id } });
-    });
+    return doomed.map((row) => row.title);
   }
 
-  async purgeTrash(ownerId: string): Promise<void> {
-    // Подтверждения нет намеренно: очищается ровно то, что показывает корзина, и
-    // ничего сверх неё не гибнет. Потомки уходят FK-каскадом, поэтому удаление
-    // строк, чьи предки уже удалены этим же запросом, безвредно.
-    await this.prisma.page.deleteMany({ where: { deletedAt: { not: null }, ownerId } });
-  }
-
-  /** Блокировка уровня берётся тем же ключом, что и у `create`, и в том же порядке. */
-  private async lastRootPosition(
-    tx: TransactionClient,
+  async markProjectPagesDeleted(
     projectId: string,
     ownerId: string,
-    excludedId: string,
-  ): Promise<string> {
-    await tx.$executeRaw`
-      SELECT pg_advisory_xact_lock(hashtext(${siblingLevelLockKey(projectId, null)}))`;
+    deletedAt: Date,
+  ): Promise<void> {
+    // Рекурсия не нужна: `projectId` есть в каждой строке, дерево тут ни при чём.
+    await this.client.page.updateMany({
+      data: { deletedAt, deletedOrigin: PageDeletionOrigin.PROJECT },
+      where: { deletedAt: null, ownerId, projectId },
+    });
+  }
 
-    const last = await tx.page.findFirst({
-      orderBy: [{ position: 'desc' }, { id: 'desc' }],
-      select: { position: true },
-      where: { deletedAt: null, id: { not: excludedId }, ownerId, parentPageId: null, projectId },
+  async clearProjectPagesDeleted(projectId: string, ownerId: string): Promise<void> {
+    await this.client.page.updateMany({
+      data: { deletedAt: null, deletedOrigin: null },
+      where: { deletedOrigin: PageDeletionOrigin.PROJECT, ownerId, projectId },
+    });
+  }
+
+  async findSelfDeletedTitlesByProjects(
+    projectIds: readonly string[],
+    ownerId: string,
+  ): Promise<string[]> {
+    const doomed = await this.client.page.findMany({
+      orderBy: [{ title: 'asc' }, { id: 'asc' }],
+      select: { title: true },
+      where: {
+        deletedOrigin: PageDeletionOrigin.SELF,
+        ownerId,
+        projectId: { in: [...projectIds] },
+      },
     });
 
-    return positionBetween(last?.position ?? null, null);
+    return doomed.map((page) => page.title);
+  }
+
+  async deleteById(id: string): Promise<void> {
+    await this.client.page.delete({ where: { id } });
+  }
+
+  async deleteAllDeletedByOwner(ownerId: string): Promise<void> {
+    // Потомки уходят FK-каскадом — повторное удаление строки безвредно.
+    await this.client.page.deleteMany({ where: { deletedAt: { not: null }, ownerId } });
   }
 }

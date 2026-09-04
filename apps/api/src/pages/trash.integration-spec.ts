@@ -5,11 +5,20 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { PurgeConfirmationRequiredError } from '../common/errors';
 import type { PrismaService } from '../database/prisma.service';
+import { PrismaTransactionRunner } from '../database/transaction';
 import { PrismaClient } from '../generated/prisma/client';
 import { PrismaProjectsRepository } from '../projects/projects.repository';
-import { TIPTAP_SCHEMA_VERSION } from './constants';
-import { PageRestoreProjectDeletedError } from './errors';
+import { PurgeProjectUseCase } from '../projects/use-cases/purge-project.use-case';
+import { RestoreProjectUseCase } from '../projects/use-cases/restore-project.use-case';
+import { SoftDeleteProjectUseCase } from '../projects/use-cases/soft-delete-project.use-case';
+import { PageNotFoundError, PageRestoreProjectDeletedError } from './errors';
+import { PrismaPageDocumentRepository } from './page-document/page-document.repository';
 import { PrismaPagesRepository } from './pages.repository';
+import { CreatePageUseCase } from './use-cases/create-page.use-case';
+import { PurgePageUseCase } from './use-cases/purge-page.use-case';
+import { PurgePagesTrashUseCase } from './use-cases/purge-pages-trash.use-case';
+import { RestorePageUseCase } from './use-cases/restore-page.use-case';
+import { SoftDeletePageUseCase } from './use-cases/soft-delete-page.use-case';
 
 /**
  * Корзина на живой базе. Здесь проверяется то, чего in-memory двойник по
@@ -22,18 +31,28 @@ describe('корзина страниц и проектов на живой ба
   let prisma: PrismaClient;
   let pages: PrismaPagesRepository;
   let projects: PrismaProjectsRepository;
+  let softDeleteProject: SoftDeleteProjectUseCase;
+  let purgeProject: PurgeProjectUseCase;
+  let createPageUseCase: CreatePageUseCase;
+  let softDeletePageUseCase: SoftDeletePageUseCase;
+  let restorePageUseCase: RestorePageUseCase;
+  let purgePageUseCase: PurgePageUseCase;
+  let purgePagesTrashUseCase: PurgePagesTrashUseCase;
+  let restoreProject: RestoreProjectUseCase;
   const ownerId = randomUUID();
   let projectId: string;
 
   const createPage = async (parentPageId: string | null, title: string) =>
-    pages.create({
-      createdById: ownerId,
+    createPageUseCase.execute({
       ownerId,
       parentPageId,
       projectId,
-      tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
       title,
     });
+
+  /** Сохраняет позиционный вызов тестов поверх командного контракта юзкейса. */
+  const restorePage = (pageId: string, ownerId: string, targetProjectId: string | null) =>
+    restorePageUseCase.execute({ ownerId, pageId, targetProjectId });
 
   const rowOf = (id: string) =>
     prisma.page.findUnique({
@@ -47,6 +66,21 @@ describe('корзина страниц и проектов на живой ба
     });
     pages = new PrismaPagesRepository(prisma as unknown as PrismaService);
     projects = new PrismaProjectsRepository(prisma as unknown as PrismaService);
+    const transactions = new PrismaTransactionRunner(prisma as unknown as PrismaService);
+
+    softDeleteProject = new SoftDeleteProjectUseCase(transactions, projects, pages);
+    restoreProject = new RestoreProjectUseCase(transactions, projects, pages);
+    purgeProject = new PurgeProjectUseCase(transactions, projects, pages);
+    createPageUseCase = new CreatePageUseCase(
+      transactions,
+      pages,
+      projects,
+      new PrismaPageDocumentRepository(prisma as unknown as PrismaService),
+    );
+    softDeletePageUseCase = new SoftDeletePageUseCase(transactions, pages);
+    restorePageUseCase = new RestorePageUseCase(transactions, pages, projects);
+    purgePageUseCase = new PurgePageUseCase(transactions, pages);
+    purgePagesTrashUseCase = new PurgePagesTrashUseCase(transactions, pages);
 
     await prisma.user.create({
       data: { email: `${ownerId}@trash.test`, id: ownerId, name: 'trash', passwordHash: 'hash' },
@@ -70,7 +104,7 @@ describe('корзина страниц и проектов на живой ба
       const child = await createPage(root.id, 'child');
       const grandchild = await createPage(child.id, 'grandchild');
 
-      await expect(pages.softDelete(root.id, ownerId)).resolves.toBe(true);
+      await softDeletePageUseCase.execute(root.id, ownerId);
 
       const rows = await Promise.all([rowOf(root.id), rowOf(child.id), rowOf(grandchild.id)]);
 
@@ -83,10 +117,10 @@ describe('корзина страниц и проектов на живой ба
       const root = await createPage(null, 'root');
       const child = await createPage(root.id, 'child');
       const grandchild = await createPage(child.id, 'grandchild');
-      await pages.softDelete(child.id, ownerId);
+      await softDeletePageUseCase.execute(child.id, ownerId);
       const before = await rowOf(child.id);
 
-      await pages.softDelete(root.id, ownerId);
+      await softDeletePageUseCase.execute(root.id, ownerId);
 
       const after = await rowOf(child.id);
 
@@ -97,9 +131,11 @@ describe('корзина страниц и проектов на живой ба
 
     it('не находит уже удалённую страницу', async () => {
       const page = await createPage(null, 'page');
-      await pages.softDelete(page.id, ownerId);
+      await softDeletePageUseCase.execute(page.id, ownerId);
 
-      await expect(pages.softDelete(page.id, ownerId)).resolves.toBe(false);
+      await expect(softDeletePageUseCase.execute(page.id, ownerId)).rejects.toBeInstanceOf(
+        PageNotFoundError,
+      );
     });
   });
 
@@ -108,10 +144,10 @@ describe('корзина страниц и проектов на живой ба
       const root = await createPage(null, 'root');
       const child = await createPage(root.id, 'child');
       const grandchild = await createPage(child.id, 'grandchild');
-      await pages.softDelete(child.id, ownerId);
-      await pages.softDelete(root.id, ownerId);
+      await softDeletePageUseCase.execute(child.id, ownerId);
+      await softDeletePageUseCase.execute(root.id, ownerId);
 
-      await pages.restore(root.id, ownerId, null);
+      await restorePage(root.id, ownerId, null);
 
       expect((await rowOf(root.id))?.deletedAt).toBeNull();
       expect((await rowOf(child.id))?.deletedAt).not.toBeNull();
@@ -123,10 +159,10 @@ describe('корзина страниц и проектов на живой ба
       const second = await createPage(null, 'second');
       const child = await createPage(first.id, 'child');
       const grandchild = await createPage(child.id, 'grandchild');
-      await pages.softDelete(child.id, ownerId);
-      await pages.softDelete(first.id, ownerId);
+      await softDeletePageUseCase.execute(child.id, ownerId);
+      await softDeletePageUseCase.execute(first.id, ownerId);
 
-      const restored = await pages.restore(child.id, ownerId, null);
+      const restored = await restorePage(child.id, ownerId, null);
 
       expect(restored.parentPageId).toBeNull();
       expect(restored.position > second.position).toBe(true);
@@ -140,9 +176,9 @@ describe('корзина страниц и проектов на живой ба
       const root = await createPage(null, 'root');
       const child = await createPage(root.id, 'child');
       const grandchild = await createPage(child.id, 'grandchild');
-      await pages.softDelete(root.id, ownerId);
+      await softDeletePageUseCase.execute(root.id, ownerId);
 
-      const restored = await pages.restore(child.id, ownerId, null);
+      const restored = await restorePage(child.id, ownerId, null);
 
       expect(restored.parentPageId).toBeNull();
       expect((await rowOf(grandchild.id))?.deletedAt).toBeNull();
@@ -151,10 +187,10 @@ describe('корзина страниц и проектов на живой ба
 
     it('отказывает, пока проект страницы в корзине', async () => {
       const page = await createPage(null, 'page');
-      await pages.softDelete(page.id, ownerId);
-      await projects.softDelete(projectId, ownerId);
+      await softDeletePageUseCase.execute(page.id, ownerId);
+      await softDeleteProject.execute(projectId, ownerId);
 
-      await expect(pages.restore(page.id, ownerId, null)).rejects.toBeInstanceOf(
+      await expect(restorePage(page.id, ownerId, null)).rejects.toBeInstanceOf(
         PageRestoreProjectDeletedError,
       );
     });
@@ -166,9 +202,9 @@ describe('корзина страниц и проектов на живой ба
       const child = await createPage(root.id, 'child');
       const grandchild = await createPage(child.id, 'grandchild');
       const other = (await projects.create({ name: 'Other', ownerId })).id;
-      await projects.softDelete(projectId, ownerId);
+      await softDeleteProject.execute(projectId, ownerId);
 
-      const restored = await pages.restore(root.id, ownerId, other);
+      const restored = await restorePage(root.id, ownerId, other);
 
       expect(restored.projectId).toBe(other);
       expect(restored.parentPageId).toBeNull();
@@ -186,11 +222,11 @@ describe('корзина страниц и проектов на живой ба
     it('уводит удалённое вложенное поддерево за переносимой страницей', async () => {
       const root = await createPage(null, 'root');
       const dropped = await createPage(root.id, 'dropped');
-      await pages.softDelete(dropped.id, ownerId);
+      await softDeletePageUseCase.execute(dropped.id, ownerId);
       const other = (await projects.create({ name: 'Other', ownerId })).id;
-      await projects.softDelete(projectId, ownerId);
+      await softDeleteProject.execute(projectId, ownerId);
 
-      await pages.restore(root.id, ownerId, other);
+      await restorePage(root.id, ownerId, other);
 
       const row = await prisma.page.findUnique({
         select: { deletedAt: true, deletedOrigin: true, projectId: true },
@@ -205,17 +241,15 @@ describe('корзина страниц и проектов на живой ба
     it('не трогает ранги root-страниц проекта назначения', async () => {
       const page = await createPage(null, 'page');
       const other = (await projects.create({ name: 'Other', ownerId })).id;
-      const existing = await pages.create({
-        createdById: ownerId,
+      const existing = await createPageUseCase.execute({
         ownerId,
         parentPageId: null,
         projectId: other,
-        tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
         title: 'existing',
       });
-      await projects.softDelete(projectId, ownerId);
+      await softDeleteProject.execute(projectId, ownerId);
 
-      const restored = await pages.restore(page.id, ownerId, other);
+      const restored = await restorePage(page.id, ownerId, other);
 
       expect(restored.position > existing.position).toBe(true);
       expect((await rowOf(existing.id))?.position).toBe(existing.position);
@@ -223,9 +257,9 @@ describe('корзина страниц и проектов на живой ба
 
     it('отказывает на чужом проекте назначения', async () => {
       const page = await createPage(null, 'page');
-      await projects.softDelete(projectId, ownerId);
+      await softDeleteProject.execute(projectId, ownerId);
 
-      await expect(pages.restore(page.id, ownerId, randomUUID())).rejects.toThrow();
+      await expect(restorePage(page.id, ownerId, randomUUID())).rejects.toThrow();
     });
   });
 
@@ -233,10 +267,10 @@ describe('корзина страниц и проектов на живой ба
     it('помечает живые страницы источником PROJECT и щадит удалённые раньше', async () => {
       const kept = await createPage(null, 'kept');
       const dropped = await createPage(null, 'dropped');
-      await pages.softDelete(dropped.id, ownerId);
+      await softDeletePageUseCase.execute(dropped.id, ownerId);
       const before = await rowOf(dropped.id);
 
-      await projects.softDelete(projectId, ownerId);
+      await softDeleteProject.execute(projectId, ownerId);
 
       expect((await rowOf(kept.id))?.deletedOrigin).toBe('PROJECT');
       expect((await rowOf(dropped.id))?.deletedOrigin).toBe('SELF');
@@ -246,10 +280,10 @@ describe('корзина страниц и проектов на живой ба
     it('восстанавливает ровно то, что пометило удалением проекта', async () => {
       const kept = await createPage(null, 'kept');
       const dropped = await createPage(null, 'dropped');
-      await pages.softDelete(dropped.id, ownerId);
-      await projects.softDelete(projectId, ownerId);
+      await softDeletePageUseCase.execute(dropped.id, ownerId);
+      await softDeleteProject.execute(projectId, ownerId);
 
-      await projects.restore(projectId, ownerId);
+      await restoreProject.execute(projectId, ownerId);
 
       expect((await rowOf(kept.id))?.deletedAt).toBeNull();
       expect((await rowOf(dropped.id))?.deletedAt).not.toBeNull();
@@ -260,9 +294,9 @@ describe('корзина страниц и проектов на живой ба
     it('уносит поддерево и документы физическим каскадом', async () => {
       const root = await createPage(null, 'root');
       const child = await createPage(root.id, 'child');
-      await pages.softDelete(root.id, ownerId);
+      await softDeletePageUseCase.execute(root.id, ownerId);
 
-      await pages.purge(root.id, ownerId, false);
+      await purgePageUseCase.execute(root.id, ownerId, false);
 
       expect(await rowOf(root.id)).toBeNull();
       expect(await rowOf(child.id)).toBeNull();
@@ -274,10 +308,12 @@ describe('корзина страниц и проектов на живой ба
     it('отказывается уносить вложенный корень корзины без подтверждения', async () => {
       const root = await createPage(null, 'root');
       const child = await createPage(root.id, 'Архив 2024');
-      await pages.softDelete(child.id, ownerId);
-      await pages.softDelete(root.id, ownerId);
+      await softDeletePageUseCase.execute(child.id, ownerId);
+      await softDeletePageUseCase.execute(root.id, ownerId);
 
-      const error = await pages.purge(root.id, ownerId, false).catch((reason) => reason);
+      const error = await purgePageUseCase
+        .execute(root.id, ownerId, false)
+        .catch((reason) => reason);
 
       expect(error).toBeInstanceOf(PurgeConfirmationRequiredError);
       expect((error as PurgeConfirmationRequiredError).titles).toEqual(['Архив 2024']);
@@ -289,10 +325,10 @@ describe('корзина страниц и проектов на живой ба
     it('уносит всё с подтверждением', async () => {
       const root = await createPage(null, 'root');
       const child = await createPage(root.id, 'Архив 2024');
-      await pages.softDelete(child.id, ownerId);
-      await pages.softDelete(root.id, ownerId);
+      await softDeletePageUseCase.execute(child.id, ownerId);
+      await softDeletePageUseCase.execute(root.id, ownerId);
 
-      await pages.purge(root.id, ownerId, true);
+      await purgePageUseCase.execute(root.id, ownerId, true);
 
       expect(await rowOf(root.id)).toBeNull();
       expect(await rowOf(child.id)).toBeNull();
@@ -302,9 +338,9 @@ describe('корзина страниц и проектов на живой ба
       const root = await createPage(null, 'root');
       const branch = await createPage(root.id, 'branch');
       const other = await createPage(root.id, 'other');
-      await pages.softDelete(root.id, ownerId);
+      await softDeletePageUseCase.execute(root.id, ownerId);
 
-      await pages.purge(branch.id, ownerId, false);
+      await purgePageUseCase.execute(branch.id, ownerId, false);
 
       expect(await rowOf(branch.id)).toBeNull();
       expect(await rowOf(other.id)).not.toBeNull();
@@ -313,24 +349,24 @@ describe('корзина страниц и проектов на живой ба
 
     it('оставляет удалённый проект восстановимым, но пустым, после очистки корзины', async () => {
       await createPage(null, 'page');
-      await projects.softDelete(projectId, ownerId);
+      await softDeleteProject.execute(projectId, ownerId);
 
-      await pages.purgeTrash(ownerId);
+      await purgePagesTrashUseCase.execute(ownerId);
 
-      await expect(projects.restore(projectId, ownerId)).resolves.not.toBeNull();
+      await expect(restoreProject.execute(projectId, ownerId)).resolves.not.toBeNull();
       await expect(prisma.page.count({ where: { projectId } })).resolves.toBe(0);
     });
 
     it('уносит проект со всеми страницами при подтверждении', async () => {
       const dropped = await createPage(null, 'Черновики');
-      await pages.softDelete(dropped.id, ownerId);
-      await projects.softDelete(projectId, ownerId);
+      await softDeletePageUseCase.execute(dropped.id, ownerId);
+      await softDeleteProject.execute(projectId, ownerId);
 
-      await expect(projects.purge(projectId, ownerId, false)).rejects.toBeInstanceOf(
+      await expect(purgeProject.execute(projectId, ownerId, false)).rejects.toBeInstanceOf(
         PurgeConfirmationRequiredError,
       );
 
-      await projects.purge(projectId, ownerId, true);
+      await purgeProject.execute(projectId, ownerId, true);
 
       await expect(prisma.project.count({ where: { id: projectId } })).resolves.toBe(0);
       expect(await rowOf(dropped.id)).toBeNull();
@@ -341,8 +377,8 @@ describe('корзина страниц и проектов на живой ба
     it('не даёт потомку отметку позже предка при удалении самостоятельно раньше', async () => {
       const root = await createPage(null, 'root');
       const child = await createPage(root.id, 'child');
-      await pages.softDelete(child.id, ownerId);
-      await pages.softDelete(root.id, ownerId);
+      await softDeletePageUseCase.execute(child.id, ownerId);
+      await softDeletePageUseCase.execute(root.id, ownerId);
 
       const [rootRow, childRow] = await Promise.all([rowOf(root.id), rowOf(child.id)]);
       const rootDeletedAt = rootRow?.deletedAt as Date;
@@ -354,13 +390,13 @@ describe('корзина страниц и проектов на живой ба
     it('выводит восстановленную страницу из прежнего поддерева перед новым удалением', async () => {
       const root = await createPage(null, 'root');
       const child = await createPage(root.id, 'child');
-      await pages.softDelete(child.id, ownerId);
-      await pages.softDelete(root.id, ownerId);
+      await softDeletePageUseCase.execute(child.id, ownerId);
+      await softDeletePageUseCase.execute(root.id, ownerId);
       // Восстановление поднимает страницу в корень: только так её отметка может
       // стать новее отметки прежнего предка, и физического каскада между ними
       // больше нет.
-      await pages.restore(child.id, ownerId, null);
-      await pages.softDelete(child.id, ownerId);
+      await restorePage(child.id, ownerId, null);
+      await softDeletePageUseCase.execute(child.id, ownerId);
 
       const [rootRow, childRow] = await Promise.all([rowOf(root.id), rowOf(child.id)]);
       const rootDeletedAt = rootRow?.deletedAt as Date;

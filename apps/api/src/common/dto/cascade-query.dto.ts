@@ -3,12 +3,8 @@ import { Transform } from 'class-transformer';
 import { IsBoolean, IsOptional } from 'class-validator';
 
 /**
- * Подтверждение окончательного удаления. Отсутствие параметра означает «не
- * подтверждено»: безопасно по умолчанию, разрушительно по явному требованию.
- *
- * Query-параметры приходят строками, поэтому `true` разбирается вручную;
- * `class-transformer` иначе превратил бы в `true` любую непустую строку,
- * включая `cascade=false`.
+ * Отсутствие параметра означает «не подтверждено». `true` разбирается вручную:
+ * `class-transformer` превратил бы в `true` любую непустую строку, включая `false`.
  */
 export class CascadeQueryDto {
   @ApiPropertyOptional({

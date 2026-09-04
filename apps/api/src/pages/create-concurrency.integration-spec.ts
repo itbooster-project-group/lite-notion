@@ -3,9 +3,12 @@ import { randomUUID } from 'node:crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { PrismaService } from '../database/prisma.service';
+import { PrismaTransactionRunner } from '../database/transaction';
 import { PrismaClient } from '../generated/prisma/client';
-import { TIPTAP_SCHEMA_VERSION } from './constants';
+import { PrismaProjectsRepository } from '../projects/projects.repository';
+import { PrismaPageDocumentRepository } from './page-document/page-document.repository';
 import { PrismaPagesRepository } from './pages.repository';
+import { CreatePageUseCase } from './use-cases/create-page.use-case';
 
 /**
  * Гонка, которую нельзя воспроизвести на in-memory репозитории: он однопоточен,
@@ -21,6 +24,7 @@ import { PrismaPagesRepository } from './pages.repository';
 describe('конкурентное создание страниц одного уровня', () => {
   let prisma: PrismaClient;
   let repository: PrismaPagesRepository;
+  let createPageUseCase: CreatePageUseCase;
   const ownerId = randomUUID();
   const projectId = randomUUID();
 
@@ -29,6 +33,12 @@ describe('конкурентное создание страниц одного 
       adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
     });
     repository = new PrismaPagesRepository(prisma as unknown as PrismaService);
+    createPageUseCase = new CreatePageUseCase(
+      new PrismaTransactionRunner(prisma as unknown as PrismaService),
+      repository,
+      new PrismaProjectsRepository(prisma as unknown as PrismaService),
+      new PrismaPageDocumentRepository(prisma as unknown as PrismaService),
+    );
 
     await prisma.user.create({
       data: {
@@ -51,12 +61,10 @@ describe('конкурентное создание страниц одного 
   });
 
   const createPage = (parentPageId: string | null) =>
-    repository.create({
-      createdById: ownerId,
+    createPageUseCase.execute({
       ownerId,
       parentPageId,
       projectId,
-      tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
       title: '',
     });
 
