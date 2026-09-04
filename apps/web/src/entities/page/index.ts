@@ -1,11 +1,13 @@
 export { pageTitleSchema, parsePageTitle } from './model/page-title';
 export {
   buildProjectPageTree,
+  collectPageSubtreeIds,
   getAncestorChain,
   getBreadcrumbs,
   getPageDisplayTitle,
   insertPageIntoTree,
   isMoveIntentValid,
+  isPageInSubtree,
   type MoveIntent,
   mapMoveIntentToDto,
   movePageInTree,
@@ -16,6 +18,8 @@ export {
   type PageDropTarget,
   type PageTreeItemData,
   type ProjectPageTree,
+  removePageSubtreeFromTree,
+  removeProjectPagesFromTree,
   renamePageInTree,
   SYNTHETIC_ROOT_PREFIX,
   selectPage,

@@ -8,6 +8,7 @@ import {
   type ProjectDto,
   useCreateProject as useCreateProjectMutation,
 } from '@/shared/api';
+import { workspaceProjectPath } from '@/shared/routing';
 
 export function useProjectCreation() {
   const router = useRouter();
@@ -21,7 +22,7 @@ export function useProjectCreation() {
       ...(current ?? []),
       project,
     ]);
-    router.push(`/projects/${project.id}`);
+    router.push(workspaceProjectPath(project.id));
   }
 
   return { createProject, isCreatingProject: mutation.isPending } as const;

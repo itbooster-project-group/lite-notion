@@ -3,8 +3,13 @@
 import type { ItemInstance } from '@headless-tree/core';
 import { PlusSignIcon } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react';
+import { MoreHorizontal, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
-import { PageDraft } from '@/features/workspace-management';
+import {
+  type PageDeleteRequest,
+  PageDraft,
+  type ProjectDeleteRequest,
+} from '@/features/workspace-management';
 import { Button, Input, Menu, MenuItem, MenuPopup, MenuTrigger } from '@/shared/ui';
 import type { WorkspaceTreeItemData } from '../model/workspace-tree';
 
@@ -22,6 +27,8 @@ type WorkspaceTreeItemProps = Readonly<{
   onChangeCreate: (value: string) => void;
   onCompleteRename: () => void;
   onCreateChild: () => void;
+  onRequestDeletePage: (request: PageDeleteRequest) => void;
+  onRequestDeleteProject: (request: ProjectDeleteRequest) => void;
   onStartMove: (returnFocus: HTMLElement | undefined) => void;
   onSubmitCreate: () => void;
 }>;
@@ -40,6 +47,8 @@ export function WorkspaceTreeItem({
   onChangeCreate,
   onCompleteRename,
   onCreateChild,
+  onRequestDeletePage,
+  onRequestDeleteProject,
   onStartMove,
   onSubmitCreate,
 }: WorkspaceTreeItemProps) {
@@ -148,7 +157,7 @@ export function WorkspaceTreeItem({
                   setMenuOpen(true);
                 }}
               >
-                ⋯
+                <MoreHorizontal aria-hidden="true" />
               </MenuTrigger>
               <MenuPopup sideOffset={4}>
                 <MenuItem onClick={onCreateChild}>Добавить дочернюю</MenuItem>
@@ -160,22 +169,67 @@ export function WorkspaceTreeItem({
                 >
                   Переместить…
                 </MenuItem>
+                <MenuItem
+                  variant="destructive"
+                  onClick={() => {
+                    if (!data.pageId) return;
+                    onRequestDeletePage({
+                      pageId: data.pageId,
+                      returnFocus: actionsRef.current ?? undefined,
+                      title: data.title,
+                    });
+                  }}
+                >
+                  <Trash2 aria-hidden="true" />
+                  Удалить
+                </MenuItem>
               </MenuPopup>
             </Menu>
           </>
         ) : (
-          <Button
-            aria-label={`Создать страницу в ${data.title}`}
-            size="icon-sm"
-            type="button"
-            variant="ghost"
-            onClick={(event) => {
-              event.stopPropagation();
-              onCreateChild();
-            }}
-          >
-            <HugeiconsIcon aria-hidden="true" icon={PlusSignIcon} strokeWidth={2} />
-          </Button>
+          <>
+            <Button
+              aria-label={`Создать страницу в ${data.title}`}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+              onClick={(event) => {
+                event.stopPropagation();
+                onCreateChild();
+              }}
+            >
+              <HugeiconsIcon aria-hidden="true" icon={PlusSignIcon} strokeWidth={2} />
+            </Button>
+            <Menu modal={false} open={menuOpen} onOpenChange={setMenuOpen}>
+              <MenuTrigger
+                ref={actionsRef}
+                aria-label={`Действия для проекта ${data.title}`}
+                render={<Button size="icon-sm" variant="ghost" />}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setMenuOpen(true);
+                }}
+              >
+                <MoreHorizontal aria-hidden="true" />
+              </MenuTrigger>
+              <MenuPopup sideOffset={4}>
+                <MenuItem
+                  variant="destructive"
+                  onClick={() => {
+                    if (!data.projectId) return;
+                    onRequestDeleteProject({
+                      name: data.title,
+                      projectId: data.projectId,
+                      returnFocus: actionsRef.current ?? undefined,
+                    });
+                  }}
+                >
+                  <Trash2 aria-hidden="true" />
+                  Удалить проект
+                </MenuItem>
+              </MenuPopup>
+            </Menu>
+          </>
         )}
       </div>
 

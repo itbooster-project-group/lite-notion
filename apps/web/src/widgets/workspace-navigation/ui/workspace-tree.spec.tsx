@@ -56,24 +56,33 @@ function tree(
   activePageId: string | undefined = undefined,
   activeProjectId: string | undefined = undefined,
 ) {
-  return (
-    <WorkspaceTreeExpansionProvider>
-      <WorkspaceTree
-        activePageId={activePageId}
-        activeProjectId={activeProjectId}
-        normalizedTree={normalizePageTree(pages)}
-        projects={projects}
-        onCreatePage={vi.fn().mockResolvedValue(undefined)}
-        onMovePage={vi.fn().mockResolvedValue(undefined)}
-        onRenamePage={vi.fn().mockResolvedValue(undefined)}
-      />
-    </WorkspaceTreeExpansionProvider>
-  );
+  const callbacks = {
+    onCreatePage: vi.fn().mockResolvedValue(undefined),
+    onMovePage: vi.fn().mockResolvedValue(undefined),
+    onRenamePage: vi.fn().mockResolvedValue(undefined),
+    onRequestDeletePage: vi.fn(),
+    onRequestDeleteProject: vi.fn(),
+  };
+
+  return {
+    callbacks,
+    ui: (
+      <WorkspaceTreeExpansionProvider>
+        <WorkspaceTree
+          activePageId={activePageId}
+          activeProjectId={activeProjectId}
+          normalizedTree={normalizePageTree(pages)}
+          projects={projects}
+          {...callbacks}
+        />
+      </WorkspaceTreeExpansionProvider>
+    ),
+  };
 }
 
 describe('workspace tree', () => {
   it('рендерит проекты и страницы одним ARIA tree с корректными уровнями', async () => {
-    render(tree());
+    render(tree().ui);
 
     expect(screen.getAllByRole('tree', { name: 'Проекты и страницы' })).toHaveLength(1);
     await waitFor(() => expect(screen.getAllByRole('treeitem')).toHaveLength(5));
@@ -91,7 +100,7 @@ describe('workspace tree', () => {
   });
 
   it('перемещает фокус с проекта по страницам к следующему проекту', async () => {
-    render(tree());
+    render(tree().ui);
     const projectAlpha = await screen.findByRole('treeitem', { name: 'Project Alpha' });
     const alpha = await screen.findByRole('treeitem', { name: 'Alpha page' });
     const empty = await screen.findByRole('treeitem', { name: 'Empty page' });
@@ -107,7 +116,7 @@ describe('workspace tree', () => {
   });
 
   it('сохраняет collapse проекта при обновлении данных дерева', async () => {
-    const view = render(tree());
+    const view = render(tree().ui);
     const collapse = await screen.findByRole('button', { name: 'Свернуть Project Alpha' });
     fireEvent.click(collapse);
     await waitFor(() => expect(screen.queryByRole('treeitem', { name: 'Alpha page' })).toBeNull());
@@ -115,7 +124,7 @@ describe('workspace tree', () => {
     const updated = source.map((item) =>
       item.id === 'alpha' ? { ...item, title: 'Alpha updated' } : item,
     );
-    view.rerender(tree(updated));
+    view.rerender(tree(updated).ui);
 
     expect(screen.queryByRole('treeitem', { name: 'Alpha updated' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Раскрыть Project Alpha' })).toBeInTheDocument();
@@ -124,7 +133,7 @@ describe('workspace tree', () => {
   });
 
   it('переходит по project/page и сохраняет active page после cache update', async () => {
-    const view = render(tree(source, 'empty'));
+    const view = render(tree(source, 'empty').ui);
     const activePage = await screen.findByRole('treeitem', { name: 'Empty page' });
     expect(activePage).toHaveAttribute('aria-selected', 'true');
 
@@ -136,7 +145,7 @@ describe('workspace tree', () => {
     const updated = source.map((item) =>
       item.id === 'empty' ? { ...item, title: 'Empty updated' } : item,
     );
-    view.rerender(tree(updated, 'empty'));
+    view.rerender(tree(updated, 'empty').ui);
     expect(await screen.findByRole('treeitem', { name: 'Empty updated' })).toHaveAttribute(
       'aria-selected',
       'true',
@@ -144,10 +153,42 @@ describe('workspace tree', () => {
   });
 
   it('считает пустую страницу folder-capable, но не показывает пустой chevron', async () => {
-    render(tree());
+    render(tree().ui);
     const empty = await screen.findByRole('treeitem', { name: 'Empty page' });
 
     expect(empty).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByRole('button', { name: 'Раскрыть Empty page' })).toBeNull();
+  });
+
+  it('формирует page delete intent из page actions', async () => {
+    const view = tree();
+    render(view.ui);
+    const trigger = await screen.findByRole('button', { name: 'Действия для Alpha page' });
+
+    fireEvent.click(trigger);
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить' }));
+
+    expect(view.callbacks.onRequestDeletePage).toHaveBeenCalledWith({
+      pageId: 'alpha',
+      returnFocus: trigger,
+      title: 'Alpha page',
+    });
+  });
+
+  it('формирует project delete intent из project actions', async () => {
+    const view = tree();
+    render(view.ui);
+    const trigger = await screen.findByRole('button', {
+      name: 'Действия для проекта Project Alpha',
+    });
+
+    fireEvent.click(trigger);
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить проект' }));
+
+    expect(view.callbacks.onRequestDeleteProject).toHaveBeenCalledWith({
+      name: 'Project Alpha',
+      projectId: 'project-a',
+      returnFocus: trigger,
+    });
   });
 });

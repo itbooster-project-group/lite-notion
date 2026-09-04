@@ -3,15 +3,20 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { delay, HttpResponse, http } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { PageDto, PageTreeNodeDto } from '@/shared/api';
+import {
+  getGetPageTreeQueryKey,
+  getListProjectsQueryKey,
+  type PageDto,
+  type PageTreeNodeDto,
+} from '@/shared/api';
 import { server } from '@/shared/api/mocks/server';
 
 import { WorkspacePage, type WorkspaceRouteContext } from './workspace-page';
 
-const navigation = vi.hoisted(() => ({ push: vi.fn() }));
+const navigation = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: navigation.push }),
+  useRouter: () => ({ push: navigation.push, replace: navigation.replace }),
 }));
 
 function page(
@@ -40,7 +45,7 @@ function asPageDto(node: PageTreeNodeDto): PageDto {
   return dto;
 }
 
-const projects = [
+let currentProjects = [
   { id: 'project-a', name: 'Project Alpha', ownerId: 'user-1' },
   { id: 'project-b', name: 'Project Beta', ownerId: 'user-1' },
 ];
@@ -48,6 +53,10 @@ const projects = [
 let currentTree: PageTreeNodeDto[];
 
 beforeEach(() => {
+  currentProjects = [
+    { id: 'project-a', name: 'Project Alpha', ownerId: 'user-1' },
+    { id: 'project-b', name: 'Project Beta', ownerId: 'user-1' },
+  ];
   currentTree = [
     page('alpha', 'project-a', null, 'Alpha page', [
       page('child', 'project-a', 'alpha', 'Child page'),
@@ -56,7 +65,7 @@ beforeEach(() => {
     page('other', 'project-b', null, 'Other project page'),
   ];
   server.use(
-    http.get('*/api/v1/projects', () => HttpResponse.json(projects)),
+    http.get('*/api/v1/projects', () => HttpResponse.json(currentProjects)),
     http.get('*/api/v1/pages', () => HttpResponse.json(currentTree)),
   );
 });
@@ -64,15 +73,27 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   navigation.push.mockReset();
+  navigation.replace.mockReset();
 });
 
 function renderWorkspace(route: WorkspaceRouteContext) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const view = render(
     <QueryClientProvider client={queryClient}>
       <WorkspacePage route={route} />
     </QueryClientProvider>,
   );
+
+  return { queryClient, ...view };
+}
+
+function createDeferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((innerResolve) => {
+    resolve = innerResolve;
+  });
+
+  return { promise, resolve };
 }
 
 describe('workspace page', () => {
@@ -110,8 +131,8 @@ describe('workspace page', () => {
     expect(
       await screen.findByRole('heading', { name: 'Project Alpha', level: 1 }),
     ).toBeInTheDocument();
-    expect(screen.getAllByRole('treeitem', { name: 'Alpha page' })).not.toHaveLength(0);
-    expect(screen.getByText('Other project page')).toBeInTheDocument();
+    expect(await screen.findAllByRole('treeitem', { name: 'Alpha page' })).not.toHaveLength(0);
+    expect(await screen.findByText('Other project page')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('treeitem', { name: 'Project Beta' }));
     expect(navigation.push).toHaveBeenCalledWith('/projects/project-b');
@@ -131,7 +152,7 @@ describe('workspace page', () => {
     expect(screen.getByRole('navigation', { name: 'Хлебные крошки' })).toHaveTextContent(
       'Alpha page/Child page',
     );
-    expect(screen.getByRole('treeitem', { name: 'Child page' })).toHaveAttribute(
+    expect(await screen.findByRole('treeitem', { name: 'Child page' })).toHaveAttribute(
       'aria-selected',
       'true',
     );
@@ -281,5 +302,378 @@ describe('workspace page', () => {
     expect(screen.getByRole('heading', { name: 'Child page' })).toBeInTheDocument();
     expect(screen.getByRole('textbox')).toHaveValue('Draft rename');
     expect(screen.queryByText('Raw rename detail')).not.toBeInTheDocument();
+  });
+
+  it('открывает confirmation страницы с выбранным title и не вызывает DELETE до confirm', async () => {
+    const deleteRequests = vi.fn();
+    server.use(
+      http.delete('*/api/v1/pages/:pageId', ({ params }) => {
+        deleteRequests(params.pageId);
+        currentTree = currentTree.filter((pageNode) => pageNode.id !== params.pageId);
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    renderWorkspace({ projectId: 'project-a', type: 'project' });
+    await screen.findByRole('heading', { name: 'Project Alpha' });
+
+    const alphaActions = screen.getAllByRole('button', { name: 'Действия для Alpha page' }).at(-1);
+    if (!alphaActions) throw new Error('Alpha actions are unavailable');
+    fireEvent.click(alphaActions);
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Удалить страницу?' })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Страница «Alpha page» и все вложенные страницы будут перемещены в корзину.',
+      ),
+    ).toBeInTheDocument();
+    expect(deleteRequests).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Отмена' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(deleteRequests).not.toHaveBeenCalled();
+
+    const betaActions = screen.getAllByRole('button', { name: 'Действия для Beta page' }).at(-1);
+    if (!betaActions) throw new Error('Beta actions are unavailable');
+    fireEvent.click(betaActions);
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
+
+    await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('beta'));
+    await waitFor(() =>
+      expect(screen.queryAllByRole('treeitem', { name: 'Beta page' })).toHaveLength(0),
+    );
+    expect(screen.getAllByRole('treeitem', { name: 'Alpha page' })).not.toHaveLength(0);
+    expect(navigation.replace).not.toHaveBeenCalled();
+  });
+
+  it('удаление active page сразу начинает replace-navigation без push', async () => {
+    const deleteRequests = vi.fn();
+    server.use(
+      http.delete('*/api/v1/pages/:pageId', ({ params }) => {
+        deleteRequests(params.pageId);
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    renderWorkspace({ pageId: 'child', type: 'page' });
+    await screen.findByRole('heading', { name: 'Child page' });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Действия для Child page' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
+
+    await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('child'));
+    expect(navigation.replace).toHaveBeenCalledWith('/projects/project-a');
+    expect(navigation.push).not.toHaveBeenCalled();
+    expect(screen.queryByRole('heading', { name: 'Ничего не найдено' })).not.toBeInTheDocument();
+  });
+
+  it('отменяет in-flight page tree refetch перед affected page delete', async () => {
+    const deleteRequests = vi.fn();
+    const refetch = createDeferred();
+    let pageTreeRequests = 0;
+    server.use(
+      http.get('*/api/v1/pages', async () => {
+        pageTreeRequests += 1;
+        if (pageTreeRequests === 1) return HttpResponse.json(currentTree);
+
+        await refetch.promise;
+        return HttpResponse.json([page('beta', 'project-a', null, 'Beta page')]);
+      }),
+      http.delete('*/api/v1/pages/:pageId', ({ params }) => {
+        deleteRequests(params.pageId);
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    const { queryClient } = renderWorkspace({ pageId: 'child', type: 'page' });
+    await screen.findByRole('heading', { name: 'Child page' });
+
+    const refetchPromise = queryClient.invalidateQueries({ queryKey: getGetPageTreeQueryKey() });
+    await waitFor(() => expect(pageTreeRequests).toBe(2));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Действия для Child page' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
+
+    await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('child'));
+    expect(navigation.replace).toHaveBeenCalledWith('/projects/project-a');
+
+    refetch.resolve();
+    await refetchPromise;
+
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: 'Ничего не найдено' })).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole('heading', { name: 'Child page' })).toBeInTheDocument();
+  });
+
+  it('удаление ancestor active page начинает replace-navigation на project root', async () => {
+    const deleteRequests = vi.fn();
+    server.use(
+      http.delete('*/api/v1/pages/:pageId', ({ params }) => {
+        deleteRequests(params.pageId);
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    renderWorkspace({ pageId: 'child', type: 'page' });
+    await screen.findByRole('heading', { name: 'Child page' });
+
+    const alphaActions = await screen.findAllByRole('button', {
+      name: 'Действия для Alpha page',
+    });
+    const alphaAction = alphaActions.at(0);
+    if (!alphaAction) throw new Error('Alpha actions are unavailable');
+    fireEvent.click(alphaAction);
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
+
+    await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('alpha'));
+    expect(navigation.replace).toHaveBeenCalledWith('/projects/project-a');
+    expect(navigation.push).not.toHaveBeenCalled();
+    expect(screen.queryByRole('heading', { name: 'Ничего не найдено' })).not.toBeInTheDocument();
+  });
+
+  it('блокирует duplicate submit и показывает pending state при удалении page', async () => {
+    const deleteRequests = vi.fn();
+    server.use(
+      http.delete('*/api/v1/pages/:pageId', async ({ params }) => {
+        deleteRequests(params.pageId);
+        currentTree = currentTree.filter((pageNode) => pageNode.id !== params.pageId);
+        await delay(50);
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    renderWorkspace({ projectId: 'project-a', type: 'project' });
+    await screen.findByRole('heading', { name: 'Project Alpha' });
+
+    const betaActions = screen.getAllByRole('button', { name: 'Действия для Beta page' }).at(-1);
+    if (!betaActions) throw new Error('Beta actions are unavailable');
+    fireEvent.click(betaActions);
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
+
+    const pendingButton = await screen.findByRole('button', { name: 'Удаляем…' });
+    expect(pendingButton).toBeDisabled();
+    fireEvent.click(pendingButton);
+    fireEvent.click(screen.getByRole('button', { name: 'Отмена' }));
+
+    expect(screen.getByRole('dialog', { name: 'Удалить страницу?' })).toBeInTheDocument();
+    await waitFor(() => expect(deleteRequests).toHaveBeenCalledTimes(1));
+    expect(deleteRequests).toHaveBeenCalledWith('beta');
+  });
+
+  it('оставляет page и route при ошибке удаления и показывает accessible error', async () => {
+    const deleteRequests = vi.fn();
+    server.use(
+      http.delete('*/api/v1/pages/:pageId', ({ params }) => {
+        deleteRequests(params.pageId);
+        return HttpResponse.json({ message: 'Raw delete detail' }, { status: 500 });
+      }),
+    );
+    renderWorkspace({ projectId: 'project-a', type: 'project' });
+    await screen.findByRole('heading', { name: 'Project Alpha' });
+
+    const betaActions = screen.getAllByRole('button', { name: 'Действия для Beta page' }).at(-1);
+    if (!betaActions) throw new Error('Beta actions are unavailable');
+    fireEvent.click(betaActions);
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Ошибка удаления страницы. Попробуйте ещё раз.',
+    );
+    expect(screen.queryByText('Raw delete detail')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Beta page')).not.toHaveLength(0);
+    expect(screen.getByRole('dialog', { name: 'Удалить страницу?' })).toBeInTheDocument();
+    expect(navigation.replace).not.toHaveBeenCalled();
+    expect(deleteRequests).toHaveBeenCalledWith('beta');
+  });
+
+  it('удаляет project из root card без навигации и с выбранным именем', async () => {
+    const deleteRequests = vi.fn();
+    server.use(
+      http.delete('*/api/v1/projects/:projectId', ({ params }) => {
+        deleteRequests(params.projectId);
+        currentProjects = currentProjects.filter((project) => project.id !== params.projectId);
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    renderWorkspace({ type: 'root' });
+    expect(await screen.findByRole('heading', { name: 'Проекты' })).toBeInTheDocument();
+
+    const alphaProjectActions = screen
+      .getAllByRole('button', { name: 'Действия для проекта Project Alpha' })
+      .at(-1);
+    if (!alphaProjectActions) throw new Error('Project actions are unavailable');
+    fireEvent.click(alphaProjectActions);
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить проект' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Удалить проект?' })).toBeInTheDocument();
+    expect(
+      screen.getByText('Проект «Project Alpha» и все его страницы будут перемещены в корзину.'),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить' }));
+
+    await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('project-a'));
+    expect(screen.queryByRole('link', { name: 'Project Alpha' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Project Beta' })).toBeInTheDocument();
+    expect(navigation.replace).not.toHaveBeenCalled();
+  });
+
+  it('удаляет другой project из navigation без смены текущего route', async () => {
+    const deleteRequests = vi.fn();
+    server.use(
+      http.delete('*/api/v1/projects/:projectId', ({ params }) => {
+        deleteRequests(params.projectId);
+        currentProjects = currentProjects.filter((project) => project.id !== params.projectId);
+        currentTree = currentTree.filter((pageNode) => pageNode.projectId !== params.projectId);
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    renderWorkspace({ projectId: 'project-a', type: 'project' });
+    await screen.findByRole('heading', { name: 'Project Alpha' });
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Действия для проекта Project Beta' }),
+    );
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить проект' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
+
+    await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('project-b'));
+    await waitFor(() =>
+      expect(screen.queryByRole('treeitem', { name: 'Project Beta' })).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByRole('treeitem', { name: 'Other project page' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Project Alpha' })).toBeInTheDocument();
+    expect(navigation.replace).not.toHaveBeenCalled();
+  });
+
+  it('удаление текущего project сразу начинает replace-navigation без push', async () => {
+    const deleteRequests = vi.fn();
+    server.use(
+      http.delete('*/api/v1/projects/:projectId', ({ params }) => {
+        deleteRequests(params.projectId);
+        currentProjects = currentProjects.filter((project) => project.id !== params.projectId);
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    renderWorkspace({ projectId: 'project-a', type: 'project' });
+    await screen.findByRole('heading', { name: 'Project Alpha' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Действия для проекта Project Alpha' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить проект' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
+
+    await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('project-a'));
+    expect(navigation.replace).toHaveBeenCalledWith('/');
+    expect(navigation.push).not.toHaveBeenCalled();
+    expect(screen.queryByRole('heading', { name: 'Ничего не найдено' })).not.toBeInTheDocument();
+  });
+
+  it('отменяет in-flight projects/page tree refetch перед affected project delete', async () => {
+    const deleteRequests = vi.fn();
+    const projectsRefetch = createDeferred();
+    const pageTreeRefetch = createDeferred();
+    let projectRequests = 0;
+    let pageTreeRequests = 0;
+    server.use(
+      http.get('*/api/v1/projects', async () => {
+        projectRequests += 1;
+        if (projectRequests === 1) return HttpResponse.json(currentProjects);
+
+        await projectsRefetch.promise;
+        return HttpResponse.json([{ id: 'project-b', name: 'Project Beta', ownerId: 'user-1' }]);
+      }),
+      http.get('*/api/v1/pages', async () => {
+        pageTreeRequests += 1;
+        if (pageTreeRequests === 1) return HttpResponse.json(currentTree);
+
+        await pageTreeRefetch.promise;
+        return HttpResponse.json([page('other', 'project-b', null, 'Other project page')]);
+      }),
+      http.delete('*/api/v1/projects/:projectId', ({ params }) => {
+        deleteRequests(params.projectId);
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    const { queryClient } = renderWorkspace({ projectId: 'project-a', type: 'project' });
+    await screen.findByRole('heading', { name: 'Project Alpha' });
+
+    const projectsRefetchPromise = queryClient.invalidateQueries({
+      queryKey: getListProjectsQueryKey(),
+    });
+    const pageTreeRefetchPromise = queryClient.invalidateQueries({
+      queryKey: getGetPageTreeQueryKey(),
+    });
+    await waitFor(() => expect(projectRequests).toBe(2));
+    await waitFor(() => expect(pageTreeRequests).toBe(2));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Действия для проекта Project Alpha' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить проект' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
+
+    await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('project-a'));
+    expect(navigation.replace).toHaveBeenCalledWith('/');
+
+    projectsRefetch.resolve();
+    pageTreeRefetch.resolve();
+    await Promise.all([projectsRefetchPromise, pageTreeRefetchPromise]);
+
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: 'Ничего не найдено' })).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole('heading', { name: 'Project Alpha' })).toBeInTheDocument();
+  });
+
+  it('удаление project текущей page начинает replace-navigation на workspace root', async () => {
+    const deleteRequests = vi.fn();
+    server.use(
+      http.delete('*/api/v1/projects/:projectId', ({ params }) => {
+        deleteRequests(params.projectId);
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    renderWorkspace({ pageId: 'child', type: 'page' });
+    await screen.findByRole('heading', { name: 'Child page' });
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Действия для проекта Project Alpha' }),
+    );
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить проект' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
+
+    await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('project-a'));
+    expect(navigation.replace).toHaveBeenCalledWith('/');
+    expect(navigation.push).not.toHaveBeenCalled();
+    expect(screen.queryByRole('heading', { name: 'Ничего не найдено' })).not.toBeInTheDocument();
+  });
+
+  it('оставляет project в UI при ошибке удаления', async () => {
+    const deleteRequests = vi.fn();
+    server.use(
+      http.delete('*/api/v1/projects/:projectId', ({ params }) => {
+        deleteRequests(params.projectId);
+        return HttpResponse.json({ message: 'Raw project delete detail' }, { status: 500 });
+      }),
+    );
+    renderWorkspace({ type: 'root' });
+    expect(await screen.findByRole('heading', { name: 'Проекты' })).toBeInTheDocument();
+
+    const alphaProjectActions = screen
+      .getAllByRole('button', { name: 'Действия для проекта Project Alpha' })
+      .at(-1);
+    if (!alphaProjectActions) throw new Error('Project actions are unavailable');
+    fireEvent.click(alphaProjectActions);
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить проект' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Ошибка удаления проекта. Попробуйте ещё раз.',
+    );
+    expect(screen.queryByText('Raw project delete detail')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { hidden: true, name: 'Project Alpha' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Удалить проект?' })).toBeInTheDocument();
+    expect(navigation.replace).not.toHaveBeenCalled();
+    expect(deleteRequests).toHaveBeenCalledWith('project-a');
   });
 });
