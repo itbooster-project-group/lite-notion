@@ -41,6 +41,19 @@ export interface InsertPageInput {
   position: string;
 }
 
+/**
+ * Щель между двумя соседями одного уровня. Порядок братьев — по рангу, затем по
+ * `id`, поэтому границы задаются парой полей, а не одним рангом: ранги не уникальны.
+ */
+export interface SiblingGap {
+  ownerId: string;
+  projectId: string;
+  parentPageId: string | null;
+  excludedId: string;
+  previous: { id: string; position: string };
+  next: { id: string; position: string };
+}
+
 /** Уровень дерева: страницы одного проекта под одним родителем. */
 export interface SiblingLevel {
   ownerId: string;
@@ -99,6 +112,12 @@ export abstract class PagesRepository {
    * рекурсивный CTE в базе; решение о цикле принимает вызывающий.
    */
   abstract findAncestorIds(pageId: string): Promise<string[]>;
+
+  /**
+   * Сколько живых братьев стоит строго между границами щели. `0` означает, что
+   * соседи смежны и вставить между ними действительно есть куда.
+   */
+  abstract countSiblingsBetween(gap: SiblingGap): Promise<number>;
 
   /** `null`, когда соседа нет, он в другом проекте или чужой. */
   abstract findSiblingForOwner(
@@ -247,6 +266,30 @@ export class PrismaPagesRepository extends PagesRepository {
     `;
 
     return ancestors.map((row) => row.id);
+  }
+
+  async countSiblingsBetween(gap: SiblingGap): Promise<number> {
+    // Сравнение по паре `(position, id)`: ранги не уникальны, и порядок братьев
+    // разрешает ничью по `id` — тем же правилом, что `compareSiblings`.
+    const rows = await this.client.$queryRaw<{ count: bigint }[]>`
+      SELECT count(*) AS count
+      FROM "Page"
+      WHERE "deletedAt" IS NULL
+        AND "ownerId" = ${gap.ownerId}::uuid
+        AND "projectId" = ${gap.projectId}::uuid
+        AND "parentPageId" IS NOT DISTINCT FROM ${gap.parentPageId}::uuid
+        AND "id" <> ${gap.excludedId}::uuid
+        AND (
+          "position" > ${gap.previous.position}
+          OR ("position" = ${gap.previous.position} AND "id" > ${gap.previous.id}::uuid)
+        )
+        AND (
+          "position" < ${gap.next.position}
+          OR ("position" = ${gap.next.position} AND "id" < ${gap.next.id}::uuid)
+        )
+    `;
+
+    return Number(rows[0]?.count ?? 0);
   }
 
   findSiblingForOwner(

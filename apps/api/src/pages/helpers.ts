@@ -14,6 +14,7 @@ import {
   PreviousSiblingNotFoundError,
   SiblingOrderError,
   SiblingParentMismatchError,
+  SiblingsNotAdjacentError,
 } from './errors';
 
 const ZERO = POSITION_ALPHABET.charAt(0);
@@ -128,7 +129,8 @@ export async function toHttpException<T>(operation: () => Promise<T>): Promise<T
       error instanceof SiblingParentMismatchError ||
       error instanceof PageProjectMismatchError ||
       error instanceof PageRestoreTargetProjectRejectedError ||
-      error instanceof SiblingOrderError
+      error instanceof SiblingOrderError ||
+      error instanceof SiblingsNotAdjacentError
     ) {
       throw new BadRequestException(error.message);
     }

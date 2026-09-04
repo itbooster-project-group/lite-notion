@@ -19,6 +19,7 @@ import {
   PreviousSiblingNotFoundError,
   SiblingOrderError,
   SiblingParentMismatchError,
+  SiblingsNotAdjacentError,
 } from './errors';
 import { positionBetween } from './helpers';
 import { PageDocumentRepository } from './page-document/page-document.repository';
@@ -500,6 +501,63 @@ describe('PagesService', () => {
           previousSiblingId: first.id,
         }),
       ).rejects.toBeInstanceOf(SiblingOrderError);
+    });
+
+    it('отклоняет пару соседей, между которыми стоит третий брат', async () => {
+      const first = await createPage({ title: 'first' });
+      const second = await createPage({ title: 'second' });
+      const third = await createPage({ title: 'third' });
+      const moved = await createPage({ title: 'moved' });
+      const before = (await service.findTree(owner)).map((node) => node.id);
+
+      await expect(
+        movePageUseCase.execute({
+          nextSiblingId: third.id,
+          ownerId: owner,
+          pageId: moved.id,
+          parentPageId: null,
+          previousSiblingId: first.id,
+        }),
+      ).rejects.toBeInstanceOf(SiblingsNotAdjacentError);
+
+      expect(second.id).not.toBe(moved.id);
+      await expect(
+        service.findTree(owner).then((tree) => tree.map((node) => node.id)),
+      ).resolves.toEqual(before);
+    });
+
+    it('пропускает смежную пару и ставит страницу ровно между ними', async () => {
+      const first = await createPage({ title: 'first' });
+      const second = await createPage({ title: 'second' });
+      const moved = await createPage({ title: 'moved' });
+
+      await movePageUseCase.execute({
+        nextSiblingId: second.id,
+        ownerId: owner,
+        pageId: moved.id,
+        parentPageId: null,
+        previousSiblingId: first.id,
+      });
+
+      const tree = await service.findTree(owner);
+
+      expect(tree.map((node) => node.id)).toEqual([first.id, moved.id, second.id]);
+    });
+
+    it('не считает перемещаемую страницу помехой между её будущими соседями', async () => {
+      const first = await createPage({ title: 'first' });
+      const moved = await createPage({ title: 'moved' });
+      const third = await createPage({ title: 'third' });
+
+      await expect(
+        movePageUseCase.execute({
+          nextSiblingId: third.id,
+          ownerId: owner,
+          pageId: moved.id,
+          parentPageId: null,
+          previousSiblingId: first.id,
+        }),
+      ).resolves.toMatchObject({ id: moved.id });
     });
 
     it('отклоняет соседа под другим родителем', async () => {

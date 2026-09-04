@@ -11,6 +11,7 @@ import {
   PreviousSiblingNotFoundError,
   SiblingOrderError,
   SiblingParentMismatchError,
+  SiblingsNotAdjacentError,
 } from '../errors';
 
 /** Идентификатор соседа из тела запроса: он же попадает в текст ошибки. */
@@ -29,8 +30,7 @@ export interface MovePageCommand {
 
 /**
  * Перемещение страницы: смена родителя и вычисление ранга. Проверки владельца,
- * цикла и соседей идут под теми же блокировками, что и запись; ключ уровня
- * известен только после чтения страницы.
+ * цикла и соседей идут под той же блокировкой, что и запись.
  */
 @Injectable()
 export class MovePageUseCase {
@@ -93,14 +93,14 @@ export class MovePageUseCase {
       throw new SiblingOrderError();
     }
 
-    const previous = await this.readSiblingPosition(
+    const previous = await this.readSibling(
       pages,
       page,
       command.parentPageId,
       command.previousSiblingId,
       'previousSiblingId',
     );
-    const next = await this.readSiblingPosition(
+    const next = await this.readSibling(
       pages,
       page,
       command.parentPageId,
@@ -108,9 +108,27 @@ export class MovePageUseCase {
       'nextSiblingId',
     );
 
-    // Щель должна существовать: иначе генератор ранга упал бы внутренней ошибкой.
-    if (previous !== null && next !== null && previous >= next) {
-      throw new SiblingOrderError();
+    if (previous !== null && next !== null) {
+      // Строго по рангу, а не по порядку братьев: равные ранги щели не образуют,
+      // и генератор упал бы на них внутренней ошибкой.
+      if (previous.position >= next.position) {
+        throw new SiblingOrderError();
+      }
+
+      // Соседства мало проверить порядком: между ними может стоять третий брат, и
+      // тогда «ровно между указанными» невыполнимо, а ранг лёг бы рядом с ним.
+      const between = await pages.countSiblingsBetween({
+        excludedId: page.id,
+        next,
+        ownerId: page.ownerId,
+        parentPageId: command.parentPageId,
+        previous,
+        projectId: page.projectId,
+      });
+
+      if (between > 0) {
+        throw new SiblingsNotAdjacentError();
+      }
     }
 
     if (previous === null && next === null) {
@@ -124,16 +142,16 @@ export class MovePageUseCase {
       return positionBetween(last, null);
     }
 
-    return positionBetween(previous, next);
+    return positionBetween(previous?.position ?? null, next?.position ?? null);
   }
 
-  private async readSiblingPosition(
+  private async readSibling(
     pages: PagesRepository,
     page: PageRecord,
     parentPageId: string | null,
     siblingId: string | null,
     slot: SiblingSlot,
-  ): Promise<string | null> {
+  ): Promise<{ id: string; position: string } | null> {
     if (siblingId === null) {
       return null;
     }
@@ -150,6 +168,6 @@ export class MovePageUseCase {
       throw new SiblingParentMismatchError(slot);
     }
 
-    return sibling.position;
+    return { id: siblingId, position: sibling.position };
   }
 }

@@ -2,11 +2,13 @@ import { randomUUID } from 'node:crypto';
 
 import type { TransactionScope } from '../database/transaction';
 import type { PageDeletionOrigin } from '../generated/prisma/enums';
+import { compareSiblings } from './helpers';
 import type {
   Bytes,
   DeletedPageRecord,
   InsertPageInput,
   PageRecord,
+  SiblingGap,
   SiblingLevel,
   SiblingRecord,
 } from './pages.repository';
@@ -76,8 +78,7 @@ export class InMemoryPagesRepository extends PagesRepository {
       .sort(
         (left, right) =>
           (left.parentPageId ?? '').localeCompare(right.parentPageId ?? '') ||
-          left.position.localeCompare(right.position) ||
-          left.id.localeCompare(right.id),
+          compareSiblings(left, right),
       )
       .map((page) => this.toRecord(page));
   }
@@ -145,6 +146,15 @@ export class InMemoryPagesRepository extends PagesRepository {
     return ids;
   }
 
+  async countSiblingsBetween(gap: SiblingGap): Promise<number> {
+    return this.siblingsOf(gap.ownerId, gap.projectId, gap.parentPageId).filter(
+      (sibling) =>
+        sibling.id !== gap.excludedId &&
+        compareSiblings(gap.previous, sibling) < 0 &&
+        compareSiblings(sibling, gap.next) < 0,
+    ).length;
+  }
+
   async findSiblingForOwner(
     siblingId: string,
     projectId: string,
@@ -192,10 +202,7 @@ export class InMemoryPagesRepository extends PagesRepository {
           page.projectId === projectId &&
           page.parentPageId === parentPageId,
       )
-      .sort(
-        (left, right) =>
-          left.position.localeCompare(right.position) || left.id.localeCompare(right.id),
-      );
+      .sort(compareSiblings);
   }
 
   private visible(): StoredPage[] {
@@ -214,8 +221,7 @@ export class InMemoryPagesRepository extends PagesRepository {
       .sort(
         (left, right) =>
           (right.deletedAt?.getTime() ?? 0) - (left.deletedAt?.getTime() ?? 0) ||
-          left.position.localeCompare(right.position) ||
-          left.id.localeCompare(right.id),
+          compareSiblings(left, right),
       )
       .map((page) => ({
         ...this.toRecord(page),
