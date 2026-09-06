@@ -12,7 +12,7 @@ import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
 import { cn } from '@/shared/lib/cn';
-import { Button, Modal, ModalPrimitive } from '@/shared/ui';
+import { Button, Modal, ModalPrimitive, Tooltip } from '@/shared/ui';
 import { useAppShellStore } from '../model/app-shell-store';
 import { SidebarContent } from './sidebar-content';
 
@@ -126,12 +126,14 @@ export function AppShell({ actions, children, pageTree, user }: AppShellProps) {
               id={MOBILE_SIDEBAR_ID}
             >
               <div className="flex h-12 shrink-0 items-center justify-end px-3">
-                <ModalPrimitive.Close
-                  aria-label="Закрыть боковую панель"
-                  className="inline-flex size-7 items-center justify-center rounded-lg hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-sidebar-ring"
-                >
-                  <HugeiconsIcon icon={Cancel01Icon} />
-                </ModalPrimitive.Close>
+                <Tooltip label="Закрыть боковую панель">
+                  <ModalPrimitive.Close
+                    aria-label="Закрыть боковую панель"
+                    className="cursor-pointer inline-flex size-7 items-center justify-center rounded-lg hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-sidebar-ring"
+                  >
+                    <HugeiconsIcon icon={Cancel01Icon} />
+                  </ModalPrimitive.Close>
+                </Tooltip>
               </div>
               <SidebarContent actions={actions} pageTree={pageTree} user={user} />
             </aside>

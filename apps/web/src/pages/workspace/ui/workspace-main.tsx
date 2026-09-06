@@ -1,9 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  getBreadcrumbs,
   getPageDisplayTitle,
   type MoveIntent,
   type NormalizedPageTree,
@@ -37,7 +35,7 @@ export function WorkspaceMain({
 
   if (!page) {
     return (
-      <main className="min-w-0 p-6 sm:p-8">
+      <div className="min-w-0 p-6 sm:p-8">
         <PageTree
           activePageId={undefined}
           header={
@@ -52,35 +50,13 @@ export function WorkspaceMain({
           onRenamePage={onRenamePage}
           onSelectPage={(pageId) => router.push(`/pages/${pageId}`)}
         />
-      </main>
+      </div>
     );
   }
 
-  const breadcrumbs = getBreadcrumbs(normalizedTree, page.id);
-
   return (
-    <main className="min-w-0 p-6 sm:p-8">
-      <nav aria-label="Хлебные крошки">
-        <ol className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-          {breadcrumbs.map((breadcrumb, index) => (
-            <li className="flex items-center gap-2" key={breadcrumb.id}>
-              {index > 0 ? <span aria-hidden="true">/</span> : null}
-              {breadcrumb.id === page.id ? (
-                <span aria-current="page">{breadcrumb.title}</span>
-              ) : (
-                <Link
-                  className="hover:text-foreground hover:underline"
-                  href={`/pages/${breadcrumb.id}`}
-                >
-                  {breadcrumb.title}
-                </Link>
-              )}
-            </li>
-          ))}
-        </ol>
-      </nav>
-
-      <section className="mt-6 space-y-6">
+    <div className="min-w-0 p-6 sm:p-8">
+      <section className="space-y-6">
         <Heading as="h1" variant="page">
           {getPageDisplayTitle(page.title)}
         </Heading>
@@ -88,6 +64,6 @@ export function WorkspaceMain({
           <Text variant="caption">Редактор страницы появится в следующем обновлении.</Text>
         </div>
       </section>
-    </main>
+    </div>
   );
 }

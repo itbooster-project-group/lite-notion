@@ -22,14 +22,15 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('private shell navigation', () => {
-  it('ведёт на главную по логотипу и в профиль по видимому имени пользователя', () => {
+  it('отображает переданные хлебные крошки и в профиль по видимому имени пользователя', () => {
     render(
-      <PrivateShell>
+      <PrivateShell breadcrumbs={<nav aria-label="Хлебные крошки">Проекты</nav>}>
         <main>Приватный экран</main>
       </PrivateShell>,
     );
 
-    expect(screen.getByRole('link', { name: 'Lite Notion' })).toHaveAttribute('href', '/');
+    expect(screen.queryByRole('link', { name: 'Lite Notion' })).not.toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Хлебные крошки' })).toHaveTextContent('Проекты');
     expect(screen.getByRole('banner').firstElementChild).not.toHaveClass('max-w-shell', 'mx-auto');
 
     const profileLink = screen.getByRole('link', { name: 'Ada Lovelace' });
@@ -38,7 +39,6 @@ describe('private shell navigation', () => {
     expect(profileLink).toHaveClass('max-w-24', 'truncate', 'sm:max-w-48');
     expect(profileLink).not.toHaveClass('hidden');
 
-    expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Главная' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Профиль' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Выйти' })).toBeInTheDocument();
@@ -48,7 +48,11 @@ describe('private shell navigation', () => {
   it('сохраняет доступный переход в профиль до появления имени пользователя', () => {
     session.user = undefined;
 
-    render(<PrivateShell>Контент</PrivateShell>);
+    render(
+      <PrivateShell breadcrumbs={<nav aria-label="Хлебные крошки">Проекты</nav>}>
+        Контент
+      </PrivateShell>,
+    );
 
     const profileLink = screen.getByRole('link', { name: 'Профиль' });
     expect(profileLink).toHaveAttribute('href', '/profile');

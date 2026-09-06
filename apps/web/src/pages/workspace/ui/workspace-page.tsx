@@ -11,7 +11,6 @@ import {
   useListProjects,
 } from '@/shared/api';
 import { Button, Heading, Input, Text } from '@/shared/ui';
-import { WorkspaceNavigation } from '@/widgets/workspace-navigation';
 
 import { WorkspaceMain } from './workspace-main';
 
@@ -43,9 +42,9 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
 
   if (projectsQuery.isPending || pageTreeQuery.isPending) {
     return (
-      <main className="flex min-h-[60vh] items-center justify-center" aria-busy="true">
+      <div className="flex min-h-[60vh] items-center justify-center" aria-busy="true">
         <Text variant="caption">Загружаем рабочую область…</Text>
-      </main>
+      </div>
     );
   }
 
@@ -70,17 +69,7 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
   }
 
   return (
-    <div className="relative min-h-0 md:grid md:grid-cols-[20rem_minmax(0,1fr)]">
-      <WorkspaceNavigation
-        activePageId={activePage?.id}
-        activeProjectId={project?.id}
-        normalizedTree={normalizedTree}
-        projects={projects}
-        onCreatePage={pageManagement.createPage}
-        onMovePage={pageManagement.movePage}
-        onRenamePage={pageManagement.renamePage}
-      />
-
+    <div className="relative min-h-0">
       <div className="relative min-h-0 min-w-0 overflow-y-auto">
         {route.type === 'root' ? (
           <WorkspaceRoot
@@ -136,7 +125,7 @@ function WorkspaceRoot({
   }
 
   return (
-    <main className="mx-auto w-full max-w-shell space-y-8 px-page-inline py-page-block">
+    <div className="mx-auto w-full max-w-shell space-y-8 px-page-inline py-page-block">
       <section className="space-y-3" aria-labelledby="projects-title">
         <Heading as="h1" id="projects-title" variant="page">
           Проекты
@@ -175,13 +164,13 @@ function WorkspaceRoot({
       ) : (
         <Text variant="caption">Создайте первый проект, чтобы начать работу.</Text>
       )}
-    </main>
+    </div>
   );
 }
 
 function WorkspaceUnavailable() {
   return (
-    <main className="flex min-h-[60vh] items-center justify-center px-page-inline">
+    <div className="flex min-h-[60vh] items-center justify-center px-page-inline">
       <section className="max-w-lg space-y-4 text-center">
         <Heading as="h1" variant="page">
           Ничего не найдено
@@ -189,13 +178,13 @@ function WorkspaceUnavailable() {
         <Text variant="caption">Перейдите к списку проектов и выберите рабочую область.</Text>
         <Button render={<Link href="/" />}>К проектам</Button>
       </section>
-    </main>
+    </div>
   );
 }
 
 function WorkspaceError({ onRetry }: Readonly<{ onRetry: () => void }>) {
   return (
-    <main className="flex min-h-[60vh] items-center justify-center px-page-inline">
+    <div className="flex min-h-[60vh] items-center justify-center px-page-inline">
       <section className="max-w-lg space-y-4 text-center">
         <Heading as="h1" variant="page">
           Ошибка загрузки рабочей области
@@ -205,6 +194,6 @@ function WorkspaceError({ onRetry }: Readonly<{ onRetry: () => void }>) {
           Повторить
         </Button>
       </section>
-    </main>
+    </div>
   );
 }

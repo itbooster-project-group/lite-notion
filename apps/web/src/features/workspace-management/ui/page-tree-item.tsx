@@ -3,7 +3,7 @@
 import type { ItemInstance } from '@headless-tree/core';
 import { useRef } from 'react';
 import type { PageTreeItemData } from '@/entities/page';
-import { Button, Input, Menu, MenuItem, MenuPopup, MenuTrigger } from '@/shared/ui';
+import { Button, Input, Menu, MenuItem, MenuPopup, MenuTrigger, Tooltip } from '@/shared/ui';
 import { PageDraft } from './page-draft';
 
 type PageTreeItemProps = Readonly<{
@@ -70,19 +70,21 @@ export function PageTreeItem({
         }}
       >
         {data.hasChildren ? (
-          <button
-            aria-label={item.isExpanded() ? `Свернуть ${data.title}` : `Раскрыть ${data.title}`}
-            className="size-7 shrink-0 rounded text-muted-foreground"
-            tabIndex={-1}
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              if (item.isExpanded()) item.collapse();
-              else item.expand();
-            }}
-          >
-            {item.isExpanded() ? '▾' : '▸'}
-          </button>
+          <Tooltip label={item.isExpanded() ? `Свернуть ${data.title}` : `Раскрыть ${data.title}`}>
+            <button
+              aria-label={item.isExpanded() ? `Свернуть ${data.title}` : `Раскрыть ${data.title}`}
+              className="cursor-pointer disabled:cursor-default aria-disabled:cursor-default size-7 shrink-0 rounded text-muted-foreground"
+              tabIndex={-1}
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                if (item.isExpanded()) item.collapse();
+                else item.expand();
+              }}
+            >
+              {item.isExpanded() ? '▾' : '▸'}
+            </button>
+          </Tooltip>
         ) : (
           <span aria-hidden="true" className="size-7 shrink-0" />
         )}
@@ -110,15 +112,17 @@ export function PageTreeItem({
           <span className="min-w-0 flex-1 truncate text-sm">{data.title}</span>
         )}
 
-        <button
-          {...item.getDragHandleProps()}
-          aria-label={`Перетащить ${data.title}`}
-          className="size-7 shrink-0 rounded text-muted-foreground opacity-0 focus:opacity-100 group-hover:opacity-100"
-          type="button"
-          onClick={(event) => event.stopPropagation()}
-        >
-          ⋮⋮
-        </button>
+        <Tooltip label={`Перетащить ${data.title}`}>
+          <button
+            {...item.getDragHandleProps()}
+            aria-label={`Перетащить ${data.title}`}
+            className="cursor-pointer disabled:cursor-default aria-disabled:cursor-default size-7 shrink-0 rounded text-muted-foreground opacity-0 focus:opacity-100 group-hover:opacity-100"
+            type="button"
+            onClick={(event) => event.stopPropagation()}
+          >
+            ⋮⋮
+          </button>
+        </Tooltip>
 
         <Menu
           modal={false}

@@ -26,4 +26,5 @@ export {
   DropdownMenuTrigger as MenuTrigger,
 } from './shadcn/dropdown-menu';
 export { Text, type TextProps } from './text';
+export { Tooltip } from './tooltip';
 export { TREE_INDENT_PX } from './tree';

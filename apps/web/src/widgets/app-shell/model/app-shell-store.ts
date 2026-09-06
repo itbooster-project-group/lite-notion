@@ -54,6 +54,16 @@ export const useAppShellStore = create<AppShellState>()(
       storage: createJSONStorage(() => safeStorage),
       partialize: ({ desktopCollapsed }) => ({ desktopCollapsed }),
       skipHydration: true,
+      merge: (persisted, current) => ({
+        ...current,
+        desktopCollapsed:
+          typeof persisted === 'object' &&
+          persisted !== null &&
+          'desktopCollapsed' in persisted &&
+          typeof persisted.desktopCollapsed === 'boolean'
+            ? persisted.desktopCollapsed
+            : false,
+      }),
     },
   ),
 );

@@ -2,17 +2,33 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { delay, HttpResponse, http } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { WorkspacePage, type WorkspaceRouteContext } from '@/pages/workspace';
 
 import type { PageDto, PageTreeNodeDto } from '@/shared/api';
 import { server } from '@/shared/api/mocks/server';
+import { useAppShellStore } from '@/widgets/app-shell/model/app-shell-store';
+import { PrivateWorkspace } from './private-workspace';
 
-import { WorkspacePage, type WorkspaceRouteContext } from './workspace-page';
-
-const navigation = vi.hoisted(() => ({ push: vi.fn() }));
+const navigation = vi.hoisted(() => ({ push: vi.fn(), pathname: '/' }));
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: navigation.push }),
+  usePathname: () => navigation.pathname,
 }));
+
+vi.mock('@/entities/session', () => ({
+  useSession: () => ({ user: { name: 'Ada' }, clearSession: vi.fn() }),
+}));
+beforeEach(() => {
+  localStorage.clear();
+  useAppShellStore.setState({ desktopCollapsed: false, mobileOpen: false });
+  vi.stubGlobal('matchMedia', () => ({
+    matches: false,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }));
+});
+afterEach(() => vi.unstubAllGlobals());
 
 function page(
   id: string,
@@ -67,10 +83,18 @@ afterEach(() => {
 });
 
 function renderWorkspace(route: WorkspaceRouteContext) {
+  navigation.pathname =
+    route.type === 'page'
+      ? `/pages/${route.pageId}`
+      : route.type === 'project'
+        ? `/projects/${route.projectId}`
+        : '/';
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <WorkspacePage route={route} />
+      <PrivateWorkspace>
+        <WorkspacePage route={route} />
+      </PrivateWorkspace>
     </QueryClientProvider>,
   );
 }
@@ -186,13 +210,14 @@ describe('workspace page', () => {
   it('открывает mobile drawer, закрывает его по Escape и возвращает фокус', async () => {
     renderWorkspace({ projectId: 'project-a', type: 'project' });
     await screen.findByRole('heading', { name: 'Project Alpha' });
-    const trigger = screen.getByRole('button', { name: 'Открыть навигацию' });
+    const trigger = screen.getByRole('button', { name: 'Открыть боковую панель' });
 
     fireEvent.click(trigger);
-    expect(await screen.findByRole('dialog', { name: 'Навигация' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Боковая панель' })).toBeInTheDocument();
     expect(screen.queryByText('Навигация по проекту')).not.toBeInTheDocument();
     expect(screen.queryByText('Проекты и страницы рабочей области.')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Закрыть навигацию' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Закрыть боковую панель' })).toBeInTheDocument();
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
