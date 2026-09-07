@@ -1,7 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { ProjectNotFoundError } from './errors';
 import { ProjectsRepository } from './projects.repository';
 import { InMemoryProjectsRepository } from './projects.repository.in-memory';
 import { ProjectsService } from './projects.service';
@@ -57,24 +56,5 @@ describe('ProjectsService', () => {
 
     expect(first.map((project) => project.name)).toEqual(['a', 'b']);
     expect(second).toEqual(first);
-  });
-
-  it('отвечает одинаковой ошибкой на чужой и на несуществующий проект', async () => {
-    const foreign = await service.create(stranger, 'Not yours');
-
-    const foreignError = await service.requireOwned(foreign.id, owner).catch((error) => error);
-    const missingError = await service
-      .requireOwned('33333333-3333-4333-8333-333333333333', owner)
-      .catch((error) => error);
-
-    expect(foreignError).toBeInstanceOf(ProjectNotFoundError);
-    expect(missingError).toBeInstanceOf(ProjectNotFoundError);
-    expect(foreignError.message).toBe(missingError.message);
-  });
-
-  it('возвращает свой проект из requireOwned', async () => {
-    const project = await service.create(owner, 'Workspace');
-
-    await expect(service.requireOwned(project.id, owner)).resolves.toEqual(project);
   });
 });

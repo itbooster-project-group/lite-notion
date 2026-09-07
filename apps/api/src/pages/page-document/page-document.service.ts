@@ -2,7 +2,6 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import { PageNotFoundError } from '../errors';
 import type { Bytes } from '../pages.repository';
-import { PagesService } from '../pages.service';
 import { type PageDocumentRecord, PageDocumentRepository } from './page-document.repository';
 
 export interface ReplaceDocumentCommand {
@@ -13,27 +12,21 @@ export interface ReplaceDocumentCommand {
 }
 
 /**
- * Отдельно от `PagesService`: у документа нет ни транзакций, ни блокировок, ни
- * рангов — только чтение и замена байтов.
+ * Отдельно от `PagesService`: у документа нет ни блокировок, ни рангов — только
+ * чтение и замена байтов. Права проверяет запрос через связь с `Page`.
  */
 @Injectable()
 export class PageDocumentService {
-  constructor(
-    @Inject(PagesService) private readonly pages: PagesService,
-    @Inject(PageDocumentRepository) private readonly documents: PageDocumentRepository,
-  ) {}
+  constructor(@Inject(PageDocumentRepository) private readonly documents: PageDocumentRepository) {}
 
   async read(pageId: string, ownerId: string): Promise<PageDocumentRecord> {
-    await this.pages.findById(pageId, ownerId);
-
-    return this.require(await this.documents.find(pageId));
+    return this.require(await this.documents.find(pageId, ownerId));
   }
 
   async replace(command: ReplaceDocumentCommand): Promise<PageDocumentRecord> {
-    await this.pages.findById(command.pageId, command.ownerId);
-
     return this.require(
       await this.documents.replace({
+        ownerId: command.ownerId,
         pageId: command.pageId,
         tiptapSchemaVersion: command.tiptapSchemaVersion,
         yjsState: command.yjsState,

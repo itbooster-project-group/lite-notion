@@ -2,11 +2,15 @@ import { describe, expect, it } from 'vitest';
 import type { PageTreeNodeDto } from '@/shared/api';
 import {
   buildProjectPageTree,
+  collectPageSubtreeIds,
   getBreadcrumbs,
   isMoveIntentValid,
+  isPageInSubtree,
   mapMoveIntentToDto,
   movePageInTree,
   normalizePageTree,
+  removePageSubtreeFromTree,
+  removeProjectPagesFromTree,
   renamePageInTree,
 } from './page-tree';
 
@@ -138,5 +142,41 @@ describe('page tree domain model', () => {
         projectId: 'project-a',
       }),
     ).toBe(false);
+  });
+
+  it('удаляет корневое поддерево страницы без изменения страниц других проектов', () => {
+    const removed = removePageSubtreeFromTree(source, 'a');
+
+    expect(removed.map((item) => item.id)).toEqual(['b', 'c', 'other']);
+    expect(removed.find((item) => item.id === 'a-child')).toBeUndefined();
+  });
+
+  it('удаляет вложенное поддерево страницы и сохраняет siblings', () => {
+    const removed = removePageSubtreeFromTree(source, 'a-child');
+
+    expect(removed.map((item) => item.id)).toEqual(['a', 'b', 'c', 'other']);
+    expect(removed[0]?.children).toEqual([]);
+  });
+
+  it('повторно удаляет отсутствующее поддерево без изменения unrelated pages', () => {
+    const removedOnce = removePageSubtreeFromTree(source, 'a');
+    const removedTwice = removePageSubtreeFromTree(removedOnce, 'a');
+
+    expect(removedTwice.map((item) => item.id)).toEqual(['b', 'c', 'other']);
+  });
+
+  it('удаляет все страницы проекта и сохраняет другие проекты', () => {
+    const removed = removeProjectPagesFromTree(source, 'project-a');
+
+    expect(removed.map((item) => item.id)).toEqual(['other']);
+    expect(removeProjectPagesFromTree(removed, 'project-a')).toEqual(removed);
+  });
+
+  it('определяет id поддерева и принадлежность страницы к нему', () => {
+    const normalized = normalizePageTree(source);
+
+    expect([...collectPageSubtreeIds(normalized, 'a')].sort()).toEqual(['a', 'a-child']);
+    expect(isPageInSubtree(normalized, 'a', 'a-child')).toBe(true);
+    expect(isPageInSubtree(normalized, 'a', 'b')).toBe(false);
   });
 });

@@ -1,33 +1,56 @@
 'use client';
 
+import { MoreHorizontal, Trash2 } from 'lucide-react';
 import Link from 'next/link';
-import { type FormEvent, useMemo, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { buildProjectPageTree, normalizePageTree, selectPage } from '@/entities/page';
-import { usePageManagement, useProjectCreation } from '@/features/workspace-management';
+import {
+  DeleteConfirmationDialog,
+  type DeleteConfirmationIntent,
+  type PageDeleteRequest,
+  type ProjectDeleteRequest,
+  usePageManagement,
+  useProjectCreation,
+  useProjectDeletion,
+  useWorkspaceDeleteCleanupCoordinator,
+} from '@/features/workspace-management';
 import {
   type PageTreeNodeDto,
   type ProjectDto,
   useGetPageTree,
   useListProjects,
 } from '@/shared/api';
-import { Button, Heading, Input, Text } from '@/shared/ui';
+import { type WorkspaceRouteContext, workspaceProjectPath } from '@/shared/routing';
+import { Button, Heading, Input, Menu, MenuItem, MenuPopup, MenuTrigger, Text } from '@/shared/ui';
+import { WorkspaceNavigation } from '@/widgets/workspace-navigation';
 
 import { WorkspaceMain } from './workspace-main';
-
-export type WorkspaceRouteContext =
-  | Readonly<{ type: 'root' }>
-  | Readonly<{ projectId: string; type: 'project' }>
-  | Readonly<{ pageId: string; type: 'page' }>;
 
 type WorkspacePageProps = Readonly<{
   route: WorkspaceRouteContext;
 }>;
 
+export type { WorkspaceRouteContext };
+
+type WorkspaceDeleteIntent =
+  | (PageDeleteRequest & Readonly<{ kind: 'page' }>)
+  | (ProjectDeleteRequest & Readonly<{ kind: 'project' }>);
+
 export function WorkspacePage({ route }: WorkspacePageProps) {
   const projectsQuery = useListProjects<ProjectDto[]>();
   const pageTreeQuery = useGetPageTree<PageTreeNodeDto[]>();
-  const pageManagement = usePageManagement();
+  const pageManagement = usePageManagement(route);
   const projectCreation = useProjectCreation();
+  const projectDeletion = useProjectDeletion(route);
+  const deleteCleanupCoordinator = useWorkspaceDeleteCleanupCoordinator();
+  const deletePendingRef = useRef(false);
+  const [deleteIntent, setDeleteIntent] = useState<WorkspaceDeleteIntent>();
+  const [deleteError, setDeleteError] = useState<string>();
+  const [deletePending, setDeletePending] = useState(false);
+
+  useEffect(() => {
+    deleteCleanupCoordinator.setRouteContext(route);
+  }, [deleteCleanupCoordinator, route]);
 
   const pageTree = pageTreeQuery.data ?? [];
   const normalizedTree = useMemo(() => normalizePageTree(pageTree), [pageTree]);
@@ -42,9 +65,9 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
 
   if (projectsQuery.isPending || pageTreeQuery.isPending) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center" aria-busy="true">
+      <main className="flex min-h-[60vh] items-center justify-center" aria-busy="true">
         <Text variant="caption">Загружаем рабочую область…</Text>
-      </div>
+      </main>
     );
   }
 
@@ -68,14 +91,68 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
     await pageManagement.createPage(projectId, parentPageId, title);
   }
 
+  function requestPageDelete(request: PageDeleteRequest) {
+    setDeleteError(undefined);
+    setDeleteIntent({ ...request, kind: 'page' });
+  }
+
+  function requestProjectDelete(request: ProjectDeleteRequest) {
+    setDeleteError(undefined);
+    setDeleteIntent({ ...request, kind: 'project' });
+  }
+
+  function closeDeleteDialog() {
+    if (deletePendingRef.current) return;
+    setDeleteError(undefined);
+    setDeleteIntent(undefined);
+  }
+
+  async function submitDelete() {
+    if (!deleteIntent || deletePendingRef.current) return;
+
+    deletePendingRef.current = true;
+    setDeletePending(true);
+    setDeleteError(undefined);
+    try {
+      if (deleteIntent.kind === 'page') {
+        await pageManagement.deletePage(deleteIntent.pageId);
+      } else {
+        await projectDeletion.deleteProject(deleteIntent.projectId);
+      }
+      setDeleteIntent(undefined);
+    } catch {
+      setDeleteError(
+        deleteIntent.kind === 'page'
+          ? 'Ошибка удаления страницы. Попробуйте ещё раз.'
+          : 'Ошибка удаления проекта. Попробуйте ещё раз.',
+      );
+    } finally {
+      deletePendingRef.current = false;
+      setDeletePending(false);
+    }
+  }
+
   return (
-    <div className="relative min-h-0">
+    <div className="relative min-h-0 md:grid md:grid-cols-[20rem_minmax(0,1fr)]">
+      <WorkspaceNavigation
+        activePageId={activePage?.id}
+        activeProjectId={project?.id}
+        normalizedTree={normalizedTree}
+        projects={projects}
+        onCreatePage={pageManagement.createPage}
+        onMovePage={pageManagement.movePage}
+        onRenamePage={pageManagement.renamePage}
+        onRequestDeletePage={requestPageDelete}
+        onRequestDeleteProject={requestProjectDelete}
+      />
+
       <div className="relative min-h-0 min-w-0 overflow-y-auto">
         {route.type === 'root' ? (
           <WorkspaceRoot
             isCreating={projectCreation.isCreatingProject}
             projects={projects}
             onCreateProject={projectCreation.createProject}
+            onRequestDeleteProject={requestProjectDelete}
           />
         ) : (
           <WorkspaceMain
@@ -84,11 +161,19 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
             onCreatePage={createPage}
             onMovePage={pageManagement.movePage}
             onRenamePage={pageManagement.renamePage}
+            onRequestDeletePage={requestPageDelete}
             projectTree={projectTree}
             projectName={project?.name ?? ''}
           />
         )}
       </div>
+      <DeleteConfirmationDialog
+        error={deleteError}
+        intent={toDeleteConfirmationIntent(deleteIntent)}
+        pending={deletePending}
+        onCancel={closeDeleteDialog}
+        onConfirm={() => void submitDelete()}
+      />
     </div>
   );
 }
@@ -96,10 +181,12 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
 function WorkspaceRoot({
   isCreating,
   onCreateProject,
+  onRequestDeleteProject,
   projects,
 }: Readonly<{
   isCreating: boolean;
   onCreateProject: (name: string) => Promise<void>;
+  onRequestDeleteProject: (request: ProjectDeleteRequest) => void;
   projects: readonly ProjectDto[];
 }>) {
   const [error, setError] = useState<string>();
@@ -125,7 +212,7 @@ function WorkspaceRoot({
   }
 
   return (
-    <div className="mx-auto w-full max-w-shell space-y-8 px-page-inline py-page-block">
+    <main className="mx-auto w-full max-w-shell space-y-8 px-page-inline py-page-block">
       <section className="space-y-3" aria-labelledby="projects-title">
         <Heading as="h1" id="projects-title" variant="page">
           Проекты
@@ -152,25 +239,76 @@ function WorkspaceRoot({
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="Список проектов">
           {projects.map((project) => (
             <li key={project.id}>
-              <Link
-                className="block w-full rounded-xl border bg-card p-5 text-left font-medium shadow-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                href={`/projects/${project.id}`}
-              >
-                {project.name}
-              </Link>
+              <ProjectCard project={project} onRequestDeleteProject={onRequestDeleteProject} />
             </li>
           ))}
         </ul>
       ) : (
         <Text variant="caption">Создайте первый проект, чтобы начать работу.</Text>
       )}
+    </main>
+  );
+}
+
+function ProjectCard({
+  onRequestDeleteProject,
+  project,
+}: Readonly<{
+  onRequestDeleteProject: (request: ProjectDeleteRequest) => void;
+  project: ProjectDto;
+}>) {
+  const actionsRef = useRef<HTMLButtonElement>(null);
+
+  return (
+    <div className="flex min-h-16 items-start gap-2 rounded-lg border bg-card p-4 shadow-sm transition-colors hover:bg-accent">
+      <Link
+        className="min-w-0 flex-1 rounded-md text-left font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        href={workspaceProjectPath(project.id)}
+      >
+        {project.name}
+      </Link>
+      <Menu modal={false}>
+        <MenuTrigger
+          ref={actionsRef}
+          aria-label={`Действия для проекта ${project.name}`}
+          render={<Button size="icon-sm" type="button" variant="ghost" />}
+        >
+          <MoreHorizontal aria-hidden="true" />
+        </MenuTrigger>
+        <MenuPopup sideOffset={4}>
+          <MenuItem
+            variant="destructive"
+            onClick={() =>
+              onRequestDeleteProject({
+                name: project.name,
+                projectId: project.id,
+                returnFocus: actionsRef.current ?? undefined,
+              })
+            }
+          >
+            <Trash2 aria-hidden="true" />
+            Удалить проект
+          </MenuItem>
+        </MenuPopup>
+      </Menu>
     </div>
   );
 }
 
+function toDeleteConfirmationIntent(
+  intent: WorkspaceDeleteIntent | undefined,
+): DeleteConfirmationIntent | undefined {
+  if (!intent) return undefined;
+  if (intent.kind === 'project') {
+    return { kind: 'project', name: intent.name, returnFocus: intent.returnFocus };
+  }
+
+  return { kind: 'page', returnFocus: intent.returnFocus, title: intent.title };
+}
+
 function WorkspaceUnavailable() {
   return (
-    <div className="flex min-h-[60vh] items-center justify-center px-page-inline">
+    <main className="flex min-h-[60vh] items-center justify-center px-page-inline">
       <section className="max-w-lg space-y-4 text-center">
         <Heading as="h1" variant="page">
           Ничего не найдено
@@ -178,13 +316,13 @@ function WorkspaceUnavailable() {
         <Text variant="caption">Перейдите к списку проектов и выберите рабочую область.</Text>
         <Button render={<Link href="/" />}>К проектам</Button>
       </section>
-    </div>
+    </main>
   );
 }
 
 function WorkspaceError({ onRetry }: Readonly<{ onRetry: () => void }>) {
   return (
-    <div className="flex min-h-[60vh] items-center justify-center px-page-inline">
+    <main className="flex min-h-[60vh] items-center justify-center px-page-inline">
       <section className="max-w-lg space-y-4 text-center">
         <Heading as="h1" variant="page">
           Ошибка загрузки рабочей области
@@ -194,6 +332,6 @@ function WorkspaceError({ onRetry }: Readonly<{ onRetry: () => void }>) {
           Повторить
         </Button>
       </section>
-    </div>
+    </main>
   );
 }

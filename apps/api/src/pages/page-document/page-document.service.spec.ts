@@ -2,6 +2,8 @@ import { randomBytes } from 'node:crypto';
 
 import { Test } from '@nestjs/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { TransactionRunner } from '../../database/transaction';
+import { InMemoryTransactionRunner } from '../../database/transaction.in-memory';
 import { ProjectsRepository } from '../../projects/projects.repository';
 import { InMemoryProjectsRepository } from '../../projects/projects.repository.in-memory';
 import { ProjectsService } from '../../projects/projects.service';
@@ -10,6 +12,8 @@ import { PageNotFoundError } from '../errors';
 import { PagesRepository } from '../pages.repository';
 import { InMemoryPagesRepository, type StoredDocument } from '../pages.repository.in-memory';
 import { PagesService } from '../pages.service';
+import { CreatePageUseCase } from '../use-cases/create-page.use-case';
+import { SoftDeletePageUseCase } from '../use-cases/soft-delete-page.use-case';
 import { PageDocumentRepository } from './page-document.repository';
 import { InMemoryPageDocumentRepository } from './page-document.repository.in-memory';
 import { PageDocumentService } from './page-document.service';
@@ -17,22 +21,25 @@ import { PageDocumentService } from './page-document.service';
 const owner = '11111111-1111-1111-1111-111111111111';
 const stranger = '22222222-2222-2222-2222-222222222222';
 const missingId = '33333333-3333-4333-8333-333333333333';
-const projectId = '44444444-4444-4444-4444-444444444444';
+/** Проект на каждого владельца: создание страницы проверяет принадлежность проекта. */
+const projectIds = new Map<string, string>();
 
 describe('PageDocumentService', () => {
   let service: PageDocumentService;
+  let createPageUseCase: CreatePageUseCase;
+  let softDeletePageUseCase: SoftDeletePageUseCase;
   let pages: InMemoryPagesRepository;
   let documents: InMemoryPageDocumentRepository;
+  let projects: InMemoryProjectsRepository;
 
-  const createPage = (ownerId = owner) =>
-    pages.create({
-      createdById: ownerId,
-      ownerId,
-      parentPageId: null,
-      projectId,
-      tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
-      title: 'page',
-    });
+  const createPage = async (ownerId = owner) => {
+    const existing = projectIds.get(ownerId);
+    const projectId = existing ?? (await projects.create({ name: 'Workspace', ownerId })).id;
+
+    projectIds.set(ownerId, projectId);
+
+    return createPageUseCase.execute({ ownerId, parentPageId: null, projectId, title: 'page' });
+  };
 
   beforeEach(async () => {
     // Одна таблица документов на оба репозитория: страницу создаёт один, а
@@ -40,19 +47,26 @@ describe('PageDocumentService', () => {
     const store = new Map<string, StoredDocument>();
     pages = new InMemoryPagesRepository(store);
     documents = new InMemoryPageDocumentRepository(store, pages.pages);
+    projects = new InMemoryProjectsRepository();
+    projectIds.clear();
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         PageDocumentService,
         PagesService,
         ProjectsService,
+        CreatePageUseCase,
+        SoftDeletePageUseCase,
         { provide: PagesRepository, useValue: pages },
         { provide: PageDocumentRepository, useValue: documents },
-        { provide: ProjectsRepository, useValue: new InMemoryProjectsRepository() },
+        { provide: ProjectsRepository, useValue: projects },
+        { provide: TransactionRunner, useValue: new InMemoryTransactionRunner() },
       ],
     }).compile();
 
     service = moduleRef.get(PageDocumentService);
+    createPageUseCase = moduleRef.get(CreatePageUseCase);
+    softDeletePageUseCase = moduleRef.get(SoftDeletePageUseCase);
   });
 
   it('возвращает пустой документ только что созданной страницы', async () => {
@@ -224,12 +238,13 @@ describe('PageDocumentService', () => {
       tiptapSchemaVersion: 2,
       yjsState: state,
     });
-    await pages.softDelete(page.id, owner);
+    await softDeletePageUseCase.execute(page.id, owner);
 
     // Репозиторий напрямую: сервис отсеял бы запрос своей проверкой, а гонка
     // происходит как раз после неё — проверка живости обязана быть в самой записи.
     await expect(
       documents.replace({
+        ownerId: owner,
         pageId: page.id,
         tiptapSchemaVersion: 9,
         yjsState: new Uint8Array([9, 9]),

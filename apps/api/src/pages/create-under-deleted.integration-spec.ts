@@ -4,26 +4,27 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PurgeConfirmationRequiredError } from '../common/errors';
 import type { PrismaService } from '../database/prisma.service';
+import { PrismaTransactionRunner } from '../database/transaction';
 import { PrismaClient } from '../generated/prisma/client';
 import { ProjectNotFoundError } from '../projects/errors';
 import { PrismaProjectsRepository } from '../projects/projects.repository';
+import { PurgeProjectUseCase } from '../projects/use-cases/purge-project.use-case';
+import { SoftDeleteProjectUseCase } from '../projects/use-cases/soft-delete-project.use-case';
 import { TIPTAP_SCHEMA_VERSION } from './constants';
-import { PageNotFoundError } from './errors';
+import { PageParentNotFoundError, PageRestoreProjectDeletedError } from './errors';
 import { PrismaPageDocumentRepository } from './page-document/page-document.repository';
 import { PrismaPagesRepository } from './pages.repository';
+import { CreatePageUseCase } from './use-cases/create-page.use-case';
+import { MovePageUseCase } from './use-cases/move-page.use-case';
+import { RestorePageUseCase } from './use-cases/restore-page.use-case';
+import { SoftDeletePageUseCase } from './use-cases/soft-delete-page.use-case';
 
 /**
  * Гонка между созданием страницы и мягким удалением её родителя или проекта.
  *
- * Живость проверяет `PagesService` до открытия транзакции репозитория, поэтому к
- * моменту вставки проверка может устареть. Ни один FK этого не ловит: тройной
- * сверяет `(id, ownerId, projectId)` и про `deletedAt` не знает, — значит без
- * блокировки владельца в `create` появлялась бы живая страница под удалённым
- * предком, и инвариант `specs/page-tree` нарушался бы молча.
- *
- * Тест детерминирован: удержанная в первой транзакции блокировка владельца
- * гарантированно останавливает `create` на входе, пока родителя помечают
- * удалённым. In-memory двойник такое воспроизвести не может — он однопоточен.
+ * Тройной FK сверяет `(id, ownerId, projectId)` и про `deletedAt` не знает, поэтому
+ * без блокировки владельца живая страница оказалась бы под удалённым предком.
+ * Удержанная в первой транзакции блокировка делает тест детерминированным.
  *
  * Требует поднятую базу и применённые миграции — см. `test:integration`.
  */
@@ -33,16 +34,20 @@ describe('гонки вокруг мягкого удаления', () => {
   let pages: PrismaPagesRepository;
   let projects: PrismaProjectsRepository;
   let documents: PrismaPageDocumentRepository;
+  let softDeleteProject: SoftDeleteProjectUseCase;
+  let purgeProject: PurgeProjectUseCase;
+  let createPageUseCase: CreatePageUseCase;
+  let softDeletePageUseCase: SoftDeletePageUseCase;
+  let movePageUseCase: MovePageUseCase;
+  let restorePageUseCase: RestorePageUseCase;
   const ownerId = randomUUID();
   let projectId: string;
 
   const createPage = (parentPageId: string | null, title: string) =>
-    pages.create({
-      createdById: ownerId,
+    createPageUseCase.execute({
       ownerId,
       parentPageId,
       projectId,
-      tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
       title,
     });
 
@@ -56,6 +61,14 @@ describe('гонки вокруг мягкого удаления', () => {
     pages = new PrismaPagesRepository(prisma as unknown as PrismaService);
     projects = new PrismaProjectsRepository(prisma as unknown as PrismaService);
     documents = new PrismaPageDocumentRepository(prisma as unknown as PrismaService);
+    const transactions = new PrismaTransactionRunner(prisma as unknown as PrismaService);
+
+    softDeleteProject = new SoftDeleteProjectUseCase(transactions, projects, pages);
+    purgeProject = new PurgeProjectUseCase(transactions, projects, pages);
+    createPageUseCase = new CreatePageUseCase(transactions, pages, projects, documents);
+    softDeletePageUseCase = new SoftDeletePageUseCase(transactions, pages);
+    movePageUseCase = new MovePageUseCase(transactions, pages);
+    restorePageUseCase = new RestorePageUseCase(transactions, pages, projects);
 
     await prisma.user.create({
       data: { email: `${ownerId}@race.test`, id: ownerId, name: 'race', passwordHash: 'hash' },
@@ -93,6 +106,120 @@ describe('гонки вокруг мягкого удаления', () => {
 
     return started === null ? null : await started;
   };
+
+  /**
+   * Перемещение читает будущего родителя, а пишет после. Между чтением и записью
+   * помещается мягкое удаление этого родителя, и без блокировки владельца живое
+   * поддерево оказалось бы под удалённым предком, не нарушив ни одного FK.
+   */
+  it('не переносит поддерево под родителя, помеченного удалённым в гонке', async () => {
+    const parent = await createPage(null, 'parent');
+    const moved = await createPage(null, 'moved');
+
+    const outcome = await raceAgainst(
+      (tx) =>
+        tx.$executeRaw`
+          UPDATE "Page"
+          SET "deletedAt" = now(), "deletedOrigin" = 'SELF'::"PageDeletionOrigin"
+          WHERE "id" = ${parent.id}::uuid`,
+      () =>
+        movePageUseCase.execute({
+          nextSiblingId: null,
+          ownerId,
+          pageId: moved.id,
+          parentPageId: parent.id,
+          previousSiblingId: null,
+        }),
+    );
+
+    expect(outcome).toBeInstanceOf(PageParentNotFoundError);
+
+    const row = await prisma.page.findUnique({
+      select: { deletedAt: true, parentPageId: true },
+      where: { id: moved.id },
+    });
+
+    expect(row?.parentPageId).toBeNull();
+    expect(row?.deletedAt).toBeNull();
+  });
+
+  it('ждёт блокировку владельца при перемещении', async () => {
+    const parent = await createPage(null, 'parent');
+    const moved = await createPage(null, 'moved');
+    let settled = false;
+
+    await holder.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${ownerId}))`;
+
+      const moving = movePageUseCase
+        .execute({
+          nextSiblingId: null,
+          ownerId,
+          pageId: moved.id,
+          parentPageId: parent.id,
+          previousSiblingId: null,
+        })
+        .then(
+          () => {
+            settled = true;
+          },
+          () => {
+            settled = true;
+          },
+        );
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      expect(settled).toBe(false);
+
+      void moving;
+    });
+  });
+
+  /**
+   * Восстановление читает проект страницы, а пишет после. Между чтением и записью
+   * помещается удаление этого проекта: живой страницы в удалённом проекте не бывает.
+   */
+  it('не восстанавливает страницу в проект, удалённый в гонке', async () => {
+    const page = await createPage(null, 'page');
+    await softDeletePageUseCase.execute(page.id, ownerId);
+
+    const outcome = await raceAgainst(
+      (tx) =>
+        tx.$executeRaw`UPDATE "Project" SET "deletedAt" = now() WHERE "id" = ${projectId}::uuid`,
+      () => restorePageUseCase.execute({ ownerId, pageId: page.id, targetProjectId: null }),
+    );
+
+    expect(outcome).toBeInstanceOf(PageRestoreProjectDeletedError);
+    await expect(prisma.page.count({ where: { deletedAt: null, projectId } })).resolves.toBe(0);
+  });
+
+  it('ждёт блокировку владельца при восстановлении', async () => {
+    const page = await createPage(null, 'page');
+    await softDeletePageUseCase.execute(page.id, ownerId);
+    let settled = false;
+
+    await holder.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${ownerId}))`;
+
+      const restoring = restorePageUseCase
+        .execute({ ownerId, pageId: page.id, targetProjectId: null })
+        .then(
+          () => {
+            settled = true;
+          },
+          () => {
+            settled = true;
+          },
+        );
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      expect(settled).toBe(false);
+
+      void restoring;
+    });
+  });
 
   it('ждёт блокировку владельца, а не вставляет мимо неё', async () => {
     const parent = await createPage(null, 'parent');
@@ -136,7 +263,7 @@ describe('гонки вокруг мягкого удаления', () => {
       () => createPage(parent.id, 'child'),
     );
 
-    expect(outcome).toBeInstanceOf(PageNotFoundError);
+    expect(outcome).toBeInstanceOf(PageParentNotFoundError);
     await expect(prisma.page.count({ where: { parentPageId: parent.id } })).resolves.toBe(0);
   });
 
@@ -191,6 +318,7 @@ describe('гонки вокруг мягкого удаления', () => {
 
     await expect(
       documents.replace({
+        ownerId,
         pageId: page.id,
         tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
         yjsState: new Uint8Array([1, 2, 3]),
@@ -203,17 +331,19 @@ describe('гонки вокруг мягкого удаления', () => {
     const state = new Uint8Array([1, 2, 3]);
 
     await documents.replace({
+      ownerId,
       pageId: page.id,
       tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
       yjsState: state,
     });
-    await pages.softDelete(page.id, ownerId);
+    await softDeletePageUseCase.execute(page.id, ownerId);
 
     // Живость проверяет `PageDocumentService` до записи, поэтому к моменту UPDATE
     // проверка может устареть, а мягкое удаление строку документа не трогает —
     // без условия в самом UPDATE содержимое ушло бы в уже удалённую страницу.
     await expect(
       documents.replace({
+        ownerId,
         pageId: page.id,
         tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION + 1,
         yjsState: new Uint8Array([9, 9]),
@@ -228,13 +358,13 @@ describe('гонки вокруг мягкого удаления', () => {
 
   it('окончательное удаление проекта ждёт блокировку владельца', async () => {
     await createPage(null, 'page');
-    await projects.softDelete(projectId, ownerId);
+    await softDeleteProject.execute(projectId, ownerId);
     let settled = false;
 
     await holder.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${ownerId}))`;
 
-      const purging = projects.purge(projectId, ownerId, true).then(
+      const purging = purgeProject.execute(projectId, ownerId, true).then(
         () => {
           settled = true;
         },
@@ -255,7 +385,7 @@ describe('гонки вокруг мягкого удаления', () => {
 
   it('не уносит страницу, помеченную в гонке, мимо подтверждения', async () => {
     const page = await createPage(null, 'Черновики');
-    await projects.softDelete(projectId, ownerId);
+    await softDeleteProject.execute(projectId, ownerId);
 
     // Пока подтверждение считает обречённые страницы, параллельное мягкое
     // удаление помечает `page` как SELF. Без блокировки владельца подсчёт видит
@@ -267,7 +397,7 @@ describe('гонки вокруг мягкого удаления', () => {
           UPDATE "Page"
           SET "deletedOrigin" = 'SELF'::"PageDeletionOrigin"
           WHERE "id" = ${page.id}::uuid`,
-      () => projects.purge(projectId, ownerId, false),
+      () => purgeProject.execute(projectId, ownerId, false),
     );
 
     expect(outcome).toBeInstanceOf(PurgeConfirmationRequiredError);

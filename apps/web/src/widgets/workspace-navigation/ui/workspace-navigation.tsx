@@ -4,6 +4,7 @@ import { Cancel01Icon, SidebarLeftIcon } from '@hugeicons/core-free-icons';
 import { HugeiconsIcon } from '@hugeicons/react';
 import { useState } from 'react';
 import type { MoveIntent, NormalizedPageTree } from '@/entities/page';
+import type { PageDeleteRequest, ProjectDeleteRequest } from '@/features/workspace-management';
 import type { ProjectDto } from '@/shared/api';
 import {
   Button,
@@ -22,6 +23,8 @@ type WorkspaceNavigationProps = Readonly<{
   onCreatePage: (projectId: string, parentPageId: string | null, title: string) => Promise<void>;
   onMovePage: (intent: MoveIntent) => Promise<void>;
   onRenamePage: (pageId: string, title: string) => Promise<void>;
+  onRequestDeletePage: (request: PageDeleteRequest) => void;
+  onRequestDeleteProject: (request: ProjectDeleteRequest) => void;
   projects: readonly ProjectDto[];
 }>;
 

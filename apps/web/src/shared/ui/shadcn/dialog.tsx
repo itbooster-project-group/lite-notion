@@ -1,8 +1,7 @@
 'use client';
 
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
-import { Cancel01Icon } from '@hugeicons/core-free-icons';
-import { HugeiconsIcon } from '@hugeicons/react';
+import { X } from 'lucide-react';
 import type * as React from 'react';
 import { cn } from '@/shared/lib/cn';
 import { Button } from '@/shared/ui/shadcn/button';
@@ -61,7 +60,7 @@ function DialogContent({
             data-slot="dialog-close"
             render={<Button variant="ghost" className="absolute top-2 right-2" size="icon-sm" />}
           >
-            <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
+            <X aria-hidden="true" />
             <span className="sr-only">Close</span>
           </DialogPrimitive.Close>
         )}

@@ -27,6 +27,7 @@ import {
   toMoveIntent,
 } from '@/entities/page';
 import { Button, Text, TREE_INDENT_PX } from '@/shared/ui';
+import type { PageDeleteRequest } from '../model/delete-intent';
 import { MovePageDialog } from './move-page-dialog';
 import { PageDraft } from './page-draft';
 import { PageTreeItem } from './page-tree-item';
@@ -37,6 +38,7 @@ export type PageTreeProps = Readonly<{
   normalizedTree: NormalizedPageTree;
   onCreatePage: (parentPageId: string | null, title: string) => Promise<void>;
   onMovePage: (intent: MoveIntent) => Promise<void>;
+  onRequestDeletePage: (request: PageDeleteRequest) => void;
   onRenamePage: (pageId: string, title: string) => Promise<void>;
   onSelectPage: (pageId: string) => void;
   projectTree: ProjectPageTree;
@@ -48,6 +50,7 @@ export function PageTree({
   normalizedTree,
   onCreatePage,
   onMovePage,
+  onRequestDeletePage,
   onRenamePage,
   onSelectPage,
   projectTree,
@@ -250,6 +253,7 @@ export function PageTree({
             onChangeCreate={setDraftTitle}
             onCompleteRename={() => tree.completeRenaming()}
             onCreateChild={() => startDraft(item.getId())}
+            onRequestDelete={onRequestDeletePage}
             onStartMove={(returnFocus) => {
               setMoveReturnFocus(returnFocus);
               setMovingPageId(item.getId());

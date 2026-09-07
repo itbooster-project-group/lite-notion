@@ -13,6 +13,12 @@ import {
 } from './errors';
 import { PagesController } from './pages.controller';
 import { PagesService } from './pages.service';
+import { CreatePageUseCase } from './use-cases/create-page.use-case';
+import { MovePageUseCase } from './use-cases/move-page.use-case';
+import { PurgePageUseCase } from './use-cases/purge-page.use-case';
+import { PurgePagesTrashUseCase } from './use-cases/purge-pages-trash.use-case';
+import { RestorePageUseCase } from './use-cases/restore-page.use-case';
+import { SoftDeletePageUseCase } from './use-cases/soft-delete-page.use-case';
 
 const user: AuthenticatedUser = {
   id: '11111111-1111-1111-1111-111111111111',
@@ -35,26 +41,34 @@ const record = {
 
 describe('PagesController', () => {
   let controller: PagesController;
+  let createPage: { execute: ReturnType<typeof vi.fn> };
+  let movePage: { execute: ReturnType<typeof vi.fn> };
   let pages: {
-    create: ReturnType<typeof vi.fn>;
     findTree: ReturnType<typeof vi.fn>;
     findById: ReturnType<typeof vi.fn>;
     rename: ReturnType<typeof vi.fn>;
-    move: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(async () => {
+    createPage = { execute: vi.fn().mockResolvedValue(record) };
+    movePage = { execute: vi.fn().mockResolvedValue(record) };
     pages = {
-      create: vi.fn().mockResolvedValue(record),
       findById: vi.fn().mockResolvedValue(record),
       findTree: vi.fn().mockResolvedValue([{ ...record, children: [] }]),
-      move: vi.fn().mockResolvedValue(record),
       rename: vi.fn().mockResolvedValue(record),
     };
 
     const moduleRef = await Test.createTestingModule({
       controllers: [PagesController],
-      providers: [{ provide: PagesService, useValue: pages }],
+      providers: [
+        { provide: PagesService, useValue: pages },
+        { provide: CreatePageUseCase, useValue: createPage },
+        { provide: MovePageUseCase, useValue: movePage },
+        { provide: SoftDeletePageUseCase, useValue: { execute: vi.fn() } },
+        { provide: RestorePageUseCase, useValue: { execute: vi.fn() } },
+        { provide: PurgePageUseCase, useValue: { execute: vi.fn() } },
+        { provide: PurgePagesTrashUseCase, useValue: { execute: vi.fn() } },
+      ],
     }).compile();
 
     controller = moduleRef.get(PagesController);
@@ -63,7 +77,7 @@ describe('PagesController', () => {
   it('передаёт создание в сервис, подставляя владельца из токена', async () => {
     await controller.create(user, { parentPageId: null, projectId, title: 'draft' });
 
-    expect(pages.create).toHaveBeenCalledWith({
+    expect(createPage.execute).toHaveBeenCalledWith({
       ownerId: user.id,
       parentPageId: null,
       projectId,
@@ -74,7 +88,7 @@ describe('PagesController', () => {
   it('подставляет пустой заголовок, когда клиент его не прислал', async () => {
     await controller.create(user, { projectId });
 
-    expect(pages.create).toHaveBeenCalledWith(expect.objectContaining({ title: '' }));
+    expect(createPage.execute).toHaveBeenCalledWith(expect.objectContaining({ title: '' }));
   });
 
   it('передаёт чтение дерева в сервис и разворачивает узлы в DTO', async () => {
@@ -99,7 +113,7 @@ describe('PagesController', () => {
   it('передаёт перемещение в сервис, нормализуя отсутствующих соседей в null', async () => {
     await controller.move(user, pageId, { parentPageId: null });
 
-    expect(pages.move).toHaveBeenCalledWith({
+    expect(movePage.execute).toHaveBeenCalledWith({
       nextSiblingId: null,
       ownerId: user.id,
       pageId,
@@ -132,7 +146,7 @@ describe('PagesController', () => {
     });
 
     it('ProjectNotFoundError → 404', async () => {
-      pages.create.mockRejectedValue(new ProjectNotFoundError());
+      createPage.execute.mockRejectedValue(new ProjectNotFoundError());
 
       await expect(controller.create(user, { projectId })).rejects.toBeInstanceOf(
         NotFoundException,
@@ -140,31 +154,31 @@ describe('PagesController', () => {
     });
 
     it('PageCycleError → 409', async () => {
-      pages.move.mockRejectedValue(new PageCycleError());
+      movePage.execute.mockRejectedValue(new PageCycleError());
 
       await expect(controller.move(user, pageId, {})).rejects.toBeInstanceOf(ConflictException);
     });
 
     it('SiblingParentMismatchError → 400', async () => {
-      pages.move.mockRejectedValue(new SiblingParentMismatchError());
+      movePage.execute.mockRejectedValue(new SiblingParentMismatchError('previousSiblingId'));
 
       await expect(controller.move(user, pageId, {})).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('SiblingOrderError → 400', async () => {
-      pages.move.mockRejectedValue(new SiblingOrderError());
+      movePage.execute.mockRejectedValue(new SiblingOrderError());
 
       await expect(controller.move(user, pageId, {})).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('PageProjectMismatchError → 400', async () => {
-      pages.move.mockRejectedValue(new PageProjectMismatchError());
+      movePage.execute.mockRejectedValue(new PageProjectMismatchError());
 
       await expect(controller.move(user, pageId, {})).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('не подменяет неожиданную ошибку', async () => {
-      pages.move.mockRejectedValue(new Error('database is on fire'));
+      movePage.execute.mockRejectedValue(new Error('database is on fire'));
 
       await expect(controller.move(user, pageId, {})).rejects.toThrow('database is on fire');
     });

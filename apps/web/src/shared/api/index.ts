@@ -31,7 +31,9 @@ export type {
 } from './generated/model';
 export {
   createPage,
+  deletePage,
   getCreatePageMutationOptions,
+  getDeletePageMutationOptions,
   getGetPageTreeQueryKey,
   getGetPageTreeQueryOptions,
   getMovePageMutationOptions,
@@ -40,17 +42,21 @@ export {
   movePage,
   renamePage,
   useCreatePage,
+  useDeletePage,
   useGetPageTree,
   useMovePage,
   useRenamePage,
 } from './generated/pages/pages';
 export {
   createProject,
+  deleteProject,
   getCreateProjectMutationOptions,
+  getDeleteProjectMutationOptions,
   getListProjectsQueryKey,
   getListProjectsQueryOptions,
   listProjects,
   useCreateProject,
+  useDeleteProject,
   useListProjects,
 } from './generated/projects/projects';
 

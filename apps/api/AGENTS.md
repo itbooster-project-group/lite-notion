@@ -21,6 +21,20 @@ PostgreSQL access is owned by `DatabaseModule` and `PrismaService`. Keep Prisma 
 
 Authentication is owned by `AuthModule`. Access tokens are signed JWTs verified without touching the database; refresh tokens are opaque, stored only as SHA-256 hashes, and rotated on every use. Each login opens its own rotation chain (`familyId`), and **at most one session per chain may have `revokedAt = null`** — that invariant is held by the `SELECT ... FOR UPDATE` transaction in `session.repository.ts` and is what makes refresh-token reuse detectable. Do not move rotation out of its transaction, do not replace the lock with an optimistic check, and do not delete rotation-revoked rows: breaking any of these silently disables reuse detection without failing an obvious test.
 
+## Transactions, locks and use cases
+
+Transactions are owned by use-case classes, never by repositories. `TransactionRunner` (`src/database/transaction.ts`) is the only place that opens one, and `TransactionScope.lock` is the only place that takes an advisory lock. A check that must observe the same state as the write it guards has to run inside the same transaction, so it belongs in the use case beside that write — moving it into a repository is what previously pulled business rules into the data-access layer.
+
+A use case exists where there is a transaction **and** at least one decision inside it: one public `execute`, private to its module, under `use-cases/`. Reads, tree assembly and single-statement writes stay in the service, which remains the module's exported face. A transaction with no decisions — `AuthRepository.rotate` — stays in its repository; do not convert it.
+
+Repositories are data access only. Recursive CTEs stay there under intention-revealing names, but a repository must not throw a domain error, must not decide, and must not touch another module's table — `PagesRepository` owns every write to `Page`, including the cascade from project deletion. `bind(scope)` returns a **new** repository instance bound to the transaction's connection; never mutate the injected client, because the provider is a singleton shared by concurrent requests.
+
+A use case talks to repositories directly, its own and other modules', and never through another module's service: the decisions are the use case's, and a pass-through service would only add a layer. A repository stays in its aggregate's module and is exported from it; `PagesModule` and `ProjectsModule` need each other's repository, and that cycle is resolved with `forwardRef` on both sides. Do not move a repository out of its module to dodge the cycle.
+
+There is exactly one lock: `ownerLock` (`src/common/helpers.ts`), which serialises a single owner's writes. Every write use case takes it, so a finer-grained lock adds no exclusion — a sibling-level lock existed once and was removed for that reason. Build keys only with `ownerLock`; a key assembled on the spot serialises against the wrong set of operations.
+
+Before adding a second lock class, prove the first one does not already cover the race — with a failing test on a live database, not by reasoning. Two classes bring back the need for a canonical acquisition order, which nothing enforces today.
+
 The committed `openapi.json` snapshot is generated from Nest metadata. After changing controllers, DTOs, or Swagger decorators, run `pnpm api:generate` from the repository root and commit both the snapshot and generated web output. Never edit generated artifacts manually.
 
 ## Testing

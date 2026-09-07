@@ -2,10 +2,18 @@ import { Test } from '@nestjs/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
+import { TransactionRunner } from '../database/transaction';
+import { InMemoryTransactionRunner } from '../database/transaction.in-memory';
+import { PagesRepository } from '../pages/pages.repository';
+import { InMemoryPagesRepository } from '../pages/pages.repository.in-memory';
 import { ProjectsController } from './projects.controller';
 import { ProjectsRepository } from './projects.repository';
 import { InMemoryProjectsRepository } from './projects.repository.in-memory';
 import { ProjectsService } from './projects.service';
+import { PurgeProjectUseCase } from './use-cases/purge-project.use-case';
+import { PurgeProjectsTrashUseCase } from './use-cases/purge-projects-trash.use-case';
+import { RestoreProjectUseCase } from './use-cases/restore-project.use-case';
+import { SoftDeleteProjectUseCase } from './use-cases/soft-delete-project.use-case';
 
 const user: AuthenticatedUser = {
   id: '11111111-1111-1111-1111-111111111111',
@@ -21,7 +29,16 @@ describe('ProjectsController', () => {
 
     const moduleRef = await Test.createTestingModule({
       controllers: [ProjectsController],
-      providers: [ProjectsService, { provide: ProjectsRepository, useValue: repository }],
+      providers: [
+        ProjectsService,
+        PurgeProjectUseCase,
+        PurgeProjectsTrashUseCase,
+        RestoreProjectUseCase,
+        SoftDeleteProjectUseCase,
+        { provide: ProjectsRepository, useValue: repository },
+        { provide: PagesRepository, useValue: new InMemoryPagesRepository() },
+        { provide: TransactionRunner, useValue: new InMemoryTransactionRunner() },
+      ],
     }).compile();
 
     controller = moduleRef.get(ProjectsController);

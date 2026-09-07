@@ -38,6 +38,7 @@ function renderTree(activePageId: string | undefined = undefined) {
     onCreatePage: vi.fn().mockResolvedValue(undefined),
     onMovePage: vi.fn().mockResolvedValue(undefined),
     onRenamePage: vi.fn().mockResolvedValue(undefined),
+    onRequestDeletePage: vi.fn(),
     onSelectPage: vi.fn(),
   };
 
@@ -135,6 +136,7 @@ describe('workspace page tree', () => {
         onCreatePage={vi.fn().mockRejectedValue(new Error('Raw create detail'))}
         onMovePage={vi.fn().mockResolvedValue(undefined)}
         onRenamePage={vi.fn().mockResolvedValue(undefined)}
+        onRequestDeletePage={vi.fn()}
         onSelectPage={vi.fn()}
       />,
     );
@@ -175,6 +177,7 @@ describe('workspace page tree', () => {
         onCreatePage={vi.fn().mockResolvedValue(undefined)}
         onMovePage={vi.fn().mockResolvedValue(undefined)}
         onRenamePage={onRenamePage}
+        onRequestDeletePage={vi.fn()}
         onSelectPage={vi.fn()}
       />,
     );
@@ -187,7 +190,7 @@ describe('workspace page tree', () => {
     fireEvent.keyDown(input, { code: 'Enter', key: 'Enter' });
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Ошибка переименования');
-    expect(screen.getByRole('textbox')).toHaveValue('Draft value');
+    expect(await screen.findByRole('textbox')).toHaveValue('Draft value');
     expect(screen.queryByText('Raw backend detail')).not.toBeInTheDocument();
   });
 
@@ -212,6 +215,20 @@ describe('workspace page tree', () => {
     );
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(trigger).toHaveFocus();
+  });
+
+  it('формирует delete intent из node actions без mutation logic', async () => {
+    const { onRequestDeletePage } = renderTree('a');
+    const trigger = screen.getByRole('button', { name: 'Действия для Alpha' });
+
+    fireEvent.click(trigger);
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить' }));
+
+    expect(onRequestDeletePage).toHaveBeenCalledWith({
+      pageId: 'a',
+      returnFocus: trigger,
+      title: 'Alpha',
+    });
   });
 
   it('перемещает Page A внутрь пустой Page B через pointer DnD', async () => {

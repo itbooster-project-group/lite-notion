@@ -24,8 +24,13 @@ import {
   parsePageTitle,
   toMoveIntent,
 } from '@/entities/page';
-import { MovePageDialog } from '@/features/workspace-management';
+import {
+  MovePageDialog,
+  type PageDeleteRequest,
+  type ProjectDeleteRequest,
+} from '@/features/workspace-management';
 import type { ProjectDto } from '@/shared/api';
+import { workspacePagePath, workspaceProjectPath } from '@/shared/routing';
 import { Text, TREE_INDENT_PX } from '@/shared/ui';
 import {
   buildWorkspaceTree,
@@ -44,6 +49,8 @@ type WorkspaceTreeProps = Readonly<{
   onMovePage: (intent: MoveIntent) => Promise<void>;
   onNavigate?: () => void;
   onRenamePage: (pageId: string, title: string) => Promise<void>;
+  onRequestDeletePage: (request: PageDeleteRequest) => void;
+  onRequestDeleteProject: (request: ProjectDeleteRequest) => void;
   projects: readonly ProjectDto[];
 }>;
 
@@ -60,6 +67,8 @@ export function WorkspaceTree({
   onMovePage,
   onNavigate,
   onRenamePage,
+  onRequestDeletePage,
+  onRequestDeleteProject,
   projects,
 }: WorkspaceTreeProps) {
   const router = useRouter();
@@ -175,11 +184,11 @@ export function WorkspaceTree({
       const data = item.getItemData();
       if (data.kind === 'project' && data.projectId) {
         onNavigate?.();
-        router.push(`/projects/${data.projectId}`);
+        router.push(workspaceProjectPath(data.projectId));
       }
       if (data.kind === 'page' && data.pageId) {
         onNavigate?.();
-        router.push(`/pages/${data.pageId}`);
+        router.push(workspacePagePath(data.pageId));
       }
     },
     onRename: (item, value) => {
@@ -298,6 +307,8 @@ export function WorkspaceTree({
               onCreateChild={() => {
                 if (data.projectId) startDraft(data.projectId, pageId);
               }}
+              onRequestDeletePage={onRequestDeletePage}
+              onRequestDeleteProject={onRequestDeleteProject}
               onStartMove={(returnFocus) => {
                 setMoveReturnFocus(returnFocus);
                 setMovingPageId(pageId ?? undefined);

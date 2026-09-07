@@ -40,20 +40,17 @@ export function configureApplication(
   environment: ApplicationEnvironment,
 ): void {
   app.setGlobalPrefix(API_GLOBAL_PREFIX);
-  // Значение Express по умолчанию (100 KB) меньше Yjs state страницы. Предел
-  // взят с запасом над DOCUMENT_MAX_BYTES, чтобы отказ по размеру формировал
-  // ValidationPipe единым форматом ошибки, а не парсер — сырым 413.
-  // Через useBodyParser, а не app.use(express.json()): express не объявлен
-  // прямой зависимостью apps/api, и заводить её ради одной опции незачем.
+  // Предел Express по умолчанию (100 KB) меньше Yjs state страницы. Запас над
+  // DOCUMENT_MAX_BYTES нужен, чтобы отказ по размеру давал ValidationPipe, а не
+  // сырой 413 от парсера. useBodyParser — потому что express не прямая зависимость.
   if (isExpressApplication(app)) {
     app.useBodyParser('json', { limit: JSON_BODY_LIMIT });
   }
 
   app.use(cookieParser());
-  // credentials разрешены, иначе браузер не отправит refresh cookie на /auth/refresh
-  // и /auth/logout. Origin по-прежнему проверяется точным совпадением, поэтому
-  // Access-Control-Allow-Origin никогда не станет wildcard — единственное
-  // сочетание, которое при включённых credentials действительно опасно.
+  // credentials нужны, иначе браузер не отправит refresh cookie на /auth/refresh и
+  // /auth/logout. Origin проверяется точным совпадением: wildcard вместе с
+  // credentials — единственное опасное сочетание.
   app.enableCors({
     credentials: true,
     origin: (requestOrigin: string | undefined, callback: CorsCallback) => {

@@ -8,7 +8,8 @@ import {
   type ProjectPageTree,
   selectPage,
 } from '@/entities/page';
-import { PageTree } from '@/features/workspace-management';
+import { type PageDeleteRequest, PageTree } from '@/features/workspace-management';
+import { workspacePagePath } from '@/shared/routing';
 import { Heading, Text } from '@/shared/ui';
 
 type WorkspaceMainProps = Readonly<{
@@ -17,6 +18,7 @@ type WorkspaceMainProps = Readonly<{
   onCreatePage: (parentPageId: string | null, title: string) => Promise<void>;
   onMovePage: (intent: MoveIntent) => Promise<void>;
   onRenamePage: (pageId: string, title: string) => Promise<void>;
+  onRequestDeletePage: (request: PageDeleteRequest) => void;
   projectTree: ProjectPageTree;
   projectName: string;
 }>;
@@ -27,6 +29,7 @@ export function WorkspaceMain({
   onCreatePage,
   onMovePage,
   onRenamePage,
+  onRequestDeletePage,
   projectName,
   projectTree,
 }: WorkspaceMainProps) {
@@ -35,7 +38,7 @@ export function WorkspaceMain({
 
   if (!page) {
     return (
-      <div className="min-w-0 p-6 sm:p-8">
+      <main className="min-w-0 p-6 sm:p-8">
         <PageTree
           activePageId={undefined}
           header={
@@ -48,14 +51,15 @@ export function WorkspaceMain({
           onCreatePage={onCreatePage}
           onMovePage={onMovePage}
           onRenamePage={onRenamePage}
-          onSelectPage={(pageId) => router.push(`/pages/${pageId}`)}
+          onRequestDeletePage={onRequestDeletePage}
+          onSelectPage={(pageId) => router.push(workspacePagePath(pageId))}
         />
-      </div>
+      </main>
     );
   }
 
   return (
-    <div className="min-w-0 p-6 sm:p-8">
+    <main className="min-w-0 p-6 sm:p-8">
       <section className="space-y-6">
         <Heading as="h1" variant="page">
           {getPageDisplayTitle(page.title)}
@@ -64,6 +68,6 @@ export function WorkspaceMain({
           <Text variant="caption">Редактор страницы появится в следующем обновлении.</Text>
         </div>
       </section>
-    </div>
+    </main>
   );
 }

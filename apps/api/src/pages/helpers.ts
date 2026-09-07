@@ -4,25 +4,27 @@ import { PurgeConfirmationRequiredError } from '../common/errors';
 import { ProjectNotFoundError } from '../projects/errors';
 import { POSITION_ALPHABET, POSITION_MAX_LENGTH } from './constants';
 import {
+  NextSiblingNotFoundError,
   PageCycleError,
   PageNotFoundError,
+  PageParentNotFoundError,
   PageProjectMismatchError,
   PageRestoreProjectDeletedError,
   PageRestoreTargetProjectRejectedError,
+  PreviousSiblingNotFoundError,
   SiblingOrderError,
   SiblingParentMismatchError,
+  SiblingsNotAdjacentError,
 } from './errors';
 
 const ZERO = POSITION_ALPHABET.charAt(0);
 
 /**
- * Возвращает строку строго между `lower` и `upper` в лексикографическом порядке.
- * Пустой `lower` означает «от начала», `null` в `upper` — «до конца».
+ * Строка строго между `lower` и `upper`; пустой `lower` — «от начала», `null` в
+ * `upper` — «до конца».
  *
- * Ключи не заканчиваются на нулевой символ алфавита. Инвариант обязателен: между
- * `a` и `a0` не существует строки, поэтому ключ с хвостовым нулём сделал бы
- * следующую вставку невозможной. Все ранги приходят из этой функции, так что
- * инвариант держится сам собой, а нарушение входа означает порчу данных.
+ * Ключ не заканчивается нулевым символом алфавита: между `a` и `a0` строки не
+ * существует, и следующая вставка стала бы невозможной.
  */
 function midpoint(lower: string, upper: string | null): string {
   if (upper !== null && lower >= upper) {
@@ -80,16 +82,6 @@ export function positionBetween(previous: string | null, next: string | null): s
   return guardLength(midpoint(previous ?? '', next));
 }
 
-/**
- * Ключ advisory-блокировки уровня: страницы одного проекта под одним родителем.
- * Его берут все операции, читающие «последнего брата», — создание и перемещение
- * в конец, — иначе две транзакции под READ COMMITTED прочитают один и тот же
- * последний ранг и запишут дубликат.
- */
-export function siblingLevelLockKey(projectId: string, parentPageId: string | null): string {
-  return `projectId:${projectId}parentPageId:${parentPageId}`;
-}
-
 /** Порядок братьев. Ранги не уникальны, поэтому `id` — детерминированный тай-брейк. */
 export function compareSiblings(
   left: { id: string; position: string },
@@ -107,17 +99,21 @@ export function compareSiblings(
 }
 
 /**
- * Перевод доменных ошибок в HTTP. Живёт здесь, а не в сервисах: сервис и
- * репозиторий про HTTP не знают, а оба контроллера модуля переводят одинаково.
- *
- * `PageNotFoundError` и `ProjectNotFoundError` дают `404`; `403` не используется
- * нигде — он отличал бы существующую чужую запись от несуществующей.
+ * Перевод доменных ошибок в HTTP: сервис и репозиторий про HTTP не знают, а оба
+ * контроллера модуля переводят одинаково. `403` не используется нигде — он отличал
+ * бы существующую чужую запись от несуществующей.
  */
 export async function toHttpException<T>(operation: () => Promise<T>): Promise<T> {
   try {
     return await operation();
   } catch (error) {
-    if (error instanceof PageNotFoundError || error instanceof ProjectNotFoundError) {
+    if (
+      error instanceof PageNotFoundError ||
+      error instanceof ProjectNotFoundError ||
+      error instanceof PageParentNotFoundError ||
+      error instanceof PreviousSiblingNotFoundError ||
+      error instanceof NextSiblingNotFoundError
+    ) {
       throw new NotFoundException(error.message);
     }
 
@@ -133,7 +129,8 @@ export async function toHttpException<T>(operation: () => Promise<T>): Promise<T
       error instanceof SiblingParentMismatchError ||
       error instanceof PageProjectMismatchError ||
       error instanceof PageRestoreTargetProjectRejectedError ||
-      error instanceof SiblingOrderError
+      error instanceof SiblingOrderError ||
+      error instanceof SiblingsNotAdjacentError
     ) {
       throw new BadRequestException(error.message);
     }

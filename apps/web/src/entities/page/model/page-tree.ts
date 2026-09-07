@@ -259,6 +259,51 @@ export function movePageInTree(
   return inserted.changed ? inserted.nodes : [...tree];
 }
 
+export function collectPageSubtreeIds(tree: NormalizedPageTree, pageId: string): readonly string[] {
+  if (!tree.nodesById[pageId]) return [];
+
+  const ids: string[] = [];
+  const pending = [pageId];
+  const visited = new Set<string>();
+
+  while (pending.length > 0) {
+    const id = pending.pop();
+    if (!id || visited.has(id)) continue;
+    visited.add(id);
+    ids.push(id);
+    pending.push(...(tree.childIdsByParentId[id] ?? []));
+  }
+
+  return ids;
+}
+
+export function isPageInSubtree(
+  tree: NormalizedPageTree,
+  subtreeRootPageId: string,
+  pageId: string,
+): boolean {
+  if (subtreeRootPageId === pageId) return Boolean(tree.nodesById[pageId]);
+  return collectPageSubtreeIds(tree, subtreeRootPageId).includes(pageId);
+}
+
+export function removePageSubtreeFromTree(
+  tree: readonly PageTreeNodeDto[],
+  pageId: string,
+): PageTreeNodeDto[] {
+  return removePage(tree, pageId).nodes;
+}
+
+export function removeProjectPagesFromTree(
+  tree: readonly PageTreeNodeDto[],
+  projectId: string,
+): PageTreeNodeDto[] {
+  const next = tree
+    .filter((node) => node.projectId !== projectId)
+    .map((node) => removeProjectPagesFromNode(node, projectId));
+
+  return next;
+}
+
 function getMoveTargetSiblings(tree: NormalizedPageTree, intent: MoveIntent): string[] {
   const siblings = intent.parentPageId
     ? (tree.childIdsByParentId[intent.parentPageId] ?? [])
@@ -350,4 +395,13 @@ function removePage(
   }
 
   return { nodes: [...nodes] };
+}
+
+function removeProjectPagesFromNode(node: PageTreeNodeDto, projectId: string): PageTreeNodeDto {
+  return {
+    ...node,
+    children: node.children
+      .filter((child) => child.projectId !== projectId)
+      .map((child) => removeProjectPagesFromNode(child, projectId)),
+  };
 }

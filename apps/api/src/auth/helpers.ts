@@ -54,12 +54,9 @@ export function createClearRefreshCookieOptions(
 }
 
 /**
- * P2002 — нарушение unique constraint. Проверяется именно колонка email: тот же
- * код прилетает и на `Session.tokenHash`, и перевод его в `409 Email is already
- * registered` был бы враньём.
- *
- * `meta.target` в разных версиях и драйверах бывает и массивом колонок, и строкой
- * с именем индекса (`User_email_key`), поэтому разбираются оба варианта.
+ * P2002 прилетает и на `Session.tokenHash`, поэтому проверяется именно колонка email.
+ * `meta.target` бывает массивом колонок и строкой с именем индекса — разбирается и то,
+ * и другое.
  */
 export function isUniqueEmailViolation(error: unknown): boolean {
   if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
