@@ -2,9 +2,16 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { type ReactNode, useMemo } from 'react';
+import { type ReactNode, useMemo, useRef, useState } from 'react';
 import { getBreadcrumbs, normalizePageTree, selectPage } from '@/entities/page';
-import { usePageManagement } from '@/features/workspace-management';
+import {
+  DeleteConfirmationDialog,
+  type DeleteConfirmationIntent,
+  type PageDeleteRequest,
+  type ProjectDeleteRequest,
+  usePageManagement,
+  useProjectDeletion,
+} from '@/features/workspace-management';
 import {
   type PageTreeNodeDto,
   type ProjectDto,
@@ -16,12 +23,36 @@ import { AppShell } from '@/widgets/app-shell';
 import { PrivateShell } from '@/widgets/private-shell';
 import { WorkspaceTree, WorkspaceTreeExpansionProvider } from '@/widgets/workspace-navigation';
 
+type WorkspaceDeleteIntent =
+  | (PageDeleteRequest & Readonly<{ kind: 'page' }>)
+  | (ProjectDeleteRequest & Readonly<{ kind: 'project' }>);
+
+function toDeleteConfirmationIntent(
+  intent: WorkspaceDeleteIntent | undefined,
+): DeleteConfirmationIntent | undefined {
+  if (!intent) return undefined;
+  if (intent.kind === 'project') {
+    return { kind: 'project', name: intent.name, returnFocus: intent.returnFocus };
+  }
+
+  return { kind: 'page', returnFocus: intent.returnFocus, title: intent.title };
+}
+
 export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>) {
   const pathname = usePathname() ?? '/';
   const projectsQuery = useListProjects<ProjectDto[]>();
   const treeQuery = useGetPageTree<PageTreeNodeDto[]>();
+  const [deleteIntent, setDeleteIntent] = useState<WorkspaceDeleteIntent>();
+  const [deleteError, setDeleteError] = useState<string>();
+  const [deletePending, setDeletePending] = useState(false);
+  const deletePendingRef = useRef(false);
   const tree = useMemo(() => normalizePageTree(treeQuery.data ?? []), [treeQuery.data]);
-  const management = usePageManagement();
+  const pageManagement = usePageManagement({
+    type: 'root',
+  });
+  const projectDeletion = useProjectDeletion({
+    type: 'root',
+  });
   const pageId = /^\/pages\/([^/]+)$/.exec(pathname)?.[1];
   const projectId = /^\/projects\/([^/]+)$/.exec(pathname)?.[1];
   const page = selectPage(tree, pageId);
@@ -67,6 +98,46 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
     </nav>
   );
 
+  function requestPageDelete(request: PageDeleteRequest) {
+    setDeleteError(undefined);
+    setDeleteIntent({ ...request, kind: 'page' });
+  }
+
+  function requestProjectDelete(request: ProjectDeleteRequest) {
+    setDeleteError(undefined);
+    setDeleteIntent({ ...request, kind: 'project' });
+  }
+  function closeDeleteDialog() {
+    if (deletePendingRef.current) return;
+    setDeleteError(undefined);
+    setDeleteIntent(undefined);
+  }
+
+  async function submitDelete() {
+    if (!deleteIntent || deletePendingRef.current) return;
+
+    deletePendingRef.current = true;
+    setDeletePending(true);
+    setDeleteError(undefined);
+    try {
+      if (deleteIntent.kind === 'page') {
+        await pageManagement.deletePage(deleteIntent.pageId);
+      } else {
+        await projectDeletion.deleteProject(deleteIntent.projectId);
+      }
+      setDeleteIntent(undefined);
+    } catch {
+      setDeleteError(
+        deleteIntent.kind === 'page'
+          ? 'Ошибка удаления страницы. Попробуйте ещё раз.'
+          : 'Ошибка удаления проекта. Попробуйте ещё раз.',
+      );
+    } finally {
+      deletePendingRef.current = false;
+      setDeletePending(false);
+    }
+  }
+
   const navigation = pending ? (
     <Text aria-busy="true">Загружаем дерево…</Text>
   ) : failed ? (
@@ -87,9 +158,11 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
       activeProjectId={project?.id}
       normalizedTree={tree}
       projects={projectsQuery.data ?? []}
-      onCreatePage={management.createPage}
-      onMovePage={management.movePage}
-      onRenamePage={management.renamePage}
+      onCreatePage={pageManagement.createPage}
+      onMovePage={pageManagement.movePage}
+      onRequestDeletePage={requestPageDelete}
+      onRequestDeleteProject={requestProjectDelete}
+      onRenamePage={pageManagement.renamePage}
     />
   );
 
@@ -97,6 +170,13 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
     <WorkspaceTreeExpansionProvider>
       <AppShell pageTree={navigation}>
         <PrivateShell breadcrumbs={breadcrumbs}>{children}</PrivateShell>
+        <DeleteConfirmationDialog
+          error={deleteError}
+          intent={toDeleteConfirmationIntent(deleteIntent)}
+          pending={deletePending}
+          onCancel={closeDeleteDialog}
+          onConfirm={() => void submitDelete()}
+        />
       </AppShell>
     </WorkspaceTreeExpansionProvider>
   );

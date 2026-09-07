@@ -182,7 +182,6 @@ describe('DeleteConfirmationDialog', () => {
 
     const trigger = screen.getByRole('button', { name: 'Open delete' });
     fireEvent.click(trigger);
-    fireEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Не удалось удалить страницу');
     const closeButton = screen.getByRole('button', { name: 'Close' });

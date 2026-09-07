@@ -22,7 +22,6 @@ import {
 } from '@/shared/api';
 import { type WorkspaceRouteContext, workspaceProjectPath } from '@/shared/routing';
 import { Button, Heading, Input, Menu, MenuItem, MenuPopup, MenuTrigger, Text } from '@/shared/ui';
-import { WorkspaceNavigation } from '@/widgets/workspace-navigation';
 
 import { WorkspaceMain } from './workspace-main';
 
@@ -133,19 +132,7 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
   }
 
   return (
-    <div className="relative min-h-0 md:grid md:grid-cols-[20rem_minmax(0,1fr)]">
-      <WorkspaceNavigation
-        activePageId={activePage?.id}
-        activeProjectId={project?.id}
-        normalizedTree={normalizedTree}
-        projects={projects}
-        onCreatePage={pageManagement.createPage}
-        onMovePage={pageManagement.movePage}
-        onRenamePage={pageManagement.renamePage}
-        onRequestDeletePage={requestPageDelete}
-        onRequestDeleteProject={requestProjectDelete}
-      />
-
+    <div className="relative min-h-0">
       <div className="relative min-h-0 min-w-0 overflow-y-auto">
         {route.type === 'root' ? (
           <WorkspaceRoot
