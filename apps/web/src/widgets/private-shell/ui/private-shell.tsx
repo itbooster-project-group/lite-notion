@@ -8,19 +8,22 @@ import { LogoutButton } from '@/features/auth';
 
 type PrivateShellProps = Readonly<{
   children: ReactNode;
+  breadcrumbs: ReactNode;
+  headerStart?: ReactNode;
 }>;
 
-export function PrivateShell({ children }: PrivateShellProps) {
+export function PrivateShell({ children, breadcrumbs, headerStart }: PrivateShellProps) {
   const { user } = useSession();
 
   return (
     <div className="grid min-h-dvh grid-rows-[auto_minmax(0,1fr)] bg-background">
       <header className="border-b bg-card">
         <div className="flex items-center justify-between gap-4 px-page-inline py-4">
-          <Link className="shrink-0 font-semibold tracking-tight" href="/">
-            Lite Notion
-          </Link>
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            {headerStart ? <div className="shrink-0">{headerStart}</div> : null}
+            {breadcrumbs}
+          </div>
+          <div className="flex shrink-0 items-center gap-3">
             <Link
               className="block max-w-24 truncate rounded-sm text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 sm:max-w-48"
               href="/profile"

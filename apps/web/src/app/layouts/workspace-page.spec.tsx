@@ -1,8 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { delay, HttpResponse, http } from 'msw';
+import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { WorkspaceDeleteCleanupProvider } from '@/features/workspace-management';
+import { WorkspacePage } from '@/pages/workspace';
 import {
   getGetPageTreeQueryKey,
   getListProjectsQueryKey,
@@ -10,14 +12,30 @@ import {
   type PageTreeNodeDto,
 } from '@/shared/api';
 import { server } from '@/shared/api/mocks/server';
+import type { WorkspaceRouteContext } from '@/shared/routing';
+import { useAppShellStore } from '@/widgets/app-shell/model/app-shell-store';
+import { PrivateWorkspace } from './private-workspace';
 
-import { WorkspacePage, type WorkspaceRouteContext } from './workspace-page';
-
-const navigation = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
+const navigation = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), pathname: '/' }));
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: navigation.push, replace: navigation.replace }),
+  usePathname: () => navigation.pathname,
 }));
+
+vi.mock('@/entities/session', () => ({
+  useSession: () => ({ user: { name: 'Ada' }, clearSession: vi.fn() }),
+}));
+beforeEach(() => {
+  localStorage.clear();
+  useAppShellStore.setState({ desktopCollapsed: false, mobileOpen: false });
+  vi.stubGlobal('matchMedia', () => ({
+    matches: false,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }));
+});
+afterEach(() => vi.unstubAllGlobals());
 
 function page(
   id: string,
@@ -77,10 +95,23 @@ afterEach(() => {
 });
 
 function renderWorkspace(route: WorkspaceRouteContext) {
+  const pathname =
+    route.type === 'page'
+      ? `/pages/${route.pageId}`
+      : route.type === 'project'
+        ? `/projects/${route.projectId}`
+        : '/';
+  return renderPrivateContent(pathname, <WorkspacePage route={route} />);
+}
+
+function renderPrivateContent(pathname: string, children: ReactNode) {
+  navigation.pathname = pathname;
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const view = render(
     <QueryClientProvider client={queryClient}>
-      <WorkspacePage route={route} />
+      <WorkspaceDeleteCleanupProvider>
+        <PrivateWorkspace>{children}</PrivateWorkspace>
+      </WorkspaceDeleteCleanupProvider>
     </QueryClientProvider>,
   );
 
@@ -111,6 +142,7 @@ describe('workspace page', () => {
     renderWorkspace({ type: 'root' });
 
     expect(await screen.findByRole('heading', { name: 'Проекты', level: 1 })).toBeInTheDocument();
+    expect(screen.getAllByRole('main')).toHaveLength(1);
     const projectList = screen.getByRole('list', { name: 'Список проектов' });
     expect(projectList).toBeInTheDocument();
     expect(within(projectList).getByRole('link', { name: 'Project Alpha' })).toBeInTheDocument();
@@ -128,9 +160,11 @@ describe('workspace page', () => {
     renderWorkspace({ projectId: 'project-a', type: 'project' });
 
     expect(screen.getByText('Загружаем рабочую область…')).toBeInTheDocument();
+    expect(screen.getAllByRole('main')).toHaveLength(1);
     expect(
       await screen.findByRole('heading', { name: 'Project Alpha', level: 1 }),
     ).toBeInTheDocument();
+    expect(screen.getAllByRole('main')).toHaveLength(1);
     expect(await screen.findAllByRole('treeitem', { name: 'Alpha page' })).not.toHaveLength(0);
     expect(await screen.findByText('Other project page')).toBeInTheDocument();
 
@@ -149,6 +183,7 @@ describe('workspace page', () => {
     expect(
       await screen.findByRole('heading', { name: 'Child page', level: 1 }),
     ).toBeInTheDocument();
+    expect(screen.getAllByRole('main')).toHaveLength(1);
     expect(screen.getByRole('navigation', { name: 'Хлебные крошки' })).toHaveTextContent(
       'Alpha page/Child page',
     );
@@ -180,6 +215,7 @@ describe('workspace page', () => {
     renderWorkspace(route);
 
     expect(await screen.findByRole('heading', { name: 'Ничего не найдено' })).toBeInTheDocument();
+    expect(screen.getAllByRole('main')).toHaveLength(1);
     expect(screen.getByRole('link', { name: 'К проектам' })).toHaveAttribute('href', '/');
   });
 
@@ -198,6 +234,7 @@ describe('workspace page', () => {
     expect(
       await screen.findByRole('heading', { name: 'Ошибка загрузки рабочей области' }),
     ).toBeInTheDocument();
+    expect(screen.getAllByRole('main')).toHaveLength(1);
     expect(screen.queryByText('Private database detail')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Повторить' }));
 
@@ -207,13 +244,14 @@ describe('workspace page', () => {
   it('открывает mobile drawer, закрывает его по Escape и возвращает фокус', async () => {
     renderWorkspace({ projectId: 'project-a', type: 'project' });
     await screen.findByRole('heading', { name: 'Project Alpha' });
-    const trigger = screen.getByRole('button', { name: 'Открыть навигацию' });
+    const trigger = screen.getByRole('button', { name: 'Открыть боковую панель' });
 
     fireEvent.click(trigger);
-    expect(await screen.findByRole('dialog', { name: 'Навигация' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Боковая панель' })).toBeInTheDocument();
     expect(screen.queryByText('Навигация по проекту')).not.toBeInTheDocument();
     expect(screen.queryByText('Проекты и страницы рабочей области.')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Закрыть навигацию' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Закрыть боковую панель' })).toBeInTheDocument();
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
@@ -337,7 +375,7 @@ describe('workspace page', () => {
     if (!betaActions) throw new Error('Beta actions are unavailable');
     fireEvent.click(betaActions);
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить' }));
 
     await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('beta'));
     await waitFor(() =>
@@ -345,27 +383,6 @@ describe('workspace page', () => {
     );
     expect(screen.getAllByRole('treeitem', { name: 'Alpha page' })).not.toHaveLength(0);
     expect(navigation.replace).not.toHaveBeenCalled();
-  });
-
-  it('удаление active page сразу начинает replace-navigation без push', async () => {
-    const deleteRequests = vi.fn();
-    server.use(
-      http.delete('*/api/v1/pages/:pageId', ({ params }) => {
-        deleteRequests(params.pageId);
-        return new HttpResponse(null, { status: 204 });
-      }),
-    );
-    renderWorkspace({ pageId: 'child', type: 'page' });
-    await screen.findByRole('heading', { name: 'Child page' });
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Действия для Child page' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
-
-    await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('child'));
-    expect(navigation.replace).toHaveBeenCalledWith('/projects/project-a');
-    expect(navigation.push).not.toHaveBeenCalled();
-    expect(screen.queryByRole('heading', { name: 'Ничего не найдено' })).not.toBeInTheDocument();
   });
 
   it('отменяет in-flight page tree refetch перед affected page delete', async () => {
@@ -393,7 +410,7 @@ describe('workspace page', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Действия для Child page' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить' }));
 
     await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('child'));
     expect(navigation.replace).toHaveBeenCalledWith('/projects/project-a');
@@ -425,7 +442,7 @@ describe('workspace page', () => {
     if (!alphaAction) throw new Error('Alpha actions are unavailable');
     fireEvent.click(alphaAction);
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить' }));
 
     await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('alpha'));
     expect(navigation.replace).toHaveBeenCalledWith('/projects/project-a');
@@ -450,7 +467,7 @@ describe('workspace page', () => {
     if (!betaActions) throw new Error('Beta actions are unavailable');
     fireEvent.click(betaActions);
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить' }));
 
     const pendingButton = await screen.findByRole('button', { name: 'Удаляем…' });
     expect(pendingButton).toBeDisabled();
@@ -477,7 +494,7 @@ describe('workspace page', () => {
     if (!betaActions) throw new Error('Beta actions are unavailable');
     fireEvent.click(betaActions);
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Ошибка удаления страницы. Попробуйте ещё раз.',
@@ -537,7 +554,7 @@ describe('workspace page', () => {
       await screen.findByRole('button', { name: 'Действия для проекта Project Beta' }),
     );
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить проект' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить' }));
 
     await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('project-b'));
     await waitFor(() =>
@@ -545,6 +562,30 @@ describe('workspace page', () => {
     );
     expect(screen.queryByRole('treeitem', { name: 'Other project page' })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Project Alpha' })).toBeInTheDocument();
+    expect(navigation.replace).not.toHaveBeenCalled();
+  });
+
+  it('не меняет profile route при удалении unrelated project из navigation', async () => {
+    const deleteRequests = vi.fn();
+    server.use(
+      http.delete('*/api/v1/projects/:projectId', ({ params }) => {
+        deleteRequests(params.projectId);
+        currentProjects = currentProjects.filter((project) => project.id !== params.projectId);
+        currentTree = currentTree.filter((pageNode) => pageNode.projectId !== params.projectId);
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    renderPrivateContent('/profile', <h1>Профиль</h1>);
+    await screen.findByRole('heading', { name: 'Профиль' });
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Действия для проекта Project Beta' }),
+    );
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить проект' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить' }));
+
+    await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('project-b'));
+    expect(screen.getByRole('heading', { name: 'Профиль' })).toBeInTheDocument();
     expect(navigation.replace).not.toHaveBeenCalled();
   });
 
@@ -562,7 +603,7 @@ describe('workspace page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Действия для проекта Project Alpha' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить проект' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить' }));
 
     await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('project-a'));
     expect(navigation.replace).toHaveBeenCalledWith('/');
@@ -610,7 +651,7 @@ describe('workspace page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Действия для проекта Project Alpha' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить проект' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить' }));
 
     await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('project-a'));
     expect(navigation.replace).toHaveBeenCalledWith('/');
@@ -623,29 +664,6 @@ describe('workspace page', () => {
       expect(screen.queryByRole('heading', { name: 'Ничего не найдено' })).not.toBeInTheDocument(),
     );
     expect(screen.getByRole('heading', { name: 'Project Alpha' })).toBeInTheDocument();
-  });
-
-  it('удаление project текущей page начинает replace-navigation на workspace root', async () => {
-    const deleteRequests = vi.fn();
-    server.use(
-      http.delete('*/api/v1/projects/:projectId', ({ params }) => {
-        deleteRequests(params.projectId);
-        return new HttpResponse(null, { status: 204 });
-      }),
-    );
-    renderWorkspace({ pageId: 'child', type: 'page' });
-    await screen.findByRole('heading', { name: 'Child page' });
-
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Действия для проекта Project Alpha' }),
-    );
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить проект' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
-
-    await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('project-a'));
-    expect(navigation.replace).toHaveBeenCalledWith('/');
-    expect(navigation.push).not.toHaveBeenCalled();
-    expect(screen.queryByRole('heading', { name: 'Ничего не найдено' })).not.toBeInTheDocument();
   });
 
   it('оставляет project в UI при ошибке удаления', async () => {

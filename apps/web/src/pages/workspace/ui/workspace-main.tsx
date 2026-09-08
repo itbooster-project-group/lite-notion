@@ -1,9 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  getBreadcrumbs,
   getPageDisplayTitle,
   type MoveIntent,
   type NormalizedPageTree,
@@ -40,7 +38,7 @@ export function WorkspaceMain({
 
   if (!page) {
     return (
-      <main className="min-w-0 p-6 sm:p-8">
+      <section className="min-w-0 p-6 sm:p-8">
         <PageTree
           activePageId={undefined}
           header={
@@ -56,42 +54,20 @@ export function WorkspaceMain({
           onRequestDeletePage={onRequestDeletePage}
           onSelectPage={(pageId) => router.push(workspacePagePath(pageId))}
         />
-      </main>
+      </section>
     );
   }
 
-  const breadcrumbs = getBreadcrumbs(normalizedTree, page.id);
-
   return (
-    <main className="min-w-0 p-6 sm:p-8">
-      <nav aria-label="Хлебные крошки">
-        <ol className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-          {breadcrumbs.map((breadcrumb, index) => (
-            <li className="flex items-center gap-2" key={breadcrumb.id}>
-              {index > 0 ? <span aria-hidden="true">/</span> : null}
-              {breadcrumb.id === page.id ? (
-                <span aria-current="page">{breadcrumb.title}</span>
-              ) : (
-                <Link
-                  className="hover:text-foreground hover:underline"
-                  href={workspacePagePath(breadcrumb.id)}
-                >
-                  {breadcrumb.title}
-                </Link>
-              )}
-            </li>
-          ))}
-        </ol>
-      </nav>
-
-      <section className="mt-6 space-y-6">
+    <section className="min-w-0 p-6 sm:p-8">
+      <div className="space-y-6">
         <Heading as="h1" variant="page">
           {getPageDisplayTitle(page.title)}
         </Heading>
         <div className="rounded-xl border border-dashed bg-muted/30 p-8">
           <Text variant="caption">Редактор страницы появится в следующем обновлении.</Text>
         </div>
-      </section>
-    </main>
+      </div>
+    </section>
   );
 }

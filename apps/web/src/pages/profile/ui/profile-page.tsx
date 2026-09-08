@@ -11,7 +11,7 @@ export function ProfilePage() {
   }
 
   return (
-    <main className="mx-auto max-w-shell px-page-inline py-12">
+    <div className="mx-auto max-w-shell px-page-inline py-12">
       <section className="space-y-6" aria-labelledby="profile-title">
         <Heading as="h1" variant="page" id="profile-title">
           Профиль
@@ -22,7 +22,7 @@ export function ProfilePage() {
           <ProfileField label="Дата регистрации" value={formatDate(user.createdAt)} />
         </dl>
       </section>
-    </main>
+    </div>
   );
 }
 

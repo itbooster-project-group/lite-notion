@@ -15,7 +15,7 @@ import {
   PageDraft,
   type ProjectDeleteRequest,
 } from '@/features/workspace-management';
-import { Button, Input, Menu, MenuItem, MenuPopup, MenuTrigger } from '@/shared/ui';
+import { Button, Input, Menu, MenuItem, MenuPopup, MenuTrigger, Tooltip } from '@/shared/ui';
 import type { WorkspaceTreeItemData } from '../model/workspace-tree';
 
 type WorkspaceTreeItemProps = Readonly<{
@@ -89,23 +89,25 @@ export function WorkspaceTreeItem({
         }}
       >
         {data.hasChildren ? (
-          <button
-            aria-label={item.isExpanded() ? `Свернуть ${data.title}` : `Раскрыть ${data.title}`}
-            className="inline-flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground"
-            tabIndex={-1}
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              if (item.isExpanded()) item.collapse();
-              else item.expand();
-            }}
-          >
-            {item.isExpanded() ? (
-              <ChevronDown aria-hidden="true" className="pointer-events-none size-4 shrink-0" />
-            ) : (
-              <ChevronRight aria-hidden="true" className="pointer-events-none size-4 shrink-0" />
-            )}
-          </button>
+          <Tooltip label={item.isExpanded() ? `Свернуть ${data.title}` : `Раскрыть ${data.title}`}>
+            <button
+              aria-label={item.isExpanded() ? `Свернуть ${data.title}` : `Раскрыть ${data.title}`}
+              className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground disabled:cursor-default aria-disabled:cursor-default"
+              tabIndex={-1}
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                if (item.isExpanded()) item.collapse();
+                else item.expand();
+              }}
+            >
+              {item.isExpanded() ? (
+                <ChevronDown aria-hidden="true" className="pointer-events-none size-4 shrink-0" />
+              ) : (
+                <ChevronRight aria-hidden="true" className="pointer-events-none size-4 shrink-0" />
+              )}
+            </button>
+          </Tooltip>
         ) : (
           <span aria-hidden="true" className="size-7 shrink-0" />
         )}
@@ -137,15 +139,17 @@ export function WorkspaceTreeItem({
 
         {isPage ? (
           <>
-            <button
-              {...item.getDragHandleProps()}
-              aria-label={`Перетащить ${data.title}`}
-              className="inline-flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 focus:opacity-100 group-hover:opacity-100"
-              type="button"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <GripVertical aria-hidden="true" className="pointer-events-none size-4 shrink-0" />
-            </button>
+            <Tooltip label={`Перетащить ${data.title}`}>
+              <button
+                {...item.getDragHandleProps()}
+                aria-label={`Перетащить ${data.title}`}
+                className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground opacity-0 focus:opacity-100 disabled:cursor-default aria-disabled:cursor-default group-hover:opacity-100"
+                type="button"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <GripVertical aria-hidden="true" className="pointer-events-none size-4 shrink-0" />
+              </button>
+            </Tooltip>
             <Menu
               modal={false}
               open={menuOpen}

@@ -2,14 +2,13 @@
 
 import type { ItemInstance } from '@headless-tree/core';
 import { ChevronDown, ChevronRight, GripVertical, MoreHorizontal, Trash2 } from 'lucide-react';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import type { PageTreeItemData } from '@/entities/page';
-import { Button, Input, Menu, MenuItem, MenuPopup, MenuTrigger } from '@/shared/ui';
+import { Button, Input, Menu, MenuItem, MenuPopup, MenuTrigger, Tooltip } from '@/shared/ui';
 import type { PageDeleteRequest } from '../model/delete-intent';
 import { PageDraft } from './page-draft';
 
 type PageTreeItemProps = Readonly<{
-  actionsOpen: boolean;
   active: boolean;
   createDraft: boolean;
   createDraftError: string | undefined;
@@ -18,7 +17,6 @@ type PageTreeItemProps = Readonly<{
   indentPx: number;
   item: ItemInstance<PageTreeItemData>;
   renameError: string | undefined;
-  onActionsOpenChange: (open: boolean) => void;
   onCancelCreate: () => void;
   onCancelRename: () => void;
   onChangeCreate: (value: string) => void;
@@ -30,7 +28,6 @@ type PageTreeItemProps = Readonly<{
 }>;
 
 export function PageTreeItem({
-  actionsOpen,
   active,
   createDraft,
   createDraftError,
@@ -39,7 +36,6 @@ export function PageTreeItem({
   indentPx,
   item,
   renameError,
-  onActionsOpenChange,
   onCancelCreate,
   onCancelRename,
   onChangeCreate,
@@ -51,6 +47,8 @@ export function PageTreeItem({
 }: PageTreeItemProps) {
   const actionsRef = useRef<HTMLButtonElement>(null);
   const moveRequestRef = useRef<{ returnFocus: HTMLElement | undefined } | undefined>(undefined);
+  const renameRequestRef = useRef(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const data = item.getItemData();
   const level = item.getItemMeta().level;
   const itemProps = item.getProps();
@@ -65,6 +63,11 @@ export function PageTreeItem({
           active ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/60'
         }`}
         style={{ paddingLeft: `${Math.max(0, level) * indentPx}px` }}
+        onClick={(event) => {
+          if (!event.currentTarget.contains(event.target as Node)) return;
+          if ((event.target as HTMLElement).closest('button, input')) return;
+          itemProps.onClick?.(event);
+        }}
         onKeyDown={(event) => {
           itemProps.onKeyDown?.(event);
           if (event.target === event.currentTarget && event.key === 'Enter') {
@@ -74,23 +77,25 @@ export function PageTreeItem({
         }}
       >
         {data.hasChildren ? (
-          <button
-            aria-label={item.isExpanded() ? `Свернуть ${data.title}` : `Раскрыть ${data.title}`}
-            className="inline-flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground"
-            tabIndex={-1}
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              if (item.isExpanded()) item.collapse();
-              else item.expand();
-            }}
-          >
-            {item.isExpanded() ? (
-              <ChevronDown aria-hidden="true" className="pointer-events-none size-4 shrink-0" />
-            ) : (
-              <ChevronRight aria-hidden="true" className="pointer-events-none size-4 shrink-0" />
-            )}
-          </button>
+          <Tooltip label={item.isExpanded() ? `Свернуть ${data.title}` : `Раскрыть ${data.title}`}>
+            <button
+              aria-label={item.isExpanded() ? `Свернуть ${data.title}` : `Раскрыть ${data.title}`}
+              className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground disabled:cursor-default aria-disabled:cursor-default"
+              tabIndex={-1}
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                if (item.isExpanded()) item.collapse();
+                else item.expand();
+              }}
+            >
+              {item.isExpanded() ? (
+                <ChevronDown aria-hidden="true" className="pointer-events-none size-4 shrink-0" />
+              ) : (
+                <ChevronRight aria-hidden="true" className="pointer-events-none size-4 shrink-0" />
+              )}
+            </button>
+          </Tooltip>
         ) : (
           <span aria-hidden="true" className="size-7 shrink-0" />
         )}
@@ -118,22 +123,29 @@ export function PageTreeItem({
           <span className="min-w-0 flex-1 truncate text-sm">{data.title}</span>
         )}
 
-        <button
-          {...item.getDragHandleProps()}
-          aria-label={`Перетащить ${data.title}`}
-          className="inline-flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 focus:opacity-100 group-hover:opacity-100"
-          type="button"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <GripVertical aria-hidden="true" className="pointer-events-none size-4 shrink-0" />
-        </button>
+        <Tooltip label={`Перетащить ${data.title}`}>
+          <button
+            {...item.getDragHandleProps()}
+            aria-label={`Перетащить ${data.title}`}
+            className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground opacity-0 focus:opacity-100 disabled:cursor-default aria-disabled:cursor-default group-hover:opacity-100"
+            type="button"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <GripVertical aria-hidden="true" className="pointer-events-none size-4 shrink-0" />
+          </button>
+        </Tooltip>
 
         <Menu
           modal={false}
-          open={actionsOpen}
-          onOpenChange={onActionsOpenChange}
+          open={menuOpen}
+          onOpenChange={setMenuOpen}
           onOpenChangeComplete={(open) => {
-            if (open || !moveRequestRef.current) return;
+            if (open) return;
+            if (renameRequestRef.current) {
+              item.startRenaming();
+              return;
+            }
+            if (!moveRequestRef.current) return;
             const { returnFocus } = moveRequestRef.current;
             moveRequestRef.current = undefined;
             onStartMove(returnFocus);
@@ -145,14 +157,21 @@ export function PageTreeItem({
             render={<Button size="icon-sm" variant="ghost" />}
             onClick={(event) => {
               event.stopPropagation();
-              onActionsOpenChange(true);
+              renameRequestRef.current = false;
+              setMenuOpen(true);
             }}
           >
             <MoreHorizontal aria-hidden="true" />
           </MenuTrigger>
-          <MenuPopup sideOffset={4}>
+          <MenuPopup finalFocus={() => !renameRequestRef.current} sideOffset={4}>
             <MenuItem onClick={onCreateChild}>Добавить дочернюю</MenuItem>
-            <MenuItem onClick={() => item.startRenaming()}>Переименовать</MenuItem>
+            <MenuItem
+              onClick={() => {
+                renameRequestRef.current = true;
+              }}
+            >
+              Переименовать
+            </MenuItem>
             <MenuItem
               onClick={() => {
                 moveRequestRef.current = { returnFocus: actionsRef.current ?? undefined };

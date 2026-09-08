@@ -1,0 +1,163 @@
+'use client';
+
+import { Menu, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react';
+import { usePathname } from 'next/navigation';
+import type { ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
+
+import { cn } from '@/shared/lib/cn';
+import { Button, Modal, ModalPrimitive, Tooltip } from '@/shared/ui';
+import { useAppShellStore } from '../model/app-shell-store';
+import { SidebarContent } from './sidebar-content';
+
+const DESKTOP_SIDEBAR_ID = 'desktop-sidebar';
+const MOBILE_SIDEBAR_ID = 'mobile-sidebar';
+const DESKTOP_MEDIA_QUERY = '(min-width: 48rem)';
+
+export type AppShellProps = Readonly<{
+  actions?: ReactNode;
+  children: ReactNode | ((slots: Readonly<{ mobileNavigationTrigger: ReactNode }>) => ReactNode);
+  pageTree?: ReactNode;
+  user?: ReactNode;
+}>;
+
+export function AppShell({ actions, children, pageTree, user }: AppShellProps) {
+  const pathname = usePathname();
+  const desktopCollapsed = useAppShellStore((state) => state.desktopCollapsed);
+  const mobileOpen = useAppShellStore((state) => state.mobileOpen);
+  const toggleDesktop = useAppShellStore((state) => state.toggleDesktop);
+  const closeMobile = useAppShellStore((state) => state.closeMobile);
+  const setMobileOpen = useAppShellStore((state) => state.setMobileOpen);
+  const [hydrated, setHydrated] = useState(false);
+  const previousPathname = useRef(pathname);
+
+  useEffect(() => {
+    let active = true;
+
+    void Promise.resolve(useAppShellStore.persist.rehydrate()).finally(() => {
+      if (active) {
+        setHydrated(true);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (previousPathname.current !== pathname) {
+      closeMobile();
+      previousPathname.current = pathname;
+    }
+  }, [pathname, closeMobile]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(DESKTOP_MEDIA_QUERY);
+    const closeAtDesktopWidth = (event: MediaQueryListEvent | MediaQueryList) => {
+      if (event.matches) {
+        closeMobile();
+      }
+    };
+
+    closeAtDesktopWidth(mediaQuery);
+    mediaQuery.addEventListener('change', closeAtDesktopWidth);
+
+    return () => mediaQuery.removeEventListener('change', closeAtDesktopWidth);
+  }, [closeMobile]);
+
+  const collapsed = hydrated ? desktopCollapsed : false;
+  const mobileNavigationTrigger = (
+    <div className="md:hidden" data-slot="mobile-navigation-trigger">
+      <Tooltip label="Открыть боковую панель">
+        <span className="inline-flex">
+          <Modal
+            onOpenChange={setMobileOpen}
+            open={mobileOpen}
+            title="Боковая панель"
+            trigger={
+              <Button
+                aria-controls={MOBILE_SIDEBAR_ID}
+                aria-expanded={mobileOpen}
+                aria-label="Открыть боковую панель"
+                size="icon"
+                type="button"
+                variant="ghost"
+              >
+                <Menu aria-hidden="true" />
+              </Button>
+            }
+          >
+            <aside
+              aria-label="Боковая панель"
+              className="flex h-full flex-col"
+              id={MOBILE_SIDEBAR_ID}
+            >
+              <div className="flex h-12 shrink-0 items-center justify-end px-3">
+                <Tooltip label="Закрыть боковую панель">
+                  <ModalPrimitive.Close
+                    aria-label="Закрыть боковую панель"
+                    className="cursor-pointer inline-flex size-7 items-center justify-center rounded-lg hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-sidebar-ring"
+                  >
+                    <X aria-hidden="true" />
+                  </ModalPrimitive.Close>
+                </Tooltip>
+              </div>
+              <SidebarContent actions={actions} pageTree={pageTree} user={user} />
+            </aside>
+          </Modal>
+        </span>
+      </Tooltip>
+    </div>
+  );
+  const content =
+    typeof children === 'function' ? (
+      children({ mobileNavigationTrigger })
+    ) : (
+      <>
+        <div className="flex h-16 items-center px-page-inline md:hidden">
+          {mobileNavigationTrigger}
+        </div>
+        {children}
+      </>
+    );
+
+  return (
+    <div className="flex min-h-dvh bg-background text-foreground" data-hydrated={hydrated}>
+      <aside
+        aria-label="Боковая панель"
+        className={cn(
+          'hidden h-dvh shrink-0 flex-col border-sidebar-border border-r bg-sidebar text-sidebar-foreground md:sticky md:top-0 md:flex',
+          collapsed ? 'w-14' : 'w-64',
+          hydrated && 'transition-[width] duration-200 motion-reduce:transition-none',
+        )}
+        id={DESKTOP_SIDEBAR_ID}
+      >
+        <div className="flex h-12 shrink-0 items-center justify-end px-3">
+          <Tooltip label={collapsed ? 'Развернуть боковую панель' : 'Свернуть боковую панель'}>
+            <Button
+              aria-controls={DESKTOP_SIDEBAR_ID}
+              aria-expanded={!collapsed}
+              aria-label={collapsed ? 'Развернуть боковую панель' : 'Свернуть боковую панель'}
+              onClick={toggleDesktop}
+              size="icon"
+              type="button"
+              variant="ghost"
+            >
+              {collapsed ? (
+                <PanelLeftOpen aria-hidden="true" />
+              ) : (
+                <PanelLeftClose aria-hidden="true" />
+              )}
+            </Button>
+          </Tooltip>
+        </div>
+        {!collapsed ? <SidebarContent actions={actions} pageTree={pageTree} user={user} /> : null}
+      </aside>
+
+      <div className="min-w-0 flex-1">
+        <main className="min-h-dvh">{content}</main>
+      </div>
+    </div>
+  );
+}

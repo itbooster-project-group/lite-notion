@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 
 import { PrivateRoute } from '@/app/routing';
-import { PrivateShell } from '@/widgets/private-shell';
-import { WorkspaceTreeExpansionProvider } from '@/widgets/workspace-navigation';
+import { WorkspaceDeleteCleanupProvider } from '@/features/workspace-management';
+import { PrivateWorkspace } from './private-workspace';
 
 type PrivateLayoutProps = Readonly<{
   children: ReactNode;
@@ -11,9 +11,9 @@ type PrivateLayoutProps = Readonly<{
 export function PrivateLayout({ children }: PrivateLayoutProps) {
   return (
     <PrivateRoute>
-      <WorkspaceTreeExpansionProvider>
-        <PrivateShell>{children}</PrivateShell>
-      </WorkspaceTreeExpansionProvider>
+      <WorkspaceDeleteCleanupProvider>
+        <PrivateWorkspace>{children}</PrivateWorkspace>
+      </WorkspaceDeleteCleanupProvider>
     </PrivateRoute>
   );
 }

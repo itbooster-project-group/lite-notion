@@ -166,6 +166,26 @@ describe('workspace page tree', () => {
     expect(onRenamePage).toHaveBeenCalledTimes(1);
   });
 
+  it('не активирует страницу при rename из меню', async () => {
+    const { onRenamePage, onSelectPage } = renderTree('a');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Действия для Alpha' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Переименовать' }));
+
+    const input = await screen.findByRole('textbox');
+    expect(onSelectPage).not.toHaveBeenCalled();
+
+    fireEvent.click(input);
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Renamed from menu' } });
+    expect(onSelectPage).not.toHaveBeenCalled();
+    expect(screen.getByRole('textbox')).toHaveValue('Renamed from menu');
+
+    fireEvent.keyDown(screen.getByRole('textbox'), { code: 'Enter', key: 'Enter' });
+
+    await waitFor(() => expect(onRenamePage).toHaveBeenCalledWith('a', 'Renamed from menu'));
+    expect(onRenamePage).toHaveBeenCalledTimes(1);
+  });
+
   it('сохраняет rename draft и показывает безопасную ошибку при отказе', async () => {
     const normalizedTree = normalizePageTree(source);
     const onRenamePage = vi.fn().mockRejectedValue(new Error('Raw backend detail'));
