@@ -2,8 +2,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { delay, HttpResponse, http } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { WorkspaceDeleteCleanupProvider } from '@/features/workspace-management';
 import { WorkspacePage } from '@/pages/workspace';
-
 import type { PageDto, PageTreeNodeDto } from '@/shared/api';
 import { server } from '@/shared/api/mocks/server';
 import { useAppShellStore } from '@/widgets/app-shell/model/app-shell-store';
@@ -80,9 +80,11 @@ function renderPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={queryClient}>
-      <PrivateWorkspace>
-        <WorkspacePage route={{ pageId: 'child', type: 'page' }} />
-      </PrivateWorkspace>
+      <WorkspaceDeleteCleanupProvider>
+        <PrivateWorkspace>
+          <WorkspacePage route={{ pageId: 'child', type: 'page' }} />
+        </PrivateWorkspace>
+      </WorkspaceDeleteCleanupProvider>
     </QueryClientProvider>,
   );
 }

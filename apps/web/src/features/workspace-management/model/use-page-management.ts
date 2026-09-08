@@ -30,7 +30,7 @@ import {
 } from '@/shared/routing';
 import { useWorkspaceDeleteCleanupCoordinator } from './delete-cleanup-coordinator';
 
-export function usePageManagement(routeContext: WorkspaceRouteContext) {
+export function usePageManagement(routeContext: WorkspaceRouteContext | undefined) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const deleteCleanupCoordinator = useWorkspaceDeleteCleanupCoordinator();
@@ -100,7 +100,7 @@ export function usePageManagement(routeContext: WorkspaceRouteContext) {
 
     const subtreePageIds = collectPageSubtreeIds(normalizedTree, pageId);
     const affectsCurrentRoute =
-      routeContext.type === 'page' && isPageInSubtree(normalizedTree, pageId, routeContext.pageId);
+      routeContext?.type === 'page' && isPageInSubtree(normalizedTree, pageId, routeContext.pageId);
 
     if (affectsCurrentRoute) {
       await queryClient.cancelQueries({ queryKey });

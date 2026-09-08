@@ -12,8 +12,7 @@ import {
   syncDataLoaderFeature,
 } from '@headless-tree/core';
 import { AssistiveTreeDescription, useTree } from '@headless-tree/react';
-import { PlusSignIcon } from '@hugeicons/core-free-icons';
-import { HugeiconsIcon } from '@hugeicons/react';
+import { Plus } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import {
   getAncestorChain,
@@ -219,7 +218,7 @@ export function PageTree({
           variant="ghost"
           onClick={() => startDraft(null)}
         >
-          <HugeiconsIcon aria-hidden="true" icon={PlusSignIcon} strokeWidth={2} />
+          <Plus aria-hidden="true" />
         </Button>
       </div>
 

@@ -98,6 +98,12 @@ describe('AppShell', () => {
 
     expect(collapse).toHaveAttribute('aria-expanded', 'true');
     expect(collapse).toHaveAttribute('aria-controls', 'desktop-sidebar');
+    collapse.focus();
+    expect(
+      (await screen.findAllByText('Свернуть боковую панель')).some((label) =>
+        label.hasAttribute('data-open'),
+      ),
+    ).toBe(true);
     fireEvent.click(collapse);
 
     const expand = screen.getByRole('button', { name: 'Развернуть боковую панель' });

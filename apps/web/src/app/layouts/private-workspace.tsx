@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { type ReactNode, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { getBreadcrumbs, normalizePageTree, selectPage } from '@/entities/page';
 import {
   DeleteConfirmationDialog,
@@ -11,6 +11,7 @@ import {
   type ProjectDeleteRequest,
   usePageManagement,
   useProjectDeletion,
+  useWorkspaceDeleteCleanupCoordinator,
 } from '@/features/workspace-management';
 import {
   type PageTreeNodeDto,
@@ -18,6 +19,11 @@ import {
   useGetPageTree,
   useListProjects,
 } from '@/shared/api';
+import {
+  parseWorkspaceRoutePathname,
+  workspacePagePath,
+  workspaceProjectPath,
+} from '@/shared/routing';
 import { Button, Text } from '@/shared/ui';
 import { AppShell } from '@/widgets/app-shell';
 import { PrivateShell } from '@/widgets/private-shell';
@@ -47,27 +53,30 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
   const [deletePending, setDeletePending] = useState(false);
   const deletePendingRef = useRef(false);
   const tree = useMemo(() => normalizePageTree(treeQuery.data ?? []), [treeQuery.data]);
-  const pageManagement = usePageManagement({
-    type: 'root',
-  });
-  const projectDeletion = useProjectDeletion({
-    type: 'root',
-  });
-  const pageId = /^\/pages\/([^/]+)$/.exec(pathname)?.[1];
-  const projectId = /^\/projects\/([^/]+)$/.exec(pathname)?.[1];
+  const routeContext = useMemo(() => parseWorkspaceRoutePathname(pathname), [pathname]);
+  const deleteCleanupCoordinator = useWorkspaceDeleteCleanupCoordinator();
+  const pageManagement = usePageManagement(routeContext);
+  const projectDeletion = useProjectDeletion(routeContext);
+  const pageId = routeContext?.type === 'page' ? routeContext.pageId : undefined;
+  const projectId = routeContext?.type === 'project' ? routeContext.projectId : undefined;
   const page = selectPage(tree, pageId);
   const project = projectsQuery.data?.find((item) => item.id === (projectId ?? page?.projectId));
   const pending = projectsQuery.isPending || treeQuery.isPending;
   const failed = projectsQuery.isError || treeQuery.isError;
+
+  useEffect(() => {
+    deleteCleanupCoordinator.setRouteContext(routeContext);
+  }, [deleteCleanupCoordinator, routeContext]);
+
   const crumbs = [{ title: 'Проекты', href: '/' }];
   if (pathname === '/profile') crumbs.push({ title: 'Профиль', href: '/profile' });
   else if (!pending && !failed && project && (!pageId || page)) {
-    crumbs.push({ title: project.name, href: `/projects/${project.id}` });
+    crumbs.push({ title: project.name, href: workspaceProjectPath(project.id) });
     if (page)
       crumbs.push(
         ...getBreadcrumbs(tree, page.id).map((item) => ({
           title: item.title,
-          href: `/pages/${item.id}`,
+          href: workspacePagePath(item.id),
         })),
       );
   } else if (pathname !== '/') {

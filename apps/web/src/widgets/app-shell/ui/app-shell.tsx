@@ -1,12 +1,6 @@
 'use client';
 
-import {
-  Cancel01Icon,
-  Menu01Icon,
-  PanelLeftCloseIcon,
-  PanelLeftOpenIcon,
-} from '@hugeicons/core-free-icons';
-import { HugeiconsIcon } from '@hugeicons/react';
+import { Menu, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
@@ -86,58 +80,68 @@ export function AppShell({ actions, children, pageTree, user }: AppShellProps) {
         id={DESKTOP_SIDEBAR_ID}
       >
         <div className="flex h-12 shrink-0 items-center justify-end px-3">
-          <Button
-            aria-controls={DESKTOP_SIDEBAR_ID}
-            aria-expanded={!collapsed}
-            aria-label={collapsed ? 'Развернуть боковую панель' : 'Свернуть боковую панель'}
-            onClick={toggleDesktop}
-            size="icon"
-            type="button"
-            variant="ghost"
-          >
-            <HugeiconsIcon icon={collapsed ? PanelLeftOpenIcon : PanelLeftCloseIcon} />
-          </Button>
+          <Tooltip label={collapsed ? 'Развернуть боковую панель' : 'Свернуть боковую панель'}>
+            <Button
+              aria-controls={DESKTOP_SIDEBAR_ID}
+              aria-expanded={!collapsed}
+              aria-label={collapsed ? 'Развернуть боковую панель' : 'Свернуть боковую панель'}
+              onClick={toggleDesktop}
+              size="icon"
+              type="button"
+              variant="ghost"
+            >
+              {collapsed ? (
+                <PanelLeftOpen aria-hidden="true" />
+              ) : (
+                <PanelLeftClose aria-hidden="true" />
+              )}
+            </Button>
+          </Tooltip>
         </div>
         {!collapsed ? <SidebarContent actions={actions} pageTree={pageTree} user={user} /> : null}
       </aside>
 
       <div className="min-w-0 flex-1">
         <div className="flex h-12 items-center border-b px-3 md:hidden">
-          <Modal
-            onOpenChange={setMobileOpen}
-            open={mobileOpen}
-            title="Боковая панель"
-            trigger={
-              <Button
-                aria-controls={MOBILE_SIDEBAR_ID}
-                aria-expanded={mobileOpen}
-                aria-label="Открыть боковую панель"
-                size="icon"
-                type="button"
-                variant="ghost"
-              >
-                <HugeiconsIcon icon={Menu01Icon} />
-              </Button>
-            }
-          >
-            <aside
-              aria-label="Боковая панель"
-              className="flex h-full flex-col"
-              id={MOBILE_SIDEBAR_ID}
-            >
-              <div className="flex h-12 shrink-0 items-center justify-end px-3">
-                <Tooltip label="Закрыть боковую панель">
-                  <ModalPrimitive.Close
-                    aria-label="Закрыть боковую панель"
-                    className="cursor-pointer inline-flex size-7 items-center justify-center rounded-lg hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-sidebar-ring"
+          <Tooltip label="Открыть боковую панель">
+            <span className="inline-flex md:hidden">
+              <Modal
+                onOpenChange={setMobileOpen}
+                open={mobileOpen}
+                title="Боковая панель"
+                trigger={
+                  <Button
+                    aria-controls={MOBILE_SIDEBAR_ID}
+                    aria-expanded={mobileOpen}
+                    aria-label="Открыть боковую панель"
+                    size="icon"
+                    type="button"
+                    variant="ghost"
                   >
-                    <HugeiconsIcon icon={Cancel01Icon} />
-                  </ModalPrimitive.Close>
-                </Tooltip>
-              </div>
-              <SidebarContent actions={actions} pageTree={pageTree} user={user} />
-            </aside>
-          </Modal>
+                    <Menu aria-hidden="true" />
+                  </Button>
+                }
+              >
+                <aside
+                  aria-label="Боковая панель"
+                  className="flex h-full flex-col"
+                  id={MOBILE_SIDEBAR_ID}
+                >
+                  <div className="flex h-12 shrink-0 items-center justify-end px-3">
+                    <Tooltip label="Закрыть боковую панель">
+                      <ModalPrimitive.Close
+                        aria-label="Закрыть боковую панель"
+                        className="cursor-pointer inline-flex size-7 items-center justify-center rounded-lg hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-sidebar-ring"
+                      >
+                        <X aria-hidden="true" />
+                      </ModalPrimitive.Close>
+                    </Tooltip>
+                  </div>
+                  <SidebarContent actions={actions} pageTree={pageTree} user={user} />
+                </aside>
+              </Modal>
+            </span>
+          </Tooltip>
         </div>
         <main className="min-h-[calc(100dvh-3rem)] md:min-h-dvh">{children}</main>
       </div>

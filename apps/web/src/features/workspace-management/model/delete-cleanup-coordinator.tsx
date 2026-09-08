@@ -43,7 +43,7 @@ type PendingDeleteCleanup = PageDeleteCleanupRecord | ProjectDeleteCleanupRecord
 type WorkspaceDeleteCleanupCoordinatorValue = Readonly<{
   schedulePageDeleteCleanup: (record: PageDeleteCleanupRecord) => void;
   scheduleProjectDeleteCleanup: (record: ProjectDeleteCleanupRecord) => void;
-  setRouteContext: (routeContext: WorkspaceRouteContext) => void;
+  setRouteContext: (routeContext: WorkspaceRouteContext | undefined) => void;
 }>;
 
 const WorkspaceDeleteCleanupCoordinatorContext =

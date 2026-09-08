@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { delay, HttpResponse, http } from 'msw';
+import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { WorkspaceDeleteCleanupProvider } from '@/features/workspace-management';
 import { WorkspacePage } from '@/pages/workspace';
-
 import {
   getGetPageTreeQueryKey,
   getListProjectsQueryKey,
@@ -94,18 +95,23 @@ afterEach(() => {
 });
 
 function renderWorkspace(route: WorkspaceRouteContext) {
-  navigation.pathname =
+  const pathname =
     route.type === 'page'
       ? `/pages/${route.pageId}`
       : route.type === 'project'
         ? `/projects/${route.projectId}`
         : '/';
+  return renderPrivateContent(pathname, <WorkspacePage route={route} />);
+}
+
+function renderPrivateContent(pathname: string, children: ReactNode) {
+  navigation.pathname = pathname;
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const view = render(
     <QueryClientProvider client={queryClient}>
-      <PrivateWorkspace>
-        <WorkspacePage route={route} />
-      </PrivateWorkspace>
+      <WorkspaceDeleteCleanupProvider>
+        <PrivateWorkspace>{children}</PrivateWorkspace>
+      </WorkspaceDeleteCleanupProvider>
     </QueryClientProvider>,
   );
 
@@ -136,6 +142,7 @@ describe('workspace page', () => {
     renderWorkspace({ type: 'root' });
 
     expect(await screen.findByRole('heading', { name: 'Проекты', level: 1 })).toBeInTheDocument();
+    expect(screen.getAllByRole('main')).toHaveLength(1);
     const projectList = screen.getByRole('list', { name: 'Список проектов' });
     expect(projectList).toBeInTheDocument();
     expect(within(projectList).getByRole('link', { name: 'Project Alpha' })).toBeInTheDocument();
@@ -153,9 +160,11 @@ describe('workspace page', () => {
     renderWorkspace({ projectId: 'project-a', type: 'project' });
 
     expect(screen.getByText('Загружаем рабочую область…')).toBeInTheDocument();
+    expect(screen.getAllByRole('main')).toHaveLength(1);
     expect(
       await screen.findByRole('heading', { name: 'Project Alpha', level: 1 }),
     ).toBeInTheDocument();
+    expect(screen.getAllByRole('main')).toHaveLength(1);
     expect(await screen.findAllByRole('treeitem', { name: 'Alpha page' })).not.toHaveLength(0);
     expect(await screen.findByText('Other project page')).toBeInTheDocument();
 
@@ -174,6 +183,7 @@ describe('workspace page', () => {
     expect(
       await screen.findByRole('heading', { name: 'Child page', level: 1 }),
     ).toBeInTheDocument();
+    expect(screen.getAllByRole('main')).toHaveLength(1);
     expect(screen.getByRole('navigation', { name: 'Хлебные крошки' })).toHaveTextContent(
       'Alpha page/Child page',
     );
@@ -205,6 +215,7 @@ describe('workspace page', () => {
     renderWorkspace(route);
 
     expect(await screen.findByRole('heading', { name: 'Ничего не найдено' })).toBeInTheDocument();
+    expect(screen.getAllByRole('main')).toHaveLength(1);
     expect(screen.getByRole('link', { name: 'К проектам' })).toHaveAttribute('href', '/');
   });
 
@@ -223,6 +234,7 @@ describe('workspace page', () => {
     expect(
       await screen.findByRole('heading', { name: 'Ошибка загрузки рабочей области' }),
     ).toBeInTheDocument();
+    expect(screen.getAllByRole('main')).toHaveLength(1);
     expect(screen.queryByText('Private database detail')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Повторить' }));
 
@@ -363,6 +375,7 @@ describe('workspace page', () => {
     if (!betaActions) throw new Error('Beta actions are unavailable');
     fireEvent.click(betaActions);
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить' }));
 
     await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('beta'));
     await waitFor(() =>
@@ -397,6 +410,7 @@ describe('workspace page', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Действия для Child page' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить' }));
 
     await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('child'));
     expect(navigation.replace).toHaveBeenCalledWith('/projects/project-a');
@@ -428,6 +442,7 @@ describe('workspace page', () => {
     if (!alphaAction) throw new Error('Alpha actions are unavailable');
     fireEvent.click(alphaAction);
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить' }));
 
     await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('alpha'));
     expect(navigation.replace).toHaveBeenCalledWith('/projects/project-a');
@@ -452,6 +467,7 @@ describe('workspace page', () => {
     if (!betaActions) throw new Error('Beta actions are unavailable');
     fireEvent.click(betaActions);
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить' }));
 
     const pendingButton = await screen.findByRole('button', { name: 'Удаляем…' });
     expect(pendingButton).toBeDisabled();
@@ -478,6 +494,7 @@ describe('workspace page', () => {
     if (!betaActions) throw new Error('Beta actions are unavailable');
     fireEvent.click(betaActions);
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Ошибка удаления страницы. Попробуйте ещё раз.',
@@ -537,6 +554,7 @@ describe('workspace page', () => {
       await screen.findByRole('button', { name: 'Действия для проекта Project Beta' }),
     );
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить проект' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить' }));
 
     await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('project-b'));
     await waitFor(() =>
@@ -544,6 +562,30 @@ describe('workspace page', () => {
     );
     expect(screen.queryByRole('treeitem', { name: 'Other project page' })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Project Alpha' })).toBeInTheDocument();
+    expect(navigation.replace).not.toHaveBeenCalled();
+  });
+
+  it('не меняет profile route при удалении unrelated project из navigation', async () => {
+    const deleteRequests = vi.fn();
+    server.use(
+      http.delete('*/api/v1/projects/:projectId', ({ params }) => {
+        deleteRequests(params.projectId);
+        currentProjects = currentProjects.filter((project) => project.id !== params.projectId);
+        currentTree = currentTree.filter((pageNode) => pageNode.projectId !== params.projectId);
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    renderPrivateContent('/profile', <h1>Профиль</h1>);
+    await screen.findByRole('heading', { name: 'Профиль' });
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Действия для проекта Project Beta' }),
+    );
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить проект' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить' }));
+
+    await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('project-b'));
+    expect(screen.getByRole('heading', { name: 'Профиль' })).toBeInTheDocument();
     expect(navigation.replace).not.toHaveBeenCalled();
   });
 
@@ -561,6 +603,7 @@ describe('workspace page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Действия для проекта Project Alpha' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить проект' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить' }));
 
     await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('project-a'));
     expect(navigation.replace).toHaveBeenCalledWith('/');
@@ -608,6 +651,7 @@ describe('workspace page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Действия для проекта Project Alpha' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить проект' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить' }));
 
     await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('project-a'));
     expect(navigation.replace).toHaveBeenCalledWith('/');

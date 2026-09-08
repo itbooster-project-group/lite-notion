@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { PrivateRoute } from '@/app/routing';
+import { WorkspaceDeleteCleanupProvider } from '@/features/workspace-management';
 import { PrivateWorkspace } from './private-workspace';
 
 type PrivateLayoutProps = Readonly<{
@@ -10,7 +11,9 @@ type PrivateLayoutProps = Readonly<{
 export function PrivateLayout({ children }: PrivateLayoutProps) {
   return (
     <PrivateRoute>
-      <PrivateWorkspace>{children}</PrivateWorkspace>
+      <WorkspaceDeleteCleanupProvider>
+        <PrivateWorkspace>{children}</PrivateWorkspace>
+      </WorkspaceDeleteCleanupProvider>
     </PrivateRoute>
   );
 }

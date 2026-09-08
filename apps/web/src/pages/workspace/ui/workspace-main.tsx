@@ -38,7 +38,7 @@ export function WorkspaceMain({
 
   if (!page) {
     return (
-      <main className="min-w-0 p-6 sm:p-8">
+      <section className="min-w-0 p-6 sm:p-8">
         <PageTree
           activePageId={undefined}
           header={
@@ -54,20 +54,20 @@ export function WorkspaceMain({
           onRequestDeletePage={onRequestDeletePage}
           onSelectPage={(pageId) => router.push(workspacePagePath(pageId))}
         />
-      </main>
+      </section>
     );
   }
 
   return (
-    <main className="min-w-0 p-6 sm:p-8">
-      <section className="space-y-6">
+    <section className="min-w-0 p-6 sm:p-8">
+      <div className="space-y-6">
         <Heading as="h1" variant="page">
           {getPageDisplayTitle(page.title)}
         </Heading>
         <div className="rounded-xl border border-dashed bg-muted/30 p-8">
           <Text variant="caption">Редактор страницы появится в следующем обновлении.</Text>
         </div>
-      </section>
-    </main>
+      </div>
+    </section>
   );
 }

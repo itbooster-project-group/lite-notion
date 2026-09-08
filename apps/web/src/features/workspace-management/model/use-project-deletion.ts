@@ -13,7 +13,7 @@ import {
 import { type WorkspaceRouteContext, workspaceRootPath } from '@/shared/routing';
 import { useWorkspaceDeleteCleanupCoordinator } from './delete-cleanup-coordinator';
 
-export function useProjectDeletion(routeContext: WorkspaceRouteContext) {
+export function useProjectDeletion(routeContext: WorkspaceRouteContext | undefined) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const deleteCleanupCoordinator = useWorkspaceDeleteCleanupCoordinator();
@@ -27,9 +27,9 @@ export function useProjectDeletion(routeContext: WorkspaceRouteContext) {
     const normalizedTree = normalizePageTree(pageTreeSnapshot);
     const projectsQueryKey = getListProjectsQueryKey();
     const affectsCurrentRoute =
-      routeContext.type === 'project'
+      routeContext?.type === 'project'
         ? routeContext.projectId === projectId
-        : routeContext.type === 'page' &&
+        : routeContext?.type === 'page' &&
           selectPage(normalizedTree, routeContext.pageId)?.projectId === projectId;
 
     if (affectsCurrentRoute) {
@@ -39,7 +39,7 @@ export function useProjectDeletion(routeContext: WorkspaceRouteContext) {
 
     await deleteMutation.mutateAsync({ projectId });
 
-    if (affectsCurrentRoute) {
+    if (affectsCurrentRoute && routeContext) {
       router.replace(workspaceRootPath());
       deleteCleanupCoordinator.scheduleProjectDeleteCleanup({
         kind: 'project',
