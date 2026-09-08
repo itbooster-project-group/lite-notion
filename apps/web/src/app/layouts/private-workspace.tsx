@@ -178,14 +178,20 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
   return (
     <WorkspaceTreeExpansionProvider>
       <AppShell pageTree={navigation}>
-        <PrivateShell breadcrumbs={breadcrumbs}>{children}</PrivateShell>
-        <DeleteConfirmationDialog
-          error={deleteError}
-          intent={toDeleteConfirmationIntent(deleteIntent)}
-          pending={deletePending}
-          onCancel={closeDeleteDialog}
-          onConfirm={() => void submitDelete()}
-        />
+        {({ mobileNavigationTrigger }) => (
+          <>
+            <PrivateShell breadcrumbs={breadcrumbs} headerStart={mobileNavigationTrigger}>
+              {children}
+            </PrivateShell>
+            <DeleteConfirmationDialog
+              error={deleteError}
+              intent={toDeleteConfirmationIntent(deleteIntent)}
+              pending={deletePending}
+              onCancel={closeDeleteDialog}
+              onConfirm={() => void submitDelete()}
+            />
+          </>
+        )}
       </AppShell>
     </WorkspaceTreeExpansionProvider>
   );

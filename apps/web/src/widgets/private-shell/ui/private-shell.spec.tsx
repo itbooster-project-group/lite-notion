@@ -33,7 +33,8 @@ describe('private shell navigation', () => {
     expect(screen.getByRole('navigation', { name: 'Хлебные крошки' })).toHaveTextContent('Проекты');
     const headerContent = screen.getByRole('banner').firstElementChild;
     expect(headerContent).not.toHaveClass('max-w-shell', 'mx-auto');
-    expect(headerContent).toHaveClass('pl-14', 'pr-page-inline', 'md:px-page-inline');
+    expect(headerContent).toHaveClass('px-page-inline');
+    expect(headerContent).not.toHaveClass('pl-14', 'pr-page-inline', 'md:px-page-inline');
 
     const profileLink = screen.getByRole('link', { name: 'Ada Lovelace' });
     expect(profileLink).toHaveAttribute('href', '/profile');
@@ -45,6 +46,22 @@ describe('private shell navigation', () => {
     expect(screen.queryByRole('link', { name: 'Профиль' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Выйти' })).toBeInTheDocument();
     expect(screen.getByText('Приватный экран')).toBeInTheDocument();
+  });
+
+  it('рендерит headerStart как обычный слот без компенсации layout под внешний trigger', () => {
+    render(
+      <PrivateShell
+        breadcrumbs={<nav aria-label="Хлебные крошки">Проекты</nav>}
+        headerStart={<button type="button">Меню</button>}
+      >
+        Контент
+      </PrivateShell>,
+    );
+
+    const headerContent = screen.getByRole('banner').firstElementChild;
+    expect(screen.getByRole('button', { name: 'Меню' })).toBeInTheDocument();
+    expect(headerContent).toHaveClass('px-page-inline');
+    expect(headerContent).not.toHaveClass('pl-14', 'ml-14');
   });
 
   it('сохраняет доступный переход в профиль до появления имени пользователя', () => {

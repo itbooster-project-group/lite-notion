@@ -92,6 +92,27 @@ describe('AppShell', () => {
     expect(document.querySelector('[data-slot="sidebar-page-tree"]')).not.toBeInTheDocument();
   });
 
+  it('передаёт mobile trigger в render-prop children без overlay positioning contract', async () => {
+    render(
+      <AppShell>
+        {({ mobileNavigationTrigger }) => (
+          <section>
+            <header>{mobileNavigationTrigger}</header>
+            <h1>Рабочая область</h1>
+          </section>
+        )}
+      </AppShell>,
+    );
+
+    const trigger = await screen.findByRole('button', { name: 'Открыть боковую панель' });
+    const triggerContainer = trigger.closest('[data-slot="mobile-navigation-trigger"]');
+
+    expect(triggerContainer).toHaveClass('md:hidden');
+    expect(triggerContainer).not.toHaveClass('absolute');
+    expect(screen.getAllByRole('main')).toHaveLength(1);
+    expect(screen.getByRole('main')).toHaveTextContent('Рабочая область');
+  });
+
   it('сворачивает и разворачивает desktop-сайдбар доступной кнопкой', async () => {
     renderShell();
     const collapse = await screen.findByRole('button', { name: 'Свернуть боковую панель' });
@@ -163,14 +184,15 @@ describe('AppShell', () => {
     expect(useAppShellStore.getState().desktopCollapsed).toBe(false);
   });
 
-  it('задаёт responsive-контракт desktop sidebar и mobile trigger', async () => {
+  it('задаёт responsive-контракт desktop sidebar и mobile trigger без координатного coupling', async () => {
     renderShell();
     const desktopSidebar = await screen.findByRole('complementary', { name: 'Боковая панель' });
     const mobileTrigger = screen.getByRole('button', { name: 'Открыть боковую панель' });
     const mobileTriggerContainer = mobileTrigger.closest('[data-slot="mobile-navigation-trigger"]');
 
     expect(desktopSidebar).toHaveClass('hidden', 'md:flex');
-    expect(mobileTriggerContainer).toHaveClass('absolute', 'top-4', 'left-3', 'md:hidden');
+    expect(mobileTriggerContainer).toHaveClass('md:hidden');
+    expect(mobileTriggerContainer).not.toHaveClass('absolute');
     expect(screen.getByRole('main')).toHaveClass('min-h-dvh');
     expect(screen.getByRole('main')).not.toHaveClass('min-h-[calc(100dvh-3rem)]');
   });
