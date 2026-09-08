@@ -17,7 +17,7 @@ export function PrivateShell({ children, breadcrumbs }: PrivateShellProps) {
   return (
     <div className="grid min-h-dvh grid-rows-[auto_minmax(0,1fr)] bg-background">
       <header className="border-b bg-card">
-        <div className="flex items-center justify-between gap-4 px-page-inline py-4">
+        <div className="flex items-center justify-between gap-4 py-4 pr-page-inline pl-14 md:px-page-inline">
           {breadcrumbs}
           <div className="flex shrink-0 items-center gap-3">
             <Link

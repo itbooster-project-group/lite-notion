@@ -31,7 +31,9 @@ describe('private shell navigation', () => {
 
     expect(screen.queryByRole('link', { name: 'Lite Notion' })).not.toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Хлебные крошки' })).toHaveTextContent('Проекты');
-    expect(screen.getByRole('banner').firstElementChild).not.toHaveClass('max-w-shell', 'mx-auto');
+    const headerContent = screen.getByRole('banner').firstElementChild;
+    expect(headerContent).not.toHaveClass('max-w-shell', 'mx-auto');
+    expect(headerContent).toHaveClass('pl-14', 'pr-page-inline', 'md:px-page-inline');
 
     const profileLink = screen.getByRole('link', { name: 'Ada Lovelace' });
     expect(profileLink).toHaveAttribute('href', '/profile');

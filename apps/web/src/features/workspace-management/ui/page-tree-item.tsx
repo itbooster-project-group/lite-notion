@@ -2,14 +2,13 @@
 
 import type { ItemInstance } from '@headless-tree/core';
 import { ChevronDown, ChevronRight, GripVertical, MoreHorizontal, Trash2 } from 'lucide-react';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import type { PageTreeItemData } from '@/entities/page';
 import { Button, Input, Menu, MenuItem, MenuPopup, MenuTrigger, Tooltip } from '@/shared/ui';
 import type { PageDeleteRequest } from '../model/delete-intent';
 import { PageDraft } from './page-draft';
 
 type PageTreeItemProps = Readonly<{
-  actionsOpen: boolean;
   active: boolean;
   createDraft: boolean;
   createDraftError: string | undefined;
@@ -18,7 +17,6 @@ type PageTreeItemProps = Readonly<{
   indentPx: number;
   item: ItemInstance<PageTreeItemData>;
   renameError: string | undefined;
-  onActionsOpenChange: (open: boolean) => void;
   onCancelCreate: () => void;
   onCancelRename: () => void;
   onChangeCreate: (value: string) => void;
@@ -30,7 +28,6 @@ type PageTreeItemProps = Readonly<{
 }>;
 
 export function PageTreeItem({
-  actionsOpen,
   active,
   createDraft,
   createDraftError,
@@ -39,7 +36,6 @@ export function PageTreeItem({
   indentPx,
   item,
   renameError,
-  onActionsOpenChange,
   onCancelCreate,
   onCancelRename,
   onChangeCreate,
@@ -51,6 +47,8 @@ export function PageTreeItem({
 }: PageTreeItemProps) {
   const actionsRef = useRef<HTMLButtonElement>(null);
   const moveRequestRef = useRef<{ returnFocus: HTMLElement | undefined } | undefined>(undefined);
+  const renameRequestRef = useRef(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const data = item.getItemData();
   const level = item.getItemMeta().level;
   const itemProps = item.getProps();
@@ -65,6 +63,11 @@ export function PageTreeItem({
           active ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/60'
         }`}
         style={{ paddingLeft: `${Math.max(0, level) * indentPx}px` }}
+        onClick={(event) => {
+          if (!event.currentTarget.contains(event.target as Node)) return;
+          if ((event.target as HTMLElement).closest('button, input')) return;
+          itemProps.onClick?.(event);
+        }}
         onKeyDown={(event) => {
           itemProps.onKeyDown?.(event);
           if (event.target === event.currentTarget && event.key === 'Enter') {
@@ -134,10 +137,15 @@ export function PageTreeItem({
 
         <Menu
           modal={false}
-          open={actionsOpen}
-          onOpenChange={onActionsOpenChange}
+          open={menuOpen}
+          onOpenChange={setMenuOpen}
           onOpenChangeComplete={(open) => {
-            if (open || !moveRequestRef.current) return;
+            if (open) return;
+            if (renameRequestRef.current) {
+              item.startRenaming();
+              return;
+            }
+            if (!moveRequestRef.current) return;
             const { returnFocus } = moveRequestRef.current;
             moveRequestRef.current = undefined;
             onStartMove(returnFocus);
@@ -149,14 +157,21 @@ export function PageTreeItem({
             render={<Button size="icon-sm" variant="ghost" />}
             onClick={(event) => {
               event.stopPropagation();
-              onActionsOpenChange(true);
+              renameRequestRef.current = false;
+              setMenuOpen(true);
             }}
           >
             <MoreHorizontal aria-hidden="true" />
           </MenuTrigger>
-          <MenuPopup sideOffset={4}>
+          <MenuPopup finalFocus={() => !renameRequestRef.current} sideOffset={4}>
             <MenuItem onClick={onCreateChild}>Добавить дочернюю</MenuItem>
-            <MenuItem onClick={() => item.startRenaming()}>Переименовать</MenuItem>
+            <MenuItem
+              onClick={() => {
+                renameRequestRef.current = true;
+              }}
+            >
+              Переименовать
+            </MenuItem>
             <MenuItem
               onClick={() => {
                 moveRequestRef.current = { returnFocus: actionsRef.current ?? undefined };

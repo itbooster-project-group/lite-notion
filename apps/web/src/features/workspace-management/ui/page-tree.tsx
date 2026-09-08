@@ -66,7 +66,6 @@ export function PageTree({
   const creatingRef = useRef(false);
   const [movingPageId, setMovingPageId] = useState<string>();
   const [moveReturnFocus, setMoveReturnFocus] = useState<HTMLElement>();
-  const [actionsPageId, setActionsPageId] = useState<string>();
   const treeMovePendingRef = useRef(false);
   const [treeMoveError, setTreeMoveError] = useState<string>();
 
@@ -236,7 +235,6 @@ export function PageTree({
       <div {...tree.getContainerProps('Страницы проекта')} className="space-y-0.5">
         {items.map((item) => (
           <PageTreeItem
-            actionsOpen={actionsPageId === item.getId()}
             active={item.getId() === activePageId}
             createDraft={draftParentId === item.getId()}
             createDraftError={draftError}
@@ -246,7 +244,6 @@ export function PageTree({
             item={item}
             key={item.getKey()}
             renameError={renameError}
-            onActionsOpenChange={(open) => setActionsPageId(open ? item.getId() : undefined)}
             onCancelCreate={() => setDraftParentId(undefined)}
             onCancelRename={() => tree.abortRenaming()}
             onChangeCreate={setDraftTitle}

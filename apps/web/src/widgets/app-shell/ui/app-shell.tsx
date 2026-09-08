@@ -101,10 +101,10 @@ export function AppShell({ actions, children, pageTree, user }: AppShellProps) {
         {!collapsed ? <SidebarContent actions={actions} pageTree={pageTree} user={user} /> : null}
       </aside>
 
-      <div className="min-w-0 flex-1">
-        <div className="flex h-12 items-center border-b px-3 md:hidden">
+      <div className="relative min-w-0 flex-1">
+        <div className="absolute top-4 left-3 z-10 md:hidden" data-slot="mobile-navigation-trigger">
           <Tooltip label="Открыть боковую панель">
-            <span className="inline-flex md:hidden">
+            <span className="inline-flex">
               <Modal
                 onOpenChange={setMobileOpen}
                 open={mobileOpen}
@@ -143,7 +143,7 @@ export function AppShell({ actions, children, pageTree, user }: AppShellProps) {
             </span>
           </Tooltip>
         </div>
-        <main className="min-h-[calc(100dvh-3rem)] md:min-h-dvh">{children}</main>
+        <main className="min-h-dvh">{children}</main>
       </div>
     </div>
   );

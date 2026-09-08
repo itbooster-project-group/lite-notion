@@ -167,8 +167,11 @@ describe('AppShell', () => {
     renderShell();
     const desktopSidebar = await screen.findByRole('complementary', { name: 'Боковая панель' });
     const mobileTrigger = screen.getByRole('button', { name: 'Открыть боковую панель' });
+    const mobileTriggerContainer = mobileTrigger.closest('[data-slot="mobile-navigation-trigger"]');
 
     expect(desktopSidebar).toHaveClass('hidden', 'md:flex');
-    expect(mobileTrigger.parentElement).toHaveClass('md:hidden');
+    expect(mobileTriggerContainer).toHaveClass('absolute', 'top-4', 'left-3', 'md:hidden');
+    expect(screen.getByRole('main')).toHaveClass('min-h-dvh');
+    expect(screen.getByRole('main')).not.toHaveClass('min-h-[calc(100dvh-3rem)]');
   });
 });
