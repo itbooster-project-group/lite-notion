@@ -1,7 +1,6 @@
 'use client';
 
-import { Logout01Icon } from '@hugeicons/core-free-icons';
-import { HugeiconsIcon } from '@hugeicons/react';
+import { LogOut } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
@@ -46,7 +45,7 @@ export function LogoutButton() {
         type="button"
         variant="ghost"
       >
-        <HugeiconsIcon aria-hidden="true" icon={Logout01Icon} strokeWidth={2} />
+        <LogOut aria-hidden="true" />
       </Button>
       {error ? (
         <Text variant="error" className="text-xs" role="alert">
