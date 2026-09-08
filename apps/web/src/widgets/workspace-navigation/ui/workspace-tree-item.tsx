@@ -1,9 +1,14 @@
 'use client';
 
 import type { ItemInstance } from '@headless-tree/core';
-import { PlusSignIcon } from '@hugeicons/core-free-icons';
-import { HugeiconsIcon } from '@hugeicons/react';
-import { MoreHorizontal, Trash2 } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  GripVertical,
+  MoreHorizontal,
+  Plus,
+  Trash2,
+} from 'lucide-react';
 import { useRef, useState } from 'react';
 import {
   type PageDeleteRequest,
@@ -86,7 +91,7 @@ export function WorkspaceTreeItem({
         {data.hasChildren ? (
           <button
             aria-label={item.isExpanded() ? `Свернуть ${data.title}` : `Раскрыть ${data.title}`}
-            className="size-7 shrink-0 rounded text-muted-foreground"
+            className="inline-flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground"
             tabIndex={-1}
             type="button"
             onClick={(event) => {
@@ -95,7 +100,11 @@ export function WorkspaceTreeItem({
               else item.expand();
             }}
           >
-            {item.isExpanded() ? '▾' : '▸'}
+            {item.isExpanded() ? (
+              <ChevronDown aria-hidden="true" className="pointer-events-none size-4 shrink-0" />
+            ) : (
+              <ChevronRight aria-hidden="true" className="pointer-events-none size-4 shrink-0" />
+            )}
           </button>
         ) : (
           <span aria-hidden="true" className="size-7 shrink-0" />
@@ -131,11 +140,11 @@ export function WorkspaceTreeItem({
             <button
               {...item.getDragHandleProps()}
               aria-label={`Перетащить ${data.title}`}
-              className="size-7 shrink-0 rounded text-muted-foreground opacity-0 focus:opacity-100 group-hover:opacity-100"
+              className="inline-flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 focus:opacity-100 group-hover:opacity-100"
               type="button"
               onClick={(event) => event.stopPropagation()}
             >
-              ⋮⋮
+              <GripVertical aria-hidden="true" className="pointer-events-none size-4 shrink-0" />
             </button>
             <Menu
               modal={false}
@@ -198,7 +207,7 @@ export function WorkspaceTreeItem({
                 onCreateChild();
               }}
             >
-              <HugeiconsIcon aria-hidden="true" icon={PlusSignIcon} strokeWidth={2} />
+              <Plus aria-hidden="true" />
             </Button>
             <Menu modal={false} open={menuOpen} onOpenChange={setMenuOpen}>
               <MenuTrigger

@@ -19,6 +19,8 @@ These instructions apply to `apps/web` and extend the repository-level `AGENTS.m
 
 Tailwind CSS and shadcn/ui provide the styling and shared UI foundation. Import project wrappers through `src/shared/ui` instead of importing generated shadcn primitives directly from route or product code. TanStack Query is the server-state boundary and generated API hooks live under `src/shared/api/generated`; update generated files through the root `pnpm api:generate` command. React Hook Form and Zod own client form validation; Zustand remains absent until an approved change requires global client state.
 
+Use `lucide-react` for UI icons. Import icons directly from `lucide-react`, keep decorative icons `aria-hidden`, and rely on existing Button/shadcn sizing classes unless a local component already owns a fixed icon size.
+
 MSW handlers are generated from the API snapshot and shared by Vitest and the opt-in development browser worker. Keep browser mocking disabled by default, fail tests on unhandled API requests, and override handlers per test instead of duplicating endpoint mocks.
 
 ## Testing
