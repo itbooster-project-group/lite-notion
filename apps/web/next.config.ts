@@ -6,8 +6,11 @@ import {
   PAGE_DOCUMENT_SECURITY_HEADER_SOURCE,
 } from './src/app/page-document-security-headers';
 
+const lanDevHost = process.env.NODE_ENV === 'development' ? process.env.LAN_HOST : undefined;
+
 const nextConfig: NextConfig = {
   agentRules: false,
+  ...(lanDevHost === undefined || lanDevHost === '' ? {} : { allowedDevOrigins: [lanDevHost] }),
   experimental: {
     turbopackPluginRuntimeStrategy: 'workerThreads',
   },
