@@ -50,7 +50,7 @@ The committed `openapi.json` snapshot is generated from Nest metadata. After cha
 - `pnpm --filter @lite-notion/api dev`: start the API in watch mode.
 - `pnpm --filter @lite-notion/api typecheck`: run the API TypeScript check.
 - `pnpm --filter @lite-notion/api test`: run the API test suite.
-- `pnpm --filter @lite-notion/api prisma:generate`: regenerate the ignored Prisma Client output.
+- `pnpm --filter @lite-notion/database prisma:generate`: regenerate the ignored Prisma Client output in `packages/database`.
 - `pnpm --filter @lite-notion/api build`: compile the production output.
 - `pnpm lint`: run the repository Biome check from the root.
 

@@ -8,9 +8,6 @@ const localDatabaseUrl =
 const variableReference = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 const maxExpansionDepth = 8;
 
-// `dotenv` keeps `${VAR}` literal, while the API expands it through `@nestjs/config`
-// (`expandVariables: true`). Mirror that here so the Prisma CLI reads the same URL as
-// the running application instead of an unusable literal.
 const expandVariables = (value: string): string => {
   let expanded = value;
 

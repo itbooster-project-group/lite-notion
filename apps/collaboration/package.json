@@ -1,0 +1,31 @@
+{
+  "name": "@lite-notion/collaboration",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch --env-file=.env src/main.ts",
+    "prebuild": "pnpm --filter @lite-notion/database build && pnpm --filter @lite-notion/auth-token build",
+    "pretest": "pnpm --filter @lite-notion/database build && pnpm --filter @lite-notion/auth-token build",
+    "pretypecheck": "pnpm --filter @lite-notion/database build && pnpm --filter @lite-notion/auth-token build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@hocuspocus/server": "^4.6.0",
+    "@lite-notion/auth-token": "workspace:*",
+    "@lite-notion/database": "workspace:*",
+    "yjs": "catalog:"
+  },
+  "devDependencies": {
+    "@hocuspocus/provider": "^4.6.0",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "catalog:",
+    "@types/ws": "^8.18.1",
+    "jsonwebtoken": "^9.0.3",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "ws": "^8.21.3"
+  }
+}

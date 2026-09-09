@@ -1,10 +1,8 @@
 import { randomUUID } from 'node:crypto';
-
+import { PrismaClient } from '@lite-notion/database';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-
 import type { PrismaService } from '../database/prisma.service';
-import { PrismaClient } from '../generated/prisma/client';
 import { PrismaTrashCleanupRepository } from './trash-cleanup.repository';
 
 /**

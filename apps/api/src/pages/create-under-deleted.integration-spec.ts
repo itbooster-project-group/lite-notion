@@ -1,11 +1,10 @@
 import { randomUUID } from 'node:crypto';
-
+import { PrismaClient } from '@lite-notion/database';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PurgeConfirmationRequiredError } from '../common/errors';
 import type { PrismaService } from '../database/prisma.service';
 import { PrismaTransactionRunner } from '../database/transaction';
-import { PrismaClient } from '../generated/prisma/client';
 import { ProjectNotFoundError } from '../projects/errors';
 import { PrismaProjectsRepository } from '../projects/projects.repository';
 import { PurgeProjectUseCase } from '../projects/use-cases/purge-project.use-case';

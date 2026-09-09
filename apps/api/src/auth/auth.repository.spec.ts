@@ -1,6 +1,5 @@
+import { Prisma } from '@lite-notion/database';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { Prisma } from '../generated/prisma/client';
 import { PrismaAuthRepository } from './auth.repository';
 import { EmailAlreadyRegisteredError } from './errors';
 

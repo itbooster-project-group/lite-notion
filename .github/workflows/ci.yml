@@ -72,3 +72,28 @@ jobs:
       - run: pnpm --filter @lite-notion/api run typecheck
       - run: pnpm --filter @lite-notion/api run test
       - run: pnpm --filter @lite-notion/api run build
+
+  collaboration:
+    name: collaboration
+    runs-on: ubuntu-latest
+    env:
+      COLLABORATION_ALLOWED_ORIGIN: http://localhost:3000
+      COLLABORATION_WEBSOCKET_MAX_PAYLOAD_BYTES: 1048576
+      DATABASE_CONNECTION_TIMEOUT_MS: 5000
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      NODE_ENV: test
+      PORT: 3002
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.21.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @lite-notion/collaboration run typecheck
+      - run: pnpm --filter @lite-notion/collaboration run test
+      - run: pnpm --filter @lite-notion/collaboration run build
