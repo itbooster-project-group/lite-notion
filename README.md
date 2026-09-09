@@ -62,6 +62,20 @@ pnpm dev
 - Swagger UI: [http://localhost:3001/api/docs](http://localhost:3001/api/docs);
 - OpenAPI JSON: [http://localhost:3001/api/openapi.json](http://localhost:3001/api/openapi.json).
 
+Для проверки с телефона, планшета или другого компьютера в той же сети запустите LAN-режим:
+
+```bash
+pnpm dev:lan
+```
+
+Команда определит private LAN IPv4, поднимет PostgreSQL, запустит web на `0.0.0.0:3000`, передаст frontend адрес API вида `http://<IP>:3001`, отключит browser API mocking для этого запуска через `NEXT_PUBLIC_API_MOCKING=disabled` и выведет адреса `Web` и `API`. Устройства должны быть в одной сети; операционная система может показать firewall prompt для входящих соединений.
+
+Если адрес нужно выбрать вручную, передайте client-usable IPv4 явно:
+
+```bash
+LAN_HOST=<IP> pnpm dev:lan
+```
+
 Проверить API можно из терминала:
 
 ```bash
@@ -175,6 +189,7 @@ pnpm db:down
 | Команда | Назначение |
 | --- | --- |
 | `pnpm dev` | Поднять PostgreSQL, дождаться healthcheck и запустить frontend и API в watch mode |
+| `pnpm dev:lan` | Поднять development окружение для устройств в той же сети; при необходимости адрес задаётся через `LAN_HOST=<IP>` |
 | `pnpm dev:web` | Запустить только frontend без API и Docker; API mocking определяется web environment |
 | `pnpm dev:api` | Поднять PostgreSQL, дождаться healthcheck и запустить API в watch mode |
 | `pnpm db:up` | Поднять локальный PostgreSQL и дождаться healthcheck |
