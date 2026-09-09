@@ -1,9 +1,11 @@
+import { DOCUMENT_MAX_BYTES } from '@lite-notion/database';
 import { describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
 
 import {
   createDocumentFromState,
   DocumentLoadError,
+  DocumentSizeLimitExceededError,
   DocumentStoreSkippedError,
   PageDocumentPersistence,
 } from './persistence';
@@ -70,5 +72,17 @@ describe('PageDocumentPersistence', () => {
     await expect(
       service.store('page:550e8400-e29b-41d4-a716-446655440000', new Y.Doc()),
     ).rejects.toThrow(DocumentStoreSkippedError);
+  });
+
+  it('проверяет размер итогового Yjs state отдельно от WebSocket payload', async () => {
+    const updateMany = vi.fn(async () => ({ count: 1 }));
+    const service = new PageDocumentPersistence({ pageDocument: { updateMany } } as never);
+    const document = new Y.Doc();
+    document.getText('body').insert(0, 'x'.repeat(DOCUMENT_MAX_BYTES));
+
+    await expect(
+      service.store('page:550e8400-e29b-41d4-a716-446655440000', document),
+    ).rejects.toThrow(DocumentSizeLimitExceededError);
+    expect(updateMany).not.toHaveBeenCalled();
   });
 });

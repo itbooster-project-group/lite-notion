@@ -100,8 +100,8 @@ export function createCollaborationConfig(
     nodeEnvironment: validateNodeEnvironment(environment.NODE_ENV),
     port: parseInteger('PORT', environment.PORT, 1, 65_535),
     websocketMaxPayloadBytes: parseInteger(
-      'COLLABORATION_WEBSOCKET_MAX_PAYLOAD_BYTES',
-      environment.COLLABORATION_WEBSOCKET_MAX_PAYLOAD_BYTES,
+      'WEBSOCKET_MAX_PAYLOAD_BYTES',
+      environment.WEBSOCKET_MAX_PAYLOAD_BYTES,
       1,
       10 * 1024 * 1024,
     ),

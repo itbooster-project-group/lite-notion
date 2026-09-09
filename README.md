@@ -124,7 +124,7 @@ Collaboration runtime использует следующие переменны
 | `DATABASE_URL` | local Compose URL | PostgreSQL URL с protocol `postgresql` или `postgres` |
 | `DATABASE_CONNECTION_TIMEOUT_MS` | `5000` | Целое число от 1 до 60000 |
 | `JWT_SECRET` | `local-development-only-change-me-before-deploy` | Тот же secret, которым API подписывает access JWT; строка длиной не менее 32 символов |
-| `COLLABORATION_WEBSOCKET_MAX_PAYLOAD_BYTES` | `1048576` | Положительное целое число, aligned with `DOCUMENT_MAX_BYTES` |
+| `WEBSOCKET_MAX_PAYLOAD_BYTES` | `1048576` | Положительное целое число для одного WebSocket payload; не ограничивает итоговый Yjs-документ |
 
 Collaboration service уже можно запускать и тестировать отдельно, но текущий frontend ещё не подключён к Hocuspocus provider. До будущей миграции редактора обычный editor traffic продолжает идти через существующий REST write-path API.
 

@@ -69,3 +69,11 @@
 - [x] 10.1 Запустить `openspec validate add-collaboration-service --strict`.
 - [x] 10.2 Запустить required checks для implemented scope: install/dedupe, если manifests менялись, lint, typecheck, tests и build.
 - [x] 10.3 Вручную проверить local startup shape: PostgreSQL, web `:3000`, API `:3001`, collaboration `:3002`; REST editor behavior remains unchanged и ordinary editor traffic не попадает в collaboration до future provider migration.
+
+## 11. Runtime hardening
+
+- [x] 11.1 При conditional store с `0 rows` закрывать connections активной комнаты и выгружать document state без retryable persistence error; добавить сценарий `connect → delete → mutate → restore`.
+- [x] 11.2 Разделить `WEBSOCKET_MAX_PAYLOAD_BYTES` и проверку итогового `Y.encodeStateAsUpdate` через `DOCUMENT_MAX_BYTES`.
+- [x] 11.3 Исправить concurrent updates test так, чтобы оба клиента меняли локальные документы до получения удалённого update.
+- [x] 11.4 Добавить persistence integration test на PostgreSQL/Prisma с reload, `storageRevision` и soft-delete invariant.
+- [x] 11.5 Передавать `PageAccess.canWrite` в Hocuspocus `connectionConfig.readOnly` без новой permissions-архитектуры.

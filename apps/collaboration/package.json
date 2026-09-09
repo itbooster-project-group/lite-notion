@@ -9,6 +9,7 @@
     "pretest": "pnpm --filter @lite-notion/database build && pnpm --filter @lite-notion/auth-token build",
     "pretypecheck": "pnpm --filter @lite-notion/database build && pnpm --filter @lite-notion/auth-token build",
     "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.mts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {

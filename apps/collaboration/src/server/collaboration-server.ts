@@ -6,7 +6,11 @@ import { assertAllowedOrigin } from '../auth/origin';
 import type { CollaborationConfig } from '../config/environment';
 import { parsePageDocumentName } from '../documents/document-name';
 import { type PageAccess, PageAccessService } from '../documents/page-access';
-import { DocumentStoreSkippedError, PageDocumentPersistence } from '../documents/persistence';
+import {
+  DocumentSizeLimitExceededError,
+  DocumentStoreSkippedError,
+  PageDocumentPersistence,
+} from '../documents/persistence';
 import type { CollaborationLogger } from '../logging/logger';
 
 export interface CollaborationContext {
@@ -40,12 +44,13 @@ export function createCollaborationServer(
     websocketOptions: {
       maxPayload: config.websocketMaxPayloadBytes,
     },
-    async onAuthenticate({ documentName, requestHeaders, token }) {
+    async onAuthenticate({ connectionConfig, documentName, requestHeaders, token }) {
       try {
         assertAllowedOrigin(requestHeaders, config.allowedOrigin);
         const user = authenticateAccessToken(token, requestHeaders, config.jwtSecret);
         const { pageId } = parsePageDocumentName(documentName);
         const pageAccess = await access.authorize(user.userId, pageId);
+        connectionConfig.readOnly = !pageAccess.canWrite;
 
         return {
           pageAccess,
@@ -70,12 +75,23 @@ export function createCollaborationServer(
         throw error;
       }
     },
-    async onStoreDocument({ document, documentName }) {
+    async onStoreDocument({ document, documentName, instance }) {
       try {
         await persistence.store(documentName, document);
       } catch (error) {
-        const level = error instanceof DocumentStoreSkippedError ? 'warn' : 'error';
-        logger[level]('collaboration document store failed', {
+        if (
+          error instanceof DocumentStoreSkippedError ||
+          error instanceof DocumentSizeLimitExceededError
+        ) {
+          instance.closeConnections(documentName);
+          logger.warn('collaboration document room closed after store rejection', {
+            documentName,
+            reason: error.constructor.name,
+          });
+          return;
+        }
+
+        logger.error('collaboration document store failed', {
           documentName,
           reason: error instanceof Error ? error.constructor.name : 'UnknownError',
         });

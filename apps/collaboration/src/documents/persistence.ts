@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@lite-notion/database';
+import { DOCUMENT_MAX_BYTES, type PrismaClient } from '@lite-notion/database';
 import * as Y from 'yjs';
 
 import { parsePageDocumentName } from './document-name';
@@ -12,6 +12,12 @@ export class DocumentLoadError extends Error {
 export class DocumentStoreSkippedError extends Error {
   constructor() {
     super('Document store skipped');
+  }
+}
+
+export class DocumentSizeLimitExceededError extends Error {
+  constructor() {
+    super('Document size limit exceeded');
   }
 }
 
@@ -58,6 +64,11 @@ export class PageDocumentPersistence {
   async store(documentName: string, document: Y.Doc): Promise<void> {
     const { pageId } = parsePageDocumentName(documentName);
     const state = toArrayBufferBytes(Y.encodeStateAsUpdate(document));
+
+    if (state.byteLength > DOCUMENT_MAX_BYTES) {
+      throw new DocumentSizeLimitExceededError();
+    }
+
     const result = await this.prisma.pageDocument.updateMany({
       data: {
         storageRevision: { increment: 1 },

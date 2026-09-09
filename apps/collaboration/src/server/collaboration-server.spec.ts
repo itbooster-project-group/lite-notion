@@ -248,11 +248,18 @@ describe('collaboration Hocuspocus runtime', () => {
     await waitFor(() => providers.every((provider) => provider.isSynced));
     first.getText('body').insert(0, 'A');
 
-    await waitFor(() => second.getText('body').toString() === 'A');
-    second.getText('body').insert(1, 'B');
+    // Both local transactions happen before waiting for either remote update.
+    second.getText('body').insert(0, 'B');
 
-    await waitFor(() => first.getText('body').toString() === 'AB');
-    expect(second.getText('body').toString()).toBe('AB');
+    await waitFor(() => {
+      const firstState = Y.encodeStateAsUpdate(first);
+      const secondState = Y.encodeStateAsUpdate(second);
+
+      return firstState.every((byte, index) => byte === secondState[index]);
+    });
+    expect(first.getText('body').toString()).toBe(second.getText('body').toString());
+    expect(first.getText('body').toString()).toContain('A');
+    expect(first.getText('body').toString()).toContain('B');
   });
 
   it('сохраняет документ и загружает его после reload', async () => {
@@ -288,9 +295,17 @@ describe('collaboration Hocuspocus runtime', () => {
     await waitFor(() => providers[0]?.isSynced === true);
     stored.deletedAt = new Date();
     document.getText('body').insert(0, 'after delete');
-    await servers[0]?.destroy();
-    servers.splice(0);
+    await waitFor(() => servers[0]?.hocuspocus.getConnectionsCount() === 0);
 
     expect(stored.storageRevision).toBe(0);
+
+    providers[0]?.destroy();
+    stored.deletedAt = null;
+
+    const restored = new Y.Doc();
+    providers.push(createProvider(url, restored, tokenFor(ownerId)));
+    await waitFor(() => providers.at(-1)?.isSynced === true);
+
+    expect(restored.getText('body').toString()).toBe('');
   });
 });

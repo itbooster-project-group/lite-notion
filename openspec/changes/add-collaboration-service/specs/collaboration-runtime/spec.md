@@ -74,6 +74,7 @@ Clients MUST NOT иметь возможность использовать arbi
 До разрешения document connection collaboration runtime MUST проверить, что parsed page существует, принадлежит authenticated user в текущей access model, не удалена и имеет `PageDocument` row. Page, которая отсутствует, принадлежит другому user, удалена или не имеет document row, MUST отклоняться без раскрытия конкретной причины.
 
 Access decision MUST возвращать internal read/write capability boundary, чтобы future permissions change мог различать viewer и editor access без изменения document-room format.
+Runtime MUST map `canWrite` from that capability to Hocuspocus `connectionConfig.readOnly` and MUST NOT introduce a separate permissions architecture in this change.
 
 #### Scenario: User can access own live page
 - **WHEN** authenticated user подключается к `page:<pageId>` для своей non-deleted page
@@ -110,6 +111,10 @@ Collaboration runtime MUST загружать current binary Yjs state из `Pag
 
 Store MUST NOT выполнять отдельный check `Page.deletedAt = null` с последующим unconditional update. Сохранение MUST выполняться как один transactional/conditional write, который атомарно проверяет live page/document invariant и записывает `yjsState`, `storageRevision` и timestamp. Если conditional write затронул `0` rows, collaboration runtime MUST NOT сохранять state.
 
+Если conditional write затронул `0` rows для уже активной комнаты, runtime MUST закрыть все connections этой комнаты, завершить её active document state и MUST NOT обрабатывать этот случай как обычную retryable persistence error. После восстановления страницы новый connection MUST загрузить последнее успешно сохранённое состояние без изменений, сделанных после soft delete.
+
+Перед conditional write runtime MUST отдельно проверить размер итогового `Y.encodeStateAsUpdate(document)` против `DOCUMENT_MAX_BYTES`. Этот предел MUST NOT использоваться как значение `websocketOptions.maxPayload`: размер одного WebSocket payload настраивается независимо через `WEBSOCKET_MAX_PAYLOAD_BYTES`.
+
 #### Scenario: Existing document state is loaded
 - **WHEN** client открывает page, whose document имеет non-empty stored `yjsState`
 - **THEN** collaboration runtime инициализирует room из этого binary Yjs state
@@ -135,6 +140,19 @@ Store MUST NOT выполнять отдельный check `Page.deletedAt = nul
 - **AND** store не записывает новый `yjsState`
 - **AND** он не опирается на previous connection user context, чтобы обойти deleted-page invariant
 
+#### Scenario: Active room is terminated after soft delete
+- **GIVEN** authenticated client подключён к live page room
+- **WHEN** page soft-deleted до следующего document store и client отправляет update
+- **THEN** conditional write не меняет `yjsState` и `storageRevision`
+- **AND** runtime закрывает connections этой комнаты и выгружает её document state
+- **AND** после restore новый connection получает state до soft delete
+
+#### Scenario: Document and WebSocket limits are independent
+- **WHEN** client отправляет отдельный WebSocket payload в пределах `WEBSOCKET_MAX_PAYLOAD_BYTES`
+- **AND** итоговый encoded Yjs state превышает `DOCUMENT_MAX_BYTES`
+- **THEN** document state не записывается в PostgreSQL
+- **AND** runtime не рассматривает WebSocket payload limit как размер всего Yjs document
+
 ### Requirement: Collaboration runtime shuts down cleanly
 Collaboration runtime MUST обрабатывать завершение процесса: закрывать WebSocket/Hocuspocus server, flush pending document stores, если это поддерживает public Hocuspocus API, и отключаться от PostgreSQL до выхода процесса.
 
@@ -146,7 +164,7 @@ Collaboration runtime MUST обрабатывать завершение про�
 ### Requirement: Collaboration logging avoids sensitive data
 Collaboration runtime MUST логировать server start, server stop, failed Origin validation, failed authentication, failed document access, document load/store errors и unexpected WebSocket errors с достаточным context для debugging. Logs MUST NOT включать access tokens, refresh tokens, full Yjs binary states или sensitive document/user content.
 
-Runtime MUST применять bounded connection или payload limits, доступные через public Hocuspocus configuration, когда эти limits совместимы с current document size contract.
+Runtime MUST применять bounded connection или payload limits через public Hocuspocus configuration с независимой настройкой `WEBSOCKET_MAX_PAYLOAD_BYTES`; итоговый encoded document size ограничивается отдельно через `DOCUMENT_MAX_BYTES`.
 
 #### Scenario: Authentication failure is logged safely
 - **WHEN** connection отклонена из-за authentication failure

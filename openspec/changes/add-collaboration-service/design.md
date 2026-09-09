@@ -124,7 +124,8 @@ Hocuspocus persistence hooks работают с Yjs binary state:
 - `onStoreDocument` не выполняет user authorization через connection context, `lastContext` или последнего подключенного клиента. Store может выполняться после disconnect, поэтому он повторно проверяет только persistence invariants: `Page` существует, `Page.deletedAt = null`, `PageDocument` существует.
 - Store не делает отдельный check `Page.deletedAt = null` с последующим unconditional update. Сохранение выполняется одним transactional/conditional write, например conditional `PageDocument.updateMany` с predicate по `pageId` и связанной `Page.deletedAt = null`.
 - Conditional write атомарно меняет `yjsState`, инкрементирует `storageRevision` и обновляет `updatedAt`; `tiptapSchemaVersion` не меняется при обычном collaboration update.
-- Если conditional write затронул `0` rows, runtime считает, что page/document отсутствуют или page soft-deleted, не сохраняет state и логирует безопасную store-invariant ошибку без document payload.
+- Если conditional write затронул `0` rows, runtime считает, что page/document отсутствуют или page soft-deleted, не сохраняет state, закрывает connections комнаты и выгружает её document state; это terminal room invalidation, а не retryable persistence error.
+- Перед записью runtime отдельно сравнивает размер `Y.encodeStateAsUpdate(document)` с `DOCUMENT_MAX_BYTES`. `websocketOptions.maxPayload` получает независимое значение `WEBSOCKET_MAX_PAYLOAD_BYTES` и не используется как размер всего документа.
 
 TipTap JSON допускается только как derived representation в web/static rendering и не становится persistence source. Collaboration не валидирует TipTap schema content на каждом update; admission validation остаётся за editor/session boundary, а binary Yjs state остаётся opaque.
 
@@ -154,7 +155,7 @@ Target после полного подключения:
 - `DATABASE_URL=...`
 - `DATABASE_CONNECTION_TIMEOUT_MS=5000`
 - `JWT_SECRET=local-development-only-change-me-before-deploy`
-- `COLLABORATION_WEBSOCKET_MAX_PAYLOAD_BYTES=1048576`
+- `WEBSOCKET_MAX_PAYLOAD_BYTES=1048576`
 - опционально `COLLABORATION_STORE_DEBOUNCE_MS` и `COLLABORATION_STORE_MAX_DEBOUNCE_MS`, если Hocuspocus defaults нужно закрепить тестируемо.
 
 Validation должна быть строгой: port range, HTTP(S) origin, PostgreSQL URL, positive bounded timeouts/limits, JWT secret min length. Ошибки не печатают secret/database credentials.
@@ -171,7 +172,7 @@ Lifecycle:
 
 Логировать: start/stop, failed authentication, failed Origin validation, failed document access, document load/store errors, unexpected WS errors. Не логировать: access/refresh tokens, full Yjs binary state, document content, database credentials.
 
-Use Hocuspocus public configuration for bounded resources: `websocketOptions.maxPayload` aligned with `DOCUMENT_MAX_BYTES`, plus pre-auth queue defaults unless tests reveal a need to lower them. Rate limiting не вводится: это отдельная edge/deployment concern. Risk DoS от большого количества connections/documents остаётся известным ограничением single-instance v1.
+Use Hocuspocus public configuration for bounded resources: `websocketOptions.maxPayload` reads the independent `WEBSOCKET_MAX_PAYLOAD_BYTES` setting. The final encoded Yjs document is checked separately against `DOCUMENT_MAX_BYTES` before persistence. Rate limiting не вводится: это отдельная edge/deployment concern. Risk DoS от большого количества connections/documents остаётся известным ограничением single-instance v1.
 
 ## Риски и trade-offs
 

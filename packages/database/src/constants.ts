@@ -5,7 +5,8 @@
 export const TIPTAP_SCHEMA_VERSION = 1;
 
 /**
- * Предел размера Yjs state в байтах. Значение выбрано без данных о реальных
- * документах и применяется как API DTO limit и WebSocket payload limit.
+ * Предел итогового Yjs state в байтах. Значение выбрано без данных о реальных
+ * документах и применяется перед persistence и в API DTO. WebSocket payload
+ * ограничивается отдельной runtime-настройкой.
  */
 export const DOCUMENT_MAX_BYTES = 1024 * 1024;
