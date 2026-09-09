@@ -3,11 +3,11 @@
 import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip';
 import type { ReactElement } from 'react';
 
-type TooltipProps = Readonly<{ children: ReactElement; label: string }>;
+type TooltipProps = Readonly<{ children: ReactElement; label: string; disabled?: boolean }>;
 
-export function Tooltip({ children, label }: TooltipProps) {
+export function Tooltip({ children, label, disabled }: TooltipProps) {
   return (
-    <TooltipPrimitive.Root>
+    <TooltipPrimitive.Root disabled={disabled}>
       <TooltipPrimitive.Trigger render={children} delay={300} />
       <TooltipPrimitive.Portal>
         <TooltipPrimitive.Positioner sideOffset={6} className="z-[100]">
