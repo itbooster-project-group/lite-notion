@@ -1,7 +1,9 @@
+import type { HttpException } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
 
 import { POSITION_MAX_LENGTH } from './constants';
-import { compareSiblings, positionBetween } from './helpers';
+import { PageNotFoundError, PageRoleInsufficientError } from './errors';
+import { compareSiblings, positionBetween, toHttpException } from './helpers';
 
 describe('positionBetween', () => {
   it('даёт ранг для пустого уровня', () => {
@@ -96,5 +98,49 @@ describe('compareSiblings', () => {
     const page = { id: 'aaaa', position: 'V' };
 
     expect(compareSiblings(page, page)).toBe(0);
+  });
+});
+
+describe('toHttpException', () => {
+  async function statusOf(error: Error): Promise<number> {
+    try {
+      await toHttpException(() => Promise.reject(error));
+    } catch (thrown) {
+      return (thrown as HttpException).getStatus();
+    }
+
+    throw new Error('Expected an HTTP exception');
+  }
+
+  it('переводит нехватку роли в 403', async () => {
+    await expect(statusOf(new PageRoleInsufficientError())).resolves.toBe(403);
+  });
+
+  it('оставляет отсутствие страницы 404 с прежним телом', async () => {
+    const error = new PageNotFoundError();
+
+    await expect(statusOf(error)).resolves.toBe(404);
+    await expect(
+      toHttpException(() => Promise.reject(error)).catch((thrown: HttpException) =>
+        thrown.getResponse(),
+      ),
+    ).resolves.toMatchObject({ message: 'Page not found' });
+  });
+
+  /**
+   * `403` и `404` обязаны оставаться разными ответами: первый говорит «страница есть,
+   * роли мало», второй — «страницы для тебя не существует».
+   */
+  it('различает нехватку роли и отсутствие доступа', async () => {
+    const forbidden = await statusOf(new PageRoleInsufficientError());
+    const notFound = await statusOf(new PageNotFoundError());
+
+    expect(forbidden).not.toBe(notFound);
+  });
+
+  it('пропускает не-доменные ошибки как есть', async () => {
+    const error = new Error('boom');
+
+    await expect(toHttpException(() => Promise.reject(error))).rejects.toBe(error);
   });
 });

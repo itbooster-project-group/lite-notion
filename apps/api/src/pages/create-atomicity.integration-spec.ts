@@ -9,6 +9,7 @@ import {
   PrismaTransactionRunner,
   type TransactionScope,
 } from '../database/transaction';
+import { PrismaPagePermissionsRepository } from '../page-permissions/page-permissions.repository';
 import { PrismaProjectsRepository } from '../projects/projects.repository';
 import { PrismaPageDocumentRepository } from './page-document/page-document.repository';
 import { PrismaPagesRepository } from './pages.repository';
@@ -53,12 +54,14 @@ describe('атомарность создания страницы на живо
       pages,
       projects,
       new PrismaPageDocumentRepository(client),
+      new PrismaPagePermissionsRepository(client),
     );
     failingCreatePage = new CreatePageUseCase(
       transactions,
       pages,
       projects,
       new FailingDocuments(client),
+      new PrismaPagePermissionsRepository(client),
     );
 
     await prisma.user.create({
@@ -78,7 +81,7 @@ describe('атомарность создания страницы на живо
 
   it('создаёт страницу вместе с её документом', async () => {
     const page = await createPage.execute({
-      ownerId,
+      actorId: ownerId,
       parentPageId: null,
       projectId,
       title: 'page',
@@ -91,7 +94,7 @@ describe('атомарность создания страницы на живо
 
   it('не оставляет страницу, если документ не создался', async () => {
     await expect(
-      failingCreatePage.execute({ ownerId, parentPageId: null, projectId, title: 'page' }),
+      failingCreatePage.execute({ actorId: ownerId, parentPageId: null, projectId, title: 'page' }),
     ).rejects.toThrow('document insert failed');
 
     await expect(prisma.page.count({ where: { ownerId } })).resolves.toBe(0);

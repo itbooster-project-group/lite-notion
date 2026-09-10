@@ -4,6 +4,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { PrismaService } from '../database/prisma.service';
 import { PrismaTransactionRunner } from '../database/transaction';
+import { PrismaPagePermissionsRepository } from '../page-permissions/page-permissions.repository';
 import { PrismaProjectsRepository } from '../projects/projects.repository';
 import { PrismaPageDocumentRepository } from './page-document/page-document.repository';
 import { PrismaPagesRepository } from './pages.repository';
@@ -37,6 +38,7 @@ describe('конкурентное создание страниц одного 
       repository,
       new PrismaProjectsRepository(prisma as unknown as PrismaService),
       new PrismaPageDocumentRepository(prisma as unknown as PrismaService),
+      new PrismaPagePermissionsRepository(prisma as unknown as PrismaService),
     );
 
     await prisma.user.create({
@@ -61,11 +63,60 @@ describe('конкурентное создание страниц одного 
 
   const createPage = (parentPageId: string | null) =>
     createPageUseCase.execute({
-      ownerId,
+      actorId: ownerId,
       parentPageId,
       projectId,
       title: '',
     });
+
+  /**
+   * Тот случай, ради которого ключ блокировки — владелец дерева, а не актор. Двое
+   * редакторов из чужих деревьев, добавляющие детей одному родителю, по ключу-актору
+   * разошлись бы по разным локам, прочитали одного «последнего брата» и записали
+   * одинаковый ранг.
+   */
+  it('двое редакторов под одним родителем не получают одинаковых рангов', async () => {
+    const editors = [randomUUID(), randomUUID()];
+
+    await prisma.user.createMany({
+      data: editors.map((id) => ({
+        email: `${id}@concurrency.test`,
+        id,
+        name: 'editor',
+        passwordHash: 'hash',
+      })),
+    });
+
+    const parent = await createPage(null);
+
+    await prisma.pagePermission.createMany({
+      data: editors.map((id) => ({
+        grantedById: ownerId,
+        pageId: parent.id,
+        role: 'EDITOR' as const,
+        userId: id,
+      })),
+    });
+
+    try {
+      const pages = await Promise.all(
+        editors.flatMap((actorId) =>
+          Array.from({ length: 5 }, () =>
+            createPageUseCase.execute({ actorId, parentPageId: parent.id, projectId, title: '' }),
+          ),
+        ),
+      );
+      const positions = pages.map((page) => page.position);
+
+      expect(new Set(positions).size).toBe(positions.length);
+      // Владелец наследуется от родителя, а создателем записан сам редактор.
+      expect(pages.every((page) => page.ownerId === ownerId)).toBe(true);
+      expect(new Set(pages.map((page) => page.createdById))).toEqual(new Set(editors));
+    } finally {
+      await prisma.page.deleteMany({ where: { ownerId } });
+      await prisma.user.deleteMany({ where: { id: { in: editors } } });
+    }
+  });
 
   it('десять параллельных созданий в корне не дают одинаковых рангов', async () => {
     const pages = await Promise.all(Array.from({ length: 10 }, () => createPage(null)));

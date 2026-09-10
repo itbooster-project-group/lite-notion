@@ -65,6 +65,9 @@ importers:
       '@lite-notion/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@lite-notion/page-permissions':
+        specifier: workspace:*
+        version: link:../../packages/page-permissions
       '@nestjs/common':
         specifier: ^11.0.0
         version: 11.1.28(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1)
@@ -183,6 +186,9 @@ importers:
       '@lite-notion/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@lite-notion/page-permissions':
+        specifier: workspace:*
+        version: link:../../packages/page-permissions
       yjs:
         specifier: 'catalog:'
         version: 13.6.32
@@ -400,6 +406,22 @@ importers:
       prisma:
         specifier: 'catalog:'
         version: 7.9.1(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@types/node@22.20.1)(jsdom@27.4.0(@noble/hashes@1.8.0))(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))(vite@8.2.1(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.2)(tsx@4.23.12)(yaml@2.9.0))
+
+  packages/page-permissions:
+    dependencies:
+      '@lite-notion/database':
+        specifier: workspace:*
+        version: link:../database
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.20.1
       typescript:
         specifier: 'catalog:'
         version: 5.9.3

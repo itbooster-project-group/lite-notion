@@ -1,6 +1,7 @@
 import { forwardRef, Module } from '@nestjs/common';
 
 import { DatabaseModule } from '../database/database.module';
+import { PagePermissionsModule } from '../page-permissions/page-permissions.module';
 import { ProjectsModule } from '../projects/projects.module';
 import { PageDocumentModule } from './page-document/page-document.module';
 import { PagesController } from './pages.controller';
@@ -26,7 +27,12 @@ const useCases = [
   controllers: [PagesController],
   // Наружу отдаётся только сервис; юзкейсы приватны модулю.
   exports: [PagesRepository, PagesService],
-  imports: [DatabaseModule, forwardRef(() => ProjectsModule), PageDocumentModule],
+  imports: [
+    DatabaseModule,
+    forwardRef(() => ProjectsModule),
+    PageDocumentModule,
+    PagePermissionsModule,
+  ],
   providers: [
     PagesService,
     { provide: PagesRepository, useClass: PrismaPagesRepository },

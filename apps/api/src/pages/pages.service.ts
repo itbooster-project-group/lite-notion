@@ -1,5 +1,9 @@
+import type { PageAccessMode } from '@lite-notion/database/enums';
+import { PageRole } from '@lite-notion/page-permissions';
 import { Inject, Injectable } from '@nestjs/common';
 
+import type { AccessiblePageRow } from '../page-permissions/page-permissions.repository';
+import { PagePermissionsService } from '../page-permissions/page-permissions.service';
 import { PageNotFoundError } from './errors';
 import { compareSiblings } from './helpers';
 import { type DeletedPageRecord, type PageRecord, PagesRepository } from './pages.repository';
@@ -8,8 +12,22 @@ export interface PageTreeNode extends PageRecord {
   children: PageTreeNode[];
 }
 
+/**
+ * Страница вместе с эффективной ролью спрашивающего. Поле рядом с записью, а не
+ * обёртка: роль — такая же часть ответа, как заголовок, и вызывающим удобнее читать
+ * `page.id`, чем разбирать пару.
+ */
+export interface PageWithRole extends PageRecord {
+  role: PageRole;
+}
+
 export interface DeletedPageTreeNode extends DeletedPageRecord {
   children: DeletedPageTreeNode[];
+}
+
+/** Узел выдачи доступных страниц: у каждого своя роль — побеждает ближайшая. */
+export interface AccessiblePageTreeNode extends AccessiblePageRow {
+  children: AccessiblePageTreeNode[];
 }
 
 /**
@@ -26,7 +44,10 @@ interface TreeShape<TRow> {
 
 @Injectable()
 export class PagesService {
-  constructor(@Inject(PagesRepository) private readonly pages: PagesRepository) {}
+  constructor(
+    @Inject(PagesRepository) private readonly pages: PagesRepository,
+    @Inject(PagePermissionsService) private readonly permissions: PagePermissionsService,
+  ) {}
 
   /**
    * Собирает вложенность из плоского списка за один проход. Страница, чей
@@ -62,22 +83,69 @@ export class PagesService {
     });
   }
 
-  findById(pageId: string, ownerId: string): Promise<PageRecord> {
-    return this.requireOwnedPage(pageId, ownerId);
+  /**
+   * Чтение — минимальное, что даёт любое разрешение, поэтому `viewer`. Роль
+   * возвращается вместе со страницей: контроллеру она нужна для ответа, а второй
+   * запрос за ней был бы лишним.
+   */
+  /**
+   * Доступные чужие страницы с вложенностью. Корни приходят с разных уровней чужих
+   * деревьев, поэтому сравниваются по заголовку и `id`: их ранги из разных групп
+   * братьев и между собой несравнимы.
+   */
+  async findAccessibleTree(userId: string): Promise<AccessiblePageTreeNode[]> {
+    const rows = await this.permissions.findAccessiblePages(userId);
+
+    return assembleTree(rows, {
+      compareRoots: (left, right) => compareTitles(left, right) || compareIds(left, right),
+      nests: () => true,
+    });
   }
 
-  async rename(pageId: string, ownerId: string, title: string): Promise<PageRecord> {
-    const page = await this.pages.rename(pageId, ownerId, title);
+  async findById(pageId: string, userId: string): Promise<PageWithRole> {
+    const role = await this.permissions.requireRole(userId, pageId, PageRole.VIEWER);
+
+    return { ...(await this.requireLivePage(pageId)), role };
+  }
+
+  /** Заголовок — часть содержимого страницы, а не структуры дерева, поэтому `editor`. */
+  async rename(pageId: string, userId: string, title: string): Promise<PageWithRole> {
+    const role = await this.permissions.requireRole(userId, pageId, PageRole.EDITOR);
+    const page = await this.pages.rename(pageId, title);
 
     if (page === null) {
       throw new PageNotFoundError();
     }
 
-    return page;
+    return { ...page, role };
   }
 
-  private async requireOwnedPage(pageId: string, ownerId: string): Promise<PageRecord> {
-    const page = await this.pages.findByIdForOwner(pageId, ownerId);
+  /**
+   * Переключение режима наследования. Требует `owner`: границу доступа двигает только
+   * хозяин дерева. Идемпотентно и не трогает ни заголовок, ни родителя, ни ранг, ни
+   * прямые разрешения — меняется одна колонка.
+   */
+  async setAccessMode(
+    pageId: string,
+    userId: string,
+    accessMode: PageAccessMode,
+  ): Promise<PageWithRole> {
+    const role = await this.permissions.requireRole(userId, pageId, PageRole.OWNER);
+    const page = await this.pages.setAccessMode(pageId, accessMode);
+
+    if (page === null) {
+      throw new PageNotFoundError();
+    }
+
+    return { ...page, role };
+  }
+
+  /**
+   * Страница уже прошла проверку прав, поэтому `null` здесь означает не отказ, а
+   * гонку: её удалили между проверкой и чтением. Ответ тот же `404`.
+   */
+  private async requireLivePage(pageId: string): Promise<PageRecord> {
+    const page = await this.pages.findLiveById(pageId);
 
     if (page === null) {
       throw new PageNotFoundError();
@@ -88,6 +156,14 @@ export class PagesService {
 }
 
 type TreeNode<TRow> = TRow & { children: TreeNode<TRow>[] };
+
+function compareTitles(left: { title: string }, right: { title: string }): number {
+  if (left.title === right.title) {
+    return 0;
+  }
+
+  return left.title < right.title ? -1 : 1;
+}
 
 function compareIds(left: { id: string }, right: { id: string }): number {
   if (left.id === right.id) {

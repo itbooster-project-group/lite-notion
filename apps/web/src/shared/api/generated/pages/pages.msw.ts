@@ -21,6 +21,8 @@ export const getCreatePageResponseMock = (
   createdById: faker.string.uuid(),
   title: faker.string.alpha({ length: { min: 10, max: 20 } }),
   position: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  accessMode: faker.helpers.arrayElement(['inherit', 'restricted'] as const),
+  accessRole: faker.helpers.arrayElement(['viewer', 'editor', 'owner'] as const),
   createdAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
   updatedAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
   ...overrideResponse,
@@ -35,6 +37,24 @@ export const getGetPageTreeResponseMock = (): PageTreeNodeDto[] =>
     createdById: faker.string.uuid(),
     title: faker.string.alpha({ length: { min: 10, max: 20 } }),
     position: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    accessMode: faker.helpers.arrayElement(['inherit', 'restricted'] as const),
+    accessRole: faker.helpers.arrayElement(['viewer', 'editor', 'owner'] as const),
+    createdAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
+    updatedAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
+    children: [],
+  }));
+
+export const getGetSharedPagesResponseMock = (): PageTreeNodeDto[] =>
+  Array.from({ length: faker.number.int({ min: 1, max: 10 }) }, (_, i) => i + 1).map(() => ({
+    id: faker.string.uuid(),
+    ownerId: faker.string.uuid(),
+    projectId: faker.string.uuid(),
+    parentPageId: faker.helpers.arrayElement([faker.string.uuid(), null]),
+    createdById: faker.string.uuid(),
+    title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    position: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    accessMode: faker.helpers.arrayElement(['inherit', 'restricted'] as const),
+    accessRole: faker.helpers.arrayElement(['viewer', 'editor', 'owner'] as const),
     createdAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
     updatedAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
     children: [],
@@ -65,6 +85,8 @@ export const getGetPageResponseMock = (
   createdById: faker.string.uuid(),
   title: faker.string.alpha({ length: { min: 10, max: 20 } }),
   position: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  accessMode: faker.helpers.arrayElement(['inherit', 'restricted'] as const),
+  accessRole: faker.helpers.arrayElement(['viewer', 'editor', 'owner'] as const),
   createdAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
   updatedAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
   ...overrideResponse,
@@ -80,6 +102,8 @@ export const getRenamePageResponseMock = (
   createdById: faker.string.uuid(),
   title: faker.string.alpha({ length: { min: 10, max: 20 } }),
   position: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  accessMode: faker.helpers.arrayElement(['inherit', 'restricted'] as const),
+  accessRole: faker.helpers.arrayElement(['viewer', 'editor', 'owner'] as const),
   createdAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
   updatedAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
   ...overrideResponse,
@@ -95,6 +119,25 @@ export const getMovePageResponseMock = (
   createdById: faker.string.uuid(),
   title: faker.string.alpha({ length: { min: 10, max: 20 } }),
   position: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  accessMode: faker.helpers.arrayElement(['inherit', 'restricted'] as const),
+  accessRole: faker.helpers.arrayElement(['viewer', 'editor', 'owner'] as const),
+  createdAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
+  updatedAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
+  ...overrideResponse,
+});
+
+export const getSetPageAccessModeResponseMock = (
+  overrideResponse: Partial<Extract<PageDto, object>> = {},
+): PageDto => ({
+  id: faker.string.uuid(),
+  ownerId: faker.string.uuid(),
+  projectId: faker.string.uuid(),
+  parentPageId: faker.helpers.arrayElement([faker.string.uuid(), null]),
+  createdById: faker.string.uuid(),
+  title: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  position: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  accessMode: faker.helpers.arrayElement(['inherit', 'restricted'] as const),
+  accessRole: faker.helpers.arrayElement(['viewer', 'editor', 'owner'] as const),
   createdAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
   updatedAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
   ...overrideResponse,
@@ -110,6 +153,8 @@ export const getRestorePageResponseMock = (
   createdById: faker.string.uuid(),
   title: faker.string.alpha({ length: { min: 10, max: 20 } }),
   position: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  accessMode: faker.helpers.arrayElement(['inherit', 'restricted'] as const),
+  accessRole: faker.helpers.arrayElement(['viewer', 'editor', 'owner'] as const),
   createdAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
   updatedAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
   ...overrideResponse,
@@ -172,6 +217,30 @@ export const getGetPageTreeMockHandler = (
             ? await overrideResponse(info)
             : overrideResponse
           : getGetPageTreeResponseMock(),
+        { status: 200 },
+      );
+    },
+    options,
+  );
+};
+
+export const getGetSharedPagesMockHandler = (
+  overrideResponse?:
+    | PageTreeNodeDto[]
+    | ((
+        info: Parameters<Parameters<typeof http.get>[1]>[0],
+      ) => Promise<PageTreeNodeDto[]> | PageTreeNodeDto[]),
+  options?: RequestHandlerOptions,
+) => {
+  return http.get(
+    '*/api/v1/pages/shared',
+    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getGetSharedPagesResponseMock(),
         { status: 200 },
       );
     },
@@ -307,6 +376,28 @@ export const getMovePageMockHandler = (
   );
 };
 
+export const getSetPageAccessModeMockHandler = (
+  overrideResponse?:
+    | PageDto
+    | ((info: Parameters<Parameters<typeof http.put>[1]>[0]) => Promise<PageDto> | PageDto),
+  options?: RequestHandlerOptions,
+) => {
+  return http.put(
+    '*/api/v1/pages/:pageId/access-mode',
+    async (info: Parameters<Parameters<typeof http.put>[1]>[0]) => {
+      return HttpResponse.json(
+        overrideResponse !== undefined
+          ? typeof overrideResponse === 'function'
+            ? await overrideResponse(info)
+            : overrideResponse
+          : getSetPageAccessModeResponseMock(),
+        { status: 200 },
+      );
+    },
+    options,
+  );
+};
+
 export const getPurgePageMockHandler = (
   overrideResponse?:
     | void
@@ -398,12 +489,14 @@ export const getUpdatePageDocumentMockHandler = (
 export const getPagesMock = () => [
   getCreatePageMockHandler(),
   getGetPageTreeMockHandler(),
+  getGetSharedPagesMockHandler(),
   getGetPageTrashMockHandler(),
   getPurgePageTrashMockHandler(),
   getGetPageMockHandler(),
   getRenamePageMockHandler(),
   getDeletePageMockHandler(),
   getMovePageMockHandler(),
+  getSetPageAccessModeMockHandler(),
   getPurgePageMockHandler(),
   getRestorePageMockHandler(),
   getGetPageDocumentMockHandler(),

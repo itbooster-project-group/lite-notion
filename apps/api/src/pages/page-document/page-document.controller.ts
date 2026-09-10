@@ -3,6 +3,7 @@ import {
   ApiBadRequestResponse,
   ApiBearerAuth,
   ApiBody,
+  ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -62,6 +63,10 @@ export class PageDocumentController {
     summary: 'Replace the content of a page',
   })
   @ApiOkResponse({ description: 'Document replaced', type: PageDocumentDto })
+  @ApiForbiddenResponse({
+    description: 'The page is readable for the current user, but writing it needs the editor role',
+    type: HttpErrorResponseDto,
+  })
   async replace(
     @CurrentUser() user: AuthenticatedUser,
     @Param('pageId', ParseUUIDPipe) pageId: string,
@@ -69,7 +74,7 @@ export class PageDocumentController {
   ): Promise<PageDocumentDto> {
     const document = await toHttpException(() =>
       this.documents.replace({
-        ownerId: user.id,
+        actorId: user.id,
         pageId,
         tiptapSchemaVersion: body.tiptapSchemaVersion,
         yjsState: new Uint8Array(Buffer.from(body.yjsState, 'base64')),
