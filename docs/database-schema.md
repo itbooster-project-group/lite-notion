@@ -83,12 +83,12 @@ erDiagram
     }
 
     PAGE_PERMISSIONS {
-        uuid page_id PK, FK
-        uuid user_id PK, FK
-        varchar role
-        uuid granted_by FK
-        timestamptz created_at
-        timestamptz updated_at
+        uuid pageId PK, FK
+        uuid userId PK, FK
+        enum role
+        uuid grantedById FK
+        timestamp createdAt
+        timestamp updatedAt
     }
 
     PAGE_DOCUMENTS {
@@ -193,7 +193,7 @@ erDiagram
     PAGES ||--o| PAGE_SEARCH_DOCUMENTS : indexed_as
 ```
 
-> В диаграмме `USERS` и `SESSIONS` — это уже созданные таблицы `"User"` и `"Session"`: их поля приведены в фактическом виде (Prisma без `@map`, то есть camelCase-колонки и типы `text` / `timestamp(3)`). Остальные сущности пока спроектированы, но не мигрированы, и записаны в проектной нотации (snake_case, `varchar` / `timestamptz`).
+> В диаграмме `USERS`, `SESSIONS` и `PAGE_PERMISSIONS` — это уже созданные таблицы `"User"`, `"Session"` и `"PagePermission"`: их поля приведены в фактическом виде (Prisma без `@map`, то есть camelCase-колонки и типы `text` / `timestamp(3)`). `PROJECTS`, `PAGES` и `PAGE_DOCUMENTS` созданы тоже, но в диаграмме часть их полей ещё спроектированная: у `PAGES` реальны `access_mode`, `position`, `title` и ссылки, а `updated_by`, `icon` и `cover_asset_id` — нет. Остальные сущности пока спроектированы, но не мигрированы, и записаны в проектной нотации (snake_case, `varchar` / `timestamptz`).
 
 ## Users and profiles
 
@@ -429,16 +429,29 @@ sourceProject.owner_id = targetProject.owner_id
 
 ## Page permissions
 
-`PAGE_PERMISSIONS` хранит прямые разрешения пользователя на конкретную страницу.
+Таблица реализована (Prisma model `PagePermission`, таблица `"PagePermission"`) и хранит прямые разрешения пользователя на конкретную страницу. Как и `"User"` с `"Session"`, она создана без `@map`, то есть с camelCase-колонками и типами `timestamp(3)`:
 
-Роли MVP:
+```text
+pageId       uuid, PK, FK -> Page.id,  ON DELETE CASCADE
+userId       uuid, PK, FK -> User.id,  ON DELETE CASCADE
+role         "PagePermissionRole"
+grantedById  uuid, FK -> User.id,      ON DELETE RESTRICT
+createdAt    timestamp(3), default now()
+updatedAt    timestamp(3), @updatedAt
+```
+
+Составной PK `(pageId, userId)` даёт единственность пары и обслуживает чтение разрешений одной страницы; отдельный `UNIQUE` не нужен. `grantedById` использует `RESTRICT`, как и `PAGES.createdBy`: удаление учётки не должно молча стирать историю выдачи.
+
+Роли MVP — enum `PagePermissionRole` со значениями `VIEWER` и `EDITOR`:
 
 * `viewer` — просмотр;
 * `editor` — просмотр и редактирование.
 
-`PAGES.owner_id` всегда имеет полный доступ к странице и её subtree.
+`OWNER` в enum отсутствует намеренно: владение хранится в `PAGES.owner_id` и строкой разрешения не выражается. `PAGES.owner_id` всегда имеет полный доступ к странице и её subtree, и разрешение владельцу на собственную страницу не выдаётся — это правило прикладное, поскольку `CHECK` не может сослаться на `PAGES.owner_id` из другой таблицы.
 
-`PAGES.access_mode`:
+Мягкое удаление страницы разрешения сохраняет: восстановленная страница возвращается с прежним кругом доступа. Каскад по `pageId` уносит их только при окончательном удалении.
+
+`PAGES.access_mode` реализована колонкой `"accessMode"` типа enum `PageAccessMode` со значениями `INHERIT` и `RESTRICTED`, default `INHERIT`:
 
 * `inherit` — если прямого разрешения нет, доступ ищется у родительской страницы;
 * `restricted` — наследование останавливается на текущей странице.
@@ -453,6 +466,10 @@ sourceProject.owner_id = targetProject.owner_id
 4. при `access_mode = inherit` проверяется parent page;
 5. root page без подходящего разрешения недоступна;
 6. публичная публикация не предоставляет доступ к рабочему редактору.
+
+Побеждает **ближайшее** прямое разрешение, а не наибольшее: найденное ниже по цепочке перекрывает выданное выше, даже когда оно уже. Это позволяет сузить доступ к отдельной ветке, не отзывая разрешение на её предка.
+
+Порядок шагов 2 и 3 существен: прямое разрешение на самой `restricted`-странице действует, поскольку проверяется до остановки. `restricted` прекращает наследование сквозь страницу, а не отменяет выданный на неё доступ.
 
 После move direct permissions остаются у тех же страниц. Effective inherited permissions корня и всего subtree могут измениться из-за новой parent chain. Это нормальное ожидаемое поведение, а не перенос или копирование permissions.
 
@@ -1308,7 +1325,15 @@ UNIQUE (PAGES.id, PAGES.project_id)
     → (PAGES.id, PAGES.project_id)
     DEFERRABLE INITIALLY DEFERRED
 
-UNIQUE (PAGE_PERMISSIONS.page_id, PAGE_PERMISSIONS.user_id)
+PRIMARY KEY (PagePermission.pageId, PagePermission.userId)
+    (даёт единственность пары; отдельный UNIQUE не нужен)
+
+PagePermission.pageId
+    → Page.id    ON DELETE CASCADE
+PagePermission.userId
+    → User.id    ON DELETE CASCADE
+PagePermission.grantedById
+    → User.id    ON DELETE RESTRICT
 
 PAGE_DOCUMENTS.storage_revision >= 0
 
@@ -1380,7 +1405,10 @@ PAGES(project_id, updated_at)
 PAGES(deleted_at)
 PAGES(created_by)
 
-PAGE_PERMISSIONS(user_id, page_id)
+PagePermission(userId, pageId)
+    (создан; обслуживает подъём по цепочке и выдачу доступных страниц)
+PagePermission(grantedById)
+    (создан; PostgreSQL не индексирует FK автоматически)
 
 DOCUMENT_SNAPSHOTS(page_id, revision DESC)
 DOCUMENT_SNAPSHOTS(page_id, source_storage_revision DESC)

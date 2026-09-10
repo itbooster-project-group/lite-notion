@@ -6,9 +6,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx watch --env-file=.env src/main.ts",
-    "prebuild": "pnpm --filter @lite-notion/database build && pnpm --filter @lite-notion/auth-token build",
-    "pretest": "pnpm --filter @lite-notion/database build && pnpm --filter @lite-notion/auth-token build",
-    "pretypecheck": "pnpm --filter @lite-notion/database build && pnpm --filter @lite-notion/auth-token build",
+    "prebuild": "pnpm --filter @lite-notion/database build && pnpm --filter @lite-notion/auth-token build && pnpm --filter @lite-notion/page-permissions build",
+    "pretest": "pnpm --filter @lite-notion/database build && pnpm --filter @lite-notion/auth-token build && pnpm --filter @lite-notion/page-permissions build",
+    "pretypecheck": "pnpm --filter @lite-notion/database build && pnpm --filter @lite-notion/auth-token build && pnpm --filter @lite-notion/page-permissions build",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.mts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
@@ -17,6 +17,7 @@
     "@hocuspocus/server": "^4.6.0",
     "@lite-notion/auth-token": "workspace:*",
     "@lite-notion/database": "workspace:*",
+    "@lite-notion/page-permissions": "workspace:*",
     "yjs": "catalog:"
   },
   "devDependencies": {

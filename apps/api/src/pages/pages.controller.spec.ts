@@ -74,11 +74,11 @@ describe('PagesController', () => {
     controller = moduleRef.get(PagesController);
   });
 
-  it('передаёт создание в сервис, подставляя владельца из токена', async () => {
+  it('передаёт создание в сервис, подставляя актора из токена', async () => {
     await controller.create(user, { parentPageId: null, projectId, title: 'draft' });
 
     expect(createPage.execute).toHaveBeenCalledWith({
-      ownerId: user.id,
+      actorId: user.id,
       parentPageId: null,
       projectId,
       title: 'draft',
@@ -114,8 +114,8 @@ describe('PagesController', () => {
     await controller.move(user, pageId, { parentPageId: null });
 
     expect(movePage.execute).toHaveBeenCalledWith({
+      actorId: user.id,
       nextSiblingId: null,
-      ownerId: user.id,
       pageId,
       parentPageId: null,
       previousSiblingId: null,
@@ -126,6 +126,8 @@ describe('PagesController', () => {
     const page = await controller.findById(user, pageId);
 
     expect(Object.keys(page).sort()).toEqual([
+      'accessMode',
+      'accessRole',
       'createdAt',
       'createdById',
       'id',

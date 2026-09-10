@@ -1,7 +1,10 @@
+import { PageRole } from '@lite-notion/page-permissions';
 import { Inject, Injectable } from '@nestjs/common';
 
 import { ownerLock } from '../../common/helpers';
 import { TransactionRunner } from '../../database/transaction';
+import { assertRole } from '../../page-permissions/helpers';
+import { PagePermissionsRepository } from '../../page-permissions/page-permissions.repository';
 import {
   NextSiblingNotFoundError,
   PageCycleError,
@@ -21,7 +24,7 @@ import { positionBetween } from '../helpers';
 import { type PageRecord, PagesRepository } from '../pages.repository';
 
 export interface MovePageCommand {
-  ownerId: string;
+  actorId: string;
   pageId: string;
   parentPageId: string | null;
   previousSiblingId: string | null;
@@ -37,20 +40,53 @@ export class MovePageUseCase {
   constructor(
     @Inject(TransactionRunner) private readonly transactions: TransactionRunner,
     @Inject(PagesRepository) private readonly pages: PagesRepository,
+    @Inject(PagePermissionsRepository)
+    private readonly permissions: PagePermissionsRepository,
   ) {}
 
+  /**
+   * Перемещение меняет границы наследования сразу для трёх поддеревьев — исходного
+   * родителя, целевого и самой страницы, — поэтому требует роли `owner` на всех
+   * трёх. Роль `owner` есть только у хозяина дерева, так что проверка сводится к
+   * нему; выражена она через ту же модель, чтобы открыть перемещение редакторам
+   * можно было сменой требуемой роли, а не переписыванием юзкейса.
+   */
   execute(command: MovePageCommand): Promise<PageRecord> {
     return this.transactions.run(async (scope) => {
-      await scope.lock(ownerLock(command.ownerId));
+      const permissions = this.permissions.bind(scope);
+
+      assertRole(await permissions.resolveRole(command.actorId, command.pageId), PageRole.OWNER);
+
+      // Роль `owner` модель возвращает только когда актор и есть владелец страницы,
+      // поэтому ключ блокировки — он сам, и лишнее чтение ради ownerId не нужно.
+      await scope.lock(ownerLock(command.actorId));
 
       const pages = this.pages.bind(scope);
-      const page = await pages.findByIdForOwner(command.pageId, command.ownerId);
+      const page = await pages.findByIdForOwner(command.pageId, command.actorId);
 
       if (page === null) {
         throw new PageNotFoundError();
       }
 
+      // Права на прежнего родителя: страница уходит из его поддерева.
+      if (page.parentPageId !== null) {
+        assertRole(
+          await permissions.resolveRole(command.actorId, page.parentPageId),
+          PageRole.OWNER,
+        );
+      }
+
       if (command.parentPageId !== null) {
+        const parentRole = await permissions.resolveRole(command.actorId, command.parentPageId);
+
+        // Недоступный родитель — это отказ о родителе, а не о перемещаемой странице:
+        // в теле запроса несколько идентификаторов, и вызывающий должен понять, какой
+        // не подошёл. Роль ниже `owner` при этом остаётся `403`.
+        if (parentRole === null) {
+          throw new PageParentNotFoundError();
+        }
+
+        assertRole(parentRole, PageRole.OWNER);
         await this.assertParentAccepts(pages, page, command.parentPageId);
       }
 

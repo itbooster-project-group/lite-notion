@@ -1,11 +1,13 @@
+import { PageRole } from '@lite-notion/page-permissions';
 import { Inject, Injectable } from '@nestjs/common';
 
+import { PagePermissionsService } from '../../page-permissions/page-permissions.service';
 import { PageNotFoundError } from '../errors';
 import type { Bytes } from '../pages.repository';
 import { type PageDocumentRecord, PageDocumentRepository } from './page-document.repository';
 
 export interface ReplaceDocumentCommand {
-  ownerId: string;
+  actorId: string;
   pageId: string;
   tiptapSchemaVersion: number;
   yjsState: Bytes;
@@ -13,20 +15,29 @@ export interface ReplaceDocumentCommand {
 
 /**
  * Отдельно от `PagesService`: у документа нет ни блокировок, ни рангов — только
- * чтение и замена байтов. Права проверяет запрос через связь с `Page`.
+ * чтение и замена байтов. Права у документа тоже не свои: он доступен ровно тем,
+ * кому доступна его страница, и той же моделью.
  */
 @Injectable()
 export class PageDocumentService {
-  constructor(@Inject(PageDocumentRepository) private readonly documents: PageDocumentRepository) {}
+  constructor(
+    @Inject(PageDocumentRepository) private readonly documents: PageDocumentRepository,
+    @Inject(PagePermissionsService) private readonly permissions: PagePermissionsService,
+  ) {}
 
-  async read(pageId: string, ownerId: string): Promise<PageDocumentRecord> {
-    return this.require(await this.documents.find(pageId, ownerId));
+  /** Чтение содержимого — то же, что чтение страницы, поэтому `viewer`. */
+  async read(pageId: string, actorId: string): Promise<PageDocumentRecord> {
+    await this.permissions.requireRole(actorId, pageId, PageRole.VIEWER);
+
+    return this.require(await this.documents.find(pageId));
   }
 
+  /** Запись — изменение страницы, поэтому `editor`: читателю её не хватает. */
   async replace(command: ReplaceDocumentCommand): Promise<PageDocumentRecord> {
+    await this.permissions.requireRole(command.actorId, command.pageId, PageRole.EDITOR);
+
     return this.require(
       await this.documents.replace({
-        ownerId: command.ownerId,
         pageId: command.pageId,
         tiptapSchemaVersion: command.tiptapSchemaVersion,
         yjsState: command.yjsState,
