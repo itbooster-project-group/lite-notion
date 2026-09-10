@@ -94,7 +94,7 @@ jobs:
       COLLABORATION_ALLOWED_ORIGIN: http://localhost:3000
       WEBSOCKET_MAX_PAYLOAD_BYTES: 1048576
       DATABASE_CONNECTION_TIMEOUT_MS: 5000
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DATABASE_URL: postgresql://lite_notion:lite_notion@localhost:5432/lite_notion?schema=public
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
       NODE_ENV: test
       PORT: 3002
