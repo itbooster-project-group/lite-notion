@@ -5,9 +5,9 @@ import { afterEach, describe, expect, it, type Mock, vi } from 'vitest';
 import WebSocket from 'ws';
 import * as Y from 'yjs';
 
-import type { CollaborationConfig } from '../config/environment';
-import type { CollaborationLogger } from '../logging/logger';
-import { createCollaborationServer } from './collaboration-server';
+import type { CollaborationConfig } from '../config/environment.js';
+import type { CollaborationLogger } from '../logging/logger.js';
+import { createCollaborationServer } from './collaboration-server.js';
 
 const jwtSecret = 'local-development-only-change-me-before-deploy';
 const ownerId = '550e8400-e29b-41d4-a716-446655440000';

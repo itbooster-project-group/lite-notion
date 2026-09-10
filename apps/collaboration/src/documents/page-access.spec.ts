@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { PageAccessDeniedError, PageAccessService } from './page-access';
+import { PageAccessDeniedError, PageAccessService } from './page-access.js';
 
 describe('PageAccessService', () => {
   it('разрешает owner access к live page с документом', async () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { assertAllowedOrigin, OriginValidationError } from './origin';
+import { assertAllowedOrigin, OriginValidationError } from './origin.js';
 
 describe('assertAllowedOrigin', () => {
   it('принимает exact allowed origin', () => {

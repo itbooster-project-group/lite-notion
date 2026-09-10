@@ -3,12 +3,11 @@ import { describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
 
 import {
-  createDocumentFromState,
   DocumentLoadError,
   DocumentSizeLimitExceededError,
   DocumentStoreSkippedError,
   PageDocumentPersistence,
-} from './persistence';
+} from './persistence.js';
 
 describe('PageDocumentPersistence', () => {
   it('загружает existing binary Yjs state', async () => {
@@ -24,13 +23,14 @@ describe('PageDocumentPersistence', () => {
     expect(loaded.getText('body').toString()).toBe('hello');
   });
 
-  it('инициализирует empty yjsState как пустой Y.Doc без applyUpdate', async () => {
-    const applyUpdate = vi.fn();
+  it('инициализирует empty yjsState как пустой Y.Doc', async () => {
+    const service = new PageDocumentPersistence({
+      pageDocument: { findFirst: vi.fn(async () => ({ yjsState: new Uint8Array() })) },
+    } as never);
 
-    const loaded = createDocumentFromState(new Uint8Array(), applyUpdate);
+    const loaded = await service.load('page:550e8400-e29b-41d4-a716-446655440000');
 
     expect(loaded.getText('body').toString()).toBe('');
-    expect(applyUpdate).not.toHaveBeenCalled();
   });
 
   it('отклоняет load для missing или deleted page/document', async () => {

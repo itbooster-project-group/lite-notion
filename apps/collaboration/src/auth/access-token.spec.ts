@@ -5,7 +5,7 @@ import {
   authenticateAccessToken,
   CollaborationAuthenticationError,
   extractAccessToken,
-} from './access-token';
+} from './access-token.js';
 
 const secret = 'local-development-only-change-me-before-deploy';
 

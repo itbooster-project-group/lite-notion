@@ -1,17 +1,17 @@
 import { Server } from '@hocuspocus/server';
 import type { PrismaClient } from '@lite-notion/database';
 
-import { authenticateAccessToken } from '../auth/access-token';
-import { assertAllowedOrigin } from '../auth/origin';
-import type { CollaborationConfig } from '../config/environment';
-import { parsePageDocumentName } from '../documents/document-name';
-import { type PageAccess, PageAccessService } from '../documents/page-access';
+import { authenticateAccessToken } from '../auth/access-token.js';
+import { assertAllowedOrigin } from '../auth/origin.js';
+import type { CollaborationConfig } from '../config/environment.js';
+import { parsePageDocumentName } from '../documents/document-name.js';
+import { type PageAccess, PageAccessService } from '../documents/page-access.js';
 import {
   DocumentSizeLimitExceededError,
   DocumentStoreSkippedError,
   PageDocumentPersistence,
-} from '../documents/persistence';
-import type { CollaborationLogger } from '../logging/logger';
+} from '../documents/persistence.js';
+import type { CollaborationLogger } from '../logging/logger.js';
 
 export interface CollaborationContext {
   pageAccess: PageAccess;

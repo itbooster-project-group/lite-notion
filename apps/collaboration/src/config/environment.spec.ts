@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createCollaborationConfig } from './environment';
+import { createCollaborationConfig } from './environment.js';
 
 const validEnvironment = {
   COLLABORATION_ALLOWED_ORIGIN: 'http://localhost:3000',

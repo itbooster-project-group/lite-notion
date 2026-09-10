@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { InvalidDocumentNameError, parsePageDocumentName } from './document-name';
+import { InvalidDocumentNameError, parsePageDocumentName } from './document-name.js';
 
 describe('parsePageDocumentName', () => {
   it('принимает canonical page room', () => {

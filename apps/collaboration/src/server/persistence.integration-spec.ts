@@ -9,8 +9,7 @@ import jwt from 'jsonwebtoken';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import * as Y from 'yjs';
-
-import { createCollaborationServer } from './collaboration-server';
+import { createCollaborationServer } from './collaboration-server.js';
 
 const jwtSecret = 'local-development-only-change-me-before-deploy';
 const origin = 'http://localhost:3000';
