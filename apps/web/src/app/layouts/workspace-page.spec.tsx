@@ -191,9 +191,9 @@ describe('workspace page', () => {
       'aria-selected',
       'true',
     );
-    expect(
-      screen.getByText('Редактор страницы появится в следующем обновлении.'),
-    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(document.querySelector('[data-collaboration-status]')).not.toBeNull(),
+    );
     expect(screen.queryByRole('textbox', { name: 'Содержимое страницы' })).toBeNull();
   });
 

@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll } from 'vitest';
 import { server } from './src/shared/api/mocks/server';
 
 process.env.NEXT_PUBLIC_API_BASE_URL = 'http://localhost:3001';
+process.env.NEXT_PUBLIC_COLLABORATION_URL = 'ws://localhost:3002';
 
 Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
   configurable: true,

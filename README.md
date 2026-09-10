@@ -112,6 +112,7 @@ Frontend использует следующие публичные переме
 | Переменная | Значение в `.env.example` | Назначение |
 | --- | --- | --- |
 | `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:3001` | Origin NestJS API для generated fetch client |
+| `NEXT_PUBLIC_COLLABORATION_URL` | `ws://localhost:3002` | Hocuspocus WebSocket URL для Yjs document transport |
 | `NEXT_PUBLIC_API_MOCKING` | `disabled` | Значение `enabled` включает MSW browser worker только в development |
 
 Collaboration runtime использует следующие переменные окружения:
@@ -126,7 +127,7 @@ Collaboration runtime использует следующие переменны
 | `JWT_SECRET` | `local-development-only-change-me-before-deploy` | Тот же secret, которым API подписывает access JWT; строка длиной не менее 32 символов |
 | `WEBSOCKET_MAX_PAYLOAD_BYTES` | `1048576` | Положительное целое число для одного WebSocket payload; не ограничивает итоговый Yjs-документ |
 
-Collaboration service уже можно запускать и тестировать отдельно, но текущий frontend ещё не подключён к Hocuspocus provider. До будущей миграции редактора обычный editor traffic продолжает идти через существующий REST write-path API.
+Collaboration service используется frontend-редактором для document content через Yjs. Backend `PUT /api/v1/pages/:pageId/document` пока сохраняется без изменений как compatibility path для legacy clients, но migrated web editor его не вызывает и не использует как fallback. Удаление backend REST writer запланировано отдельным change после end-to-end проверки collaboration.
 
 ### Автономная разработка frontend
 

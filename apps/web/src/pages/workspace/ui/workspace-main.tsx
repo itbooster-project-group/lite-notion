@@ -10,7 +10,8 @@ import {
 } from '@/entities/page';
 import { type PageDeleteRequest, PageTree } from '@/features/workspace-management';
 import { workspacePagePath } from '@/shared/routing';
-import { Heading, Text } from '@/shared/ui';
+import { Heading } from '@/shared/ui';
+import { CollaborativePageEditor } from './collaborative-page-editor';
 
 type WorkspaceMainProps = Readonly<{
   activePageId: string | undefined;
@@ -64,9 +65,7 @@ export function WorkspaceMain({
         <Heading as="h1" variant="page">
           {getPageDisplayTitle(page.title)}
         </Heading>
-        <div className="rounded-xl border border-dashed bg-muted/30 p-8">
-          <Text variant="caption">Редактор страницы появится в следующем обновлении.</Text>
-        </div>
+        <CollaborativePageEditor pageId={page.id} />
       </div>
     </section>
   );
