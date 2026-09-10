@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 
 import { PurgeConfirmationRequiredError } from '../common/errors';
 import { ProjectNotFoundError } from '../projects/errors';
@@ -11,6 +16,7 @@ import {
   PageProjectMismatchError,
   PageRestoreProjectDeletedError,
   PageRestoreTargetProjectRejectedError,
+  PageRoleInsufficientError,
   PreviousSiblingNotFoundError,
   SiblingOrderError,
   SiblingParentMismatchError,
@@ -100,8 +106,9 @@ export function compareSiblings(
 
 /**
  * Перевод доменных ошибок в HTTP: сервис и репозиторий про HTTP не знают, а оба
- * контроллера модуля переводят одинаково. `403` не используется нигде — он отличал
- * бы существующую чужую запись от несуществующей.
+ * контроллера модуля переводят одинаково. `403` даёт единственная ошибка — нехватка
+ * роли на видимой актору странице; во всех прочих случаях недоступное отвечает тем
+ * же `404`, что и несуществующее.
  */
 export async function toHttpException<T>(operation: () => Promise<T>): Promise<T> {
   try {
@@ -115,6 +122,10 @@ export async function toHttpException<T>(operation: () => Promise<T>): Promise<T
       error instanceof NextSiblingNotFoundError
     ) {
       throw new NotFoundException(error.message);
+    }
+
+    if (error instanceof PageRoleInsufficientError) {
+      throw new ForbiddenException(error.message);
     }
 
     if (error instanceof PageCycleError || error instanceof PageRestoreProjectDeletedError) {

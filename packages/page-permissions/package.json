@@ -1,0 +1,29 @@
+{
+  "name": "@lite-notion/page-permissions",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prebuild": "pnpm --filter @lite-notion/database build",
+    "pretest": "pnpm --filter @lite-notion/database build",
+    "pretest:integration": "pnpm --filter @lite-notion/database build",
+    "pretypecheck": "pnpm --filter @lite-notion/database build",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.mts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "dependencies": {
+    "@lite-notion/database": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

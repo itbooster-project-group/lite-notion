@@ -353,6 +353,64 @@
         "tags": ["pages"]
       }
     },
+    "/api/v1/pages/shared": {
+      "get": {
+        "operationId": "getSharedPages",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Accessible pages of other users as a tree",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PageTreeNodeDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Page or project does not exist, or belongs to another user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get pages of other users the current user can access",
+        "tags": ["pages"]
+      }
+    },
     "/api/v1/pages/trash": {
       "get": {
         "operationId": "getPageTrash",
@@ -733,6 +791,91 @@
           }
         ],
         "summary": "Move a page subtree and reorder siblings",
+        "tags": ["pages"]
+      }
+    },
+    "/api/v1/pages/{pageId}/access-mode": {
+      "put": {
+        "operationId": "setPageAccessMode",
+        "parameters": [
+          {
+            "name": "pageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAccessModeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Access mode updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The page is visible to the current user, but changing access needs ownership",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Page or project does not exist, or belongs to another user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set where permission inheritance stops for a page",
         "tags": ["pages"]
       }
     },
@@ -1461,6 +1604,16 @@
               }
             }
           },
+          "403": {
+            "description": "The page is readable for the current user, but writing it needs the editor role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Page does not exist or belongs to another user",
             "content": {
@@ -1479,6 +1632,244 @@
         ],
         "summary": "Replace the content of a page",
         "tags": ["pages"]
+      }
+    },
+    "/api/v1/pages/{pageId}/permissions": {
+      "get": {
+        "operationId": "getPagePermissions",
+        "parameters": [
+          {
+            "name": "pageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Direct permissions of the page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PagePermissionDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The page is visible to the current user, but managing access needs ownership",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Page or permission does not exist, or the page is not accessible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List direct permissions of a page",
+        "tags": ["page-permissions"]
+      },
+      "put": {
+        "operationId": "grantPagePermission",
+        "parameters": [
+          {
+            "name": "pageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantPagePermissionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Permission granted or changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagePermissionDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The page is visible to the current user, but managing access needs ownership",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Page or permission does not exist, or the page is not accessible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Grant or change a direct permission on a page",
+        "tags": ["page-permissions"]
+      }
+    },
+    "/api/v1/pages/{pageId}/permissions/{userId}": {
+      "delete": {
+        "operationId": "revokePagePermission",
+        "parameters": [
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Permission revoked"
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The page is visible to the current user, but managing access needs ownership",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Page or permission does not exist, or the page is not accessible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Revoke a direct permission on a page",
+        "tags": ["page-permissions"]
       }
     }
   },
@@ -1702,6 +2093,18 @@
             "description": "Fractional rank among siblings. Server-generated, ordered lexicographically.",
             "example": "V"
           },
+          "accessMode": {
+            "type": "string",
+            "description": "Where permission inheritance stops. `inherit` looks up the parent chain, `restricted` stops at this page.",
+            "enum": ["inherit", "restricted"],
+            "example": "inherit"
+          },
+          "accessRole": {
+            "type": "string",
+            "description": "Effective role of the current user on this page. Absence of access is not a value: an inaccessible page is not returned at all.",
+            "enum": ["viewer", "editor", "owner"],
+            "example": "owner"
+          },
           "createdAt": {
             "type": "string",
             "example": "2026-08-27T12:00:00.000Z",
@@ -1721,6 +2124,8 @@
           "createdById",
           "title",
           "position",
+          "accessMode",
+          "accessRole",
           "createdAt",
           "updatedAt"
         ]
@@ -1762,6 +2167,18 @@
             "description": "Fractional rank among siblings. Server-generated, ordered lexicographically.",
             "example": "V"
           },
+          "accessMode": {
+            "type": "string",
+            "description": "Where permission inheritance stops. `inherit` looks up the parent chain, `restricted` stops at this page.",
+            "enum": ["inherit", "restricted"],
+            "example": "inherit"
+          },
+          "accessRole": {
+            "type": "string",
+            "description": "Effective role of the current user on this page. Absence of access is not a value: an inaccessible page is not returned at all.",
+            "enum": ["viewer", "editor", "owner"],
+            "example": "owner"
+          },
           "createdAt": {
             "type": "string",
             "example": "2026-08-27T12:00:00.000Z",
@@ -1787,6 +2204,8 @@
           "createdById",
           "title",
           "position",
+          "accessMode",
+          "accessRole",
           "createdAt",
           "updatedAt",
           "children"
@@ -1899,6 +2318,18 @@
             "nullable": true
           }
         }
+      },
+      "SetAccessModeDto": {
+        "type": "object",
+        "properties": {
+          "accessMode": {
+            "type": "string",
+            "description": "Where permission inheritance stops. `restricted` blocks inheritance through this page; a grant on the page itself still applies.",
+            "enum": ["inherit", "restricted"],
+            "example": "restricted"
+          }
+        },
+        "required": ["accessMode"]
       },
       "PurgeConfirmationResponseDto": {
         "type": "object",
@@ -2039,6 +2470,58 @@
           }
         },
         "required": ["tiptapSchemaVersion", "yjsState"]
+      },
+      "PagePermissionDto": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "example": "9f6d4a5e-0f6d-4a5e-9f6d-0f6d4a5e9f6d",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string",
+            "example": "teammate@example.com",
+            "format": "email"
+          },
+          "name": {
+            "type": "string",
+            "example": "Alex Teammate"
+          },
+          "role": {
+            "type": "string",
+            "enum": ["viewer", "editor"],
+            "example": "viewer"
+          },
+          "createdAt": {
+            "type": "string",
+            "example": "2026-09-10T12:00:00.000Z",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "example": "2026-09-10T12:00:00.000Z",
+            "format": "date-time"
+          }
+        },
+        "required": ["userId", "email", "name", "role", "createdAt", "updatedAt"]
+      },
+      "GrantPagePermissionDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "teammate@example.com",
+            "format": "email"
+          },
+          "role": {
+            "type": "string",
+            "description": "Role to grant. `owner` is not accepted: ownership is not transferable here.",
+            "enum": ["viewer", "editor"],
+            "example": "viewer"
+          }
+        },
+        "required": ["email", "role"]
       }
     }
   }

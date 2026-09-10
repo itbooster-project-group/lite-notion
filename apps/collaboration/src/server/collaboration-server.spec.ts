@@ -64,16 +64,16 @@ function createPrismaDouble(initial?: Partial<StoredPage>): PrismaClient {
 
   const prisma = {
     __stored: stored,
-    page: {
-      findFirst: vi.fn(async ({ where }: { where: { id: string; ownerId: string } }) => {
-        if (where.id !== pageId || where.ownerId !== stored.ownerId || stored.deletedAt !== null) {
-          return null;
-        }
-
-        return { id: pageId };
-      }),
-    },
+    // Цепочка доступа: живая страница отдаёт одно звено с владельцем, удалённая —
+    // пустой результат. Разрешений в этом двойнике нет: сервер проверяется на
+    // владельце, а роли — в тестах пакета и в интеграционном тесте комнаты.
+    $queryRaw: vi.fn(async () =>
+      stored.deletedAt === null ? [{ depth: 0, ownerId: stored.ownerId, role: null }] : [],
+    ),
     pageDocument: {
+      findUnique: vi.fn(async ({ where }: { where: { pageId: string } }) =>
+        where.pageId === pageId ? { pageId } : null,
+      ),
       findFirst: vi.fn(async ({ where }: { where: { pageId: string } }) => {
         if (where.pageId !== pageId || stored.deletedAt !== null) {
           return null;

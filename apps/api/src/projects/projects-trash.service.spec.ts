@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { TransactionRunner } from '../database/transaction';
 import { InMemoryTransactionRunner } from '../database/transaction.in-memory';
+import { PagePermissionsRepository } from '../page-permissions/page-permissions.repository';
+import { InMemoryPagePermissionsRepository } from '../page-permissions/page-permissions.repository.in-memory';
+import { PagePermissionsService } from '../page-permissions/page-permissions.service';
 import { PageDocumentRepository } from '../pages/page-document/page-document.repository';
 import { InMemoryPageDocumentRepository } from '../pages/page-document/page-document.repository.in-memory';
 import { PageDocumentService } from '../pages/page-document/page-document.service';
@@ -11,6 +14,7 @@ import { InMemoryPagesRepository, type StoredPage } from '../pages/pages.reposit
 import { PagesService } from '../pages/pages.service';
 import { CreatePageUseCase } from '../pages/use-cases/create-page.use-case';
 import { SoftDeletePageUseCase } from '../pages/use-cases/soft-delete-page.use-case';
+import { UsersService } from '../users/users.service';
 import { ProjectNotFoundError } from './errors';
 import { ProjectsRepository } from './projects.repository';
 import { InMemoryProjectsRepository, type StoredProject } from './projects.repository.in-memory';
@@ -40,7 +44,7 @@ describe('ProjectsService: корзина', () => {
 
   const createPage = async (overrides: { parentPageId?: string | null; title?: string } = {}) =>
     createPageUseCase.execute({
-      ownerId: owner,
+      actorId: owner,
       parentPageId: overrides.parentPageId ?? null,
       projectId,
       title: overrides.title ?? '',
@@ -68,6 +72,12 @@ describe('ProjectsService: корзина', () => {
           useValue: new InMemoryPageDocumentRepository(pages.documents, pages.pages),
         },
         { provide: ProjectsRepository, useValue: projects },
+        PagePermissionsService,
+        { provide: UsersService, useValue: { findByEmail: async () => null } },
+        {
+          provide: PagePermissionsRepository,
+          useValue: new InMemoryPagePermissionsRepository(pageStore, projectStore),
+        },
         { provide: TransactionRunner, useValue: new InMemoryTransactionRunner() },
       ],
     }).compile();
@@ -238,7 +248,7 @@ describe('ProjectsService: корзина', () => {
 
       await expect(
         createPageUseCase.execute({
-          ownerId: owner,
+          actorId: owner,
           parentPageId: null,
           projectId,
           title: 'nope',
@@ -251,7 +261,7 @@ describe('ProjectsService: корзина', () => {
 
       const create = (targetProjectId: string) =>
         createPageUseCase
-          .execute({ ownerId: owner, parentPageId: null, projectId: targetProjectId, title: '' })
+          .execute({ actorId: owner, parentPageId: null, projectId: targetProjectId, title: '' })
           .catch((error) => error);
 
       const deleted = await create(projectId);

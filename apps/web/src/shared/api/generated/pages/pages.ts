@@ -36,6 +36,7 @@ import type {
   PurgePageParams,
   RenamePageDto,
   RestorePageDto,
+  SetAccessModeDto,
   UpdatePageDocumentDto,
 } from '../model';
 
@@ -242,6 +243,119 @@ export function useGetPageTree<
   queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getGetPageTreeQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+export const getGetSharedPagesUrl = () => {
+  return `/api/v1/pages/shared`;
+};
+
+/**
+ * @summary Get pages of other users the current user can access
+ */
+export const getSharedPages = async (
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<PageTreeNodeDto[]> => {
+  return apiFetch<PageTreeNodeDto[]>(getGetSharedPagesUrl(), {
+    ...options,
+    method: 'GET',
+  });
+};
+
+export const getGetSharedPagesQueryKey = () => {
+  return [`/api/v1/pages/shared`] as const;
+};
+
+export const getGetSharedPagesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSharedPages>>,
+  TError = ErrorType<HttpErrorResponseDto>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getSharedPages>>, TError, TData>>;
+  request?: SecondParameter<typeof apiFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetSharedPagesQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSharedPages>>> = ({ signal }) =>
+    getSharedPages({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSharedPages>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetSharedPagesQueryResult = NonNullable<Awaited<ReturnType<typeof getSharedPages>>>;
+export type GetSharedPagesQueryError = ErrorType<HttpErrorResponseDto>;
+
+export function useGetSharedPages<
+  TData = Awaited<ReturnType<typeof getSharedPages>>,
+  TError = ErrorType<HttpErrorResponseDto>,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getSharedPages>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getSharedPages>>,
+          TError,
+          Awaited<ReturnType<typeof getSharedPages>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetSharedPages<
+  TData = Awaited<ReturnType<typeof getSharedPages>>,
+  TError = ErrorType<HttpErrorResponseDto>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getSharedPages>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getSharedPages>>,
+          TError,
+          Awaited<ReturnType<typeof getSharedPages>>
+        >,
+        'initialData'
+      >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetSharedPages<
+  TData = Awaited<ReturnType<typeof getSharedPages>>,
+  TError = ErrorType<HttpErrorResponseDto>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getSharedPages>>, TError, TData>>;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Get pages of other users the current user can access
+ */
+
+export function useGetSharedPages<
+  TData = Awaited<ReturnType<typeof getSharedPages>>,
+  TError = ErrorType<HttpErrorResponseDto>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getSharedPages>>, TError, TData>>;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetSharedPagesQueryOptions(options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;
@@ -784,6 +898,90 @@ export const useMovePage = <TError = ErrorType<HttpErrorResponseDto>, TContext =
   TContext
 > => {
   return useMutation(getMovePageMutationOptions(options), queryClient);
+};
+export const getSetPageAccessModeUrl = (pageId: string) => {
+  return `/api/v1/pages/${pageId}/access-mode`;
+};
+
+/**
+ * @summary Set where permission inheritance stops for a page
+ */
+export const setPageAccessMode = async (
+  pageId: string,
+  setAccessModeDto: SetAccessModeDto,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<PageDto> => {
+  return apiFetch<PageDto>(getSetPageAccessModeUrl(pageId), {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(setAccessModeDto),
+  });
+};
+
+export const getSetPageAccessModeMutationOptions = <
+  TError = ErrorType<HttpErrorResponseDto>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setPageAccessMode>>,
+    TError,
+    { pageId: string; data: BodyType<SetAccessModeDto> },
+    TContext
+  >;
+  request?: SecondParameter<typeof apiFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setPageAccessMode>>,
+  TError,
+  { pageId: string; data: BodyType<SetAccessModeDto> },
+  TContext
+> => {
+  const mutationKey = ['setPageAccessMode'];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setPageAccessMode>>,
+    { pageId: string; data: BodyType<SetAccessModeDto> }
+  > = (props) => {
+    const { pageId, data } = props ?? {};
+
+    return setPageAccessMode(pageId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetPageAccessModeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setPageAccessMode>>
+>;
+export type SetPageAccessModeMutationBody = BodyType<SetAccessModeDto>;
+export type SetPageAccessModeMutationError = ErrorType<HttpErrorResponseDto>;
+
+/**
+ * @summary Set where permission inheritance stops for a page
+ */
+export const useSetPageAccessMode = <TError = ErrorType<HttpErrorResponseDto>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof setPageAccessMode>>,
+      TError,
+      { pageId: string; data: BodyType<SetAccessModeDto> },
+      TContext
+    >;
+    request?: SecondParameter<typeof apiFetch>;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof setPageAccessMode>>,
+  TError,
+  { pageId: string; data: BodyType<SetAccessModeDto> },
+  TContext
+> => {
+  return useMutation(getSetPageAccessModeMutationOptions(options), queryClient);
 };
 export const getPurgePageUrl = (pageId: string, params?: PurgePageParams) => {
   const normalizedParams = new URLSearchParams();

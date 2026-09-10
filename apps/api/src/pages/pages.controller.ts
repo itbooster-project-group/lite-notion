@@ -1,3 +1,4 @@
+import { PageRole } from '@lite-notion/page-permissions';
 import {
   Body,
   Controller,
@@ -10,6 +11,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import {
@@ -18,6 +20,7 @@ import {
   ApiBody,
   ApiConflictResponse,
   ApiCreatedResponse,
+  ApiForbiddenResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -32,6 +35,7 @@ import { type AuthenticatedUser, CurrentUser } from '../common/decorators/curren
 import { CascadeQueryDto } from '../common/dto/cascade-query.dto';
 import { PurgeConfirmationResponseDto } from '../common/dto/purge-confirmation-response.dto';
 import { HttpErrorResponseDto } from '../http-error-response.dto';
+import { SetAccessModeDto } from '../page-permissions/dto/set-access-mode.dto';
 // Не `import type`: emitDecoratorMetadata кладёт в design:paramtypes рантайм-ссылку
 // на класс, и без неё ValidationPipe молча перестаёт валидировать тело запроса.
 import { CreatePageDto } from './dto/create-page.dto';
@@ -82,14 +86,14 @@ export class PagesController {
   ): Promise<PageDto> {
     const page = await toHttpException(() =>
       this.createPage.execute({
-        ownerId: user.id,
+        actorId: user.id,
         parentPageId: body.parentPageId ?? null,
         projectId: body.projectId,
         title: body.title ?? '',
       }),
     );
 
-    return PageDto.fromRecord(page);
+    return PageDto.fromRecord(page, page.role);
   }
 
   @Get()
@@ -98,7 +102,24 @@ export class PagesController {
   async findTree(@CurrentUser() user: AuthenticatedUser): Promise<PageTreeNodeDto[]> {
     const tree = await this.pages.findTree(user.id);
 
-    return tree.map(PageTreeNodeDto.fromNode);
+    return tree.map(PageTreeNodeDto.fromOwnedNode);
+  }
+
+  // Объявлен выше `:pageId`: Nest разбирает маршруты в порядке объявления, и иначе
+  // `shared` поймал бы параметрический обработчик. Тем же приёмом стоит `trash`.
+  @Get('shared')
+  @ApiOperation({
+    operationId: 'getSharedPages',
+    summary: 'Get pages of other users the current user can access',
+  })
+  @ApiOkResponse({
+    description: 'Accessible pages of other users as a tree',
+    type: [PageTreeNodeDto],
+  })
+  async findAccessibleTree(@CurrentUser() user: AuthenticatedUser): Promise<PageTreeNodeDto[]> {
+    const tree = await this.pages.findAccessibleTree(user.id);
+
+    return tree.map(PageTreeNodeDto.fromAccessibleNode);
   }
 
   @Get('trash')
@@ -118,7 +139,9 @@ export class PagesController {
     @CurrentUser() user: AuthenticatedUser,
     @Param('pageId', ParseUUIDPipe) pageId: string,
   ): Promise<PageDto> {
-    return PageDto.fromRecord(await toHttpException(() => this.pages.findById(pageId, user.id)));
+    const page = await toHttpException(() => this.pages.findById(pageId, user.id));
+
+    return PageDto.fromRecord(page, page.role);
   }
 
   @Patch(':pageId')
@@ -133,7 +156,7 @@ export class PagesController {
   ): Promise<PageDto> {
     const page = await toHttpException(() => this.pages.rename(pageId, user.id, body.title));
 
-    return PageDto.fromRecord(page);
+    return PageDto.fromRecord(page, page.role);
   }
 
   @Post(':pageId/move')
@@ -153,15 +176,44 @@ export class PagesController {
   ): Promise<PageDto> {
     const page = await toHttpException(() =>
       this.movePage.execute({
+        actorId: user.id,
         nextSiblingId: body.nextSiblingId ?? null,
-        ownerId: user.id,
         pageId,
         parentPageId: body.parentPageId ?? null,
         previousSiblingId: body.previousSiblingId ?? null,
       }),
     );
 
-    return PageDto.fromRecord(page);
+    // Перемещение доступно только владельцу, поэтому роль известна без запроса.
+    return PageDto.fromRecord(page, PageRole.OWNER);
+  }
+
+  @Put(':pageId/access-mode')
+  @ApiParam({ format: 'uuid', name: 'pageId', type: String })
+  @ApiBody({ type: SetAccessModeDto })
+  @ApiOperation({
+    operationId: 'setPageAccessMode',
+    summary: 'Set where permission inheritance stops for a page',
+  })
+  @ApiOkResponse({ description: 'Access mode updated', type: PageDto })
+  @ApiForbiddenResponse({
+    description: 'The page is visible to the current user, but changing access needs ownership',
+    type: HttpErrorResponseDto,
+  })
+  async setAccessMode(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('pageId', ParseUUIDPipe) pageId: string,
+    @Body() body: SetAccessModeDto,
+  ): Promise<PageDto> {
+    const page = await toHttpException(() =>
+      this.pages.setAccessMode(
+        pageId,
+        user.id,
+        body.accessMode === 'restricted' ? 'RESTRICTED' : 'INHERIT',
+      ),
+    );
+
+    return PageDto.fromRecord(page, page.role);
   }
 
   @Delete('trash')
@@ -238,6 +290,7 @@ export class PagesController {
       }),
     );
 
-    return PageDto.fromRecord(page);
+    // Корзина owner-scoped: восстанавливает только владелец.
+    return PageDto.fromRecord(page, PageRole.OWNER);
   }
 }

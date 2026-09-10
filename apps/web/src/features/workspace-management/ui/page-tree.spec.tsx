@@ -12,6 +12,8 @@ function page(
   title = id,
 ): PageTreeNodeDto {
   return {
+    accessMode: 'inherit',
+    accessRole: 'owner',
     children,
     createdAt: '2026-08-29T00:00:00.000Z',
     createdById: 'user-1',

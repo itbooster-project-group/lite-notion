@@ -2,6 +2,9 @@ import { Test } from '@nestjs/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { TransactionRunner } from '../database/transaction';
 import { InMemoryTransactionRunner } from '../database/transaction.in-memory';
+import { PagePermissionsRepository } from '../page-permissions/page-permissions.repository';
+import { InMemoryPagePermissionsRepository } from '../page-permissions/page-permissions.repository.in-memory';
+import { PagePermissionsService } from '../page-permissions/page-permissions.service';
 import { ProjectNotFoundError } from '../projects/errors';
 import { ProjectsRepository } from '../projects/projects.repository';
 import {
@@ -9,6 +12,7 @@ import {
   type StoredProject,
 } from '../projects/projects.repository.in-memory';
 import { ProjectsService } from '../projects/projects.service';
+import { UsersService } from '../users/users.service';
 import { TIPTAP_SCHEMA_VERSION } from './constants';
 import {
   NextSiblingNotFoundError,
@@ -42,13 +46,19 @@ describe('PagesService', () => {
   let pages: InMemoryPagesRepository;
   let documents: InMemoryPageDocumentRepository;
   let projects: InMemoryProjectsRepository;
+  let permissions: InMemoryPagePermissionsRepository;
   let projectId: string;
 
   const createPage = async (
-    overrides: { parentPageId?: string | null; title?: string; projectId?: string } = {},
+    overrides: {
+      parentPageId?: string | null;
+      title?: string;
+      projectId?: string;
+      actorId?: string;
+    } = {},
   ) =>
     createPageUseCase.execute({
-      ownerId: owner,
+      actorId: overrides.actorId ?? owner,
       parentPageId: overrides.parentPageId ?? null,
       projectId: overrides.projectId ?? projectId,
       title: overrides.title ?? '',
@@ -62,6 +72,7 @@ describe('PagesService', () => {
     pages = new InMemoryPagesRepository(new Map(), projectStore, pageStore);
     documents = new InMemoryPageDocumentRepository(pages.documents, pages.pages);
     projects = new InMemoryProjectsRepository(pageStore, projectStore);
+    permissions = new InMemoryPagePermissionsRepository(pageStore, projectStore);
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -70,9 +81,12 @@ describe('PagesService', () => {
         CreatePageUseCase,
         PageDocumentService,
         MovePageUseCase,
+        PagePermissionsService,
         { provide: PagesRepository, useValue: pages },
         { provide: PageDocumentRepository, useValue: documents },
         { provide: ProjectsRepository, useValue: projects },
+        { provide: UsersService, useValue: { findByEmail: async () => null } },
+        { provide: PagePermissionsRepository, useValue: permissions },
         { provide: TransactionRunner, useValue: new InMemoryTransactionRunner() },
       ],
     }).compile();
@@ -305,7 +319,7 @@ describe('PagesService', () => {
 
       await movePageUseCase.execute({
         nextSiblingId: null,
-        ownerId: owner,
+        actorId: owner,
         pageId: second.id,
         parentPageId: first.id,
         previousSiblingId: null,
@@ -325,7 +339,7 @@ describe('PagesService', () => {
 
       await movePageUseCase.execute({
         nextSiblingId: null,
-        ownerId: owner,
+        actorId: owner,
         pageId: branch.id,
         parentPageId: root.id,
         previousSiblingId: null,
@@ -344,7 +358,7 @@ describe('PagesService', () => {
 
       const moved = await movePageUseCase.execute({
         nextSiblingId: null,
-        ownerId: owner,
+        actorId: owner,
         pageId: child.id,
         parentPageId: null,
         previousSiblingId: null,
@@ -360,7 +374,7 @@ describe('PagesService', () => {
 
       const moved = await movePageUseCase.execute({
         nextSiblingId: second.id,
-        ownerId: owner,
+        actorId: owner,
         pageId: third.id,
         parentPageId: null,
         previousSiblingId: first.id,
@@ -382,7 +396,7 @@ describe('PagesService', () => {
 
       await movePageUseCase.execute({
         nextSiblingId: null,
-        ownerId: owner,
+        actorId: owner,
         pageId: first.id,
         parentPageId: null,
         previousSiblingId: null,
@@ -399,7 +413,7 @@ describe('PagesService', () => {
       await expect(
         movePageUseCase.execute({
           nextSiblingId: null,
-          ownerId: owner,
+          actorId: owner,
           pageId: page.id,
           parentPageId: page.id,
           previousSiblingId: null,
@@ -415,7 +429,7 @@ describe('PagesService', () => {
       await expect(
         movePageUseCase.execute({
           nextSiblingId: null,
-          ownerId: owner,
+          actorId: owner,
           pageId: root.id,
           parentPageId: grandchild.id,
           previousSiblingId: null,
@@ -436,7 +450,7 @@ describe('PagesService', () => {
       await expect(
         movePageUseCase.execute({
           nextSiblingId: null,
-          ownerId: owner,
+          actorId: owner,
           pageId: here.id,
           parentPageId: there.id,
           previousSiblingId: null,
@@ -456,7 +470,7 @@ describe('PagesService', () => {
       await expect(
         movePageUseCase.execute({
           nextSiblingId: first.id,
-          ownerId: owner,
+          actorId: owner,
           pageId: second.id,
           parentPageId: null,
           previousSiblingId: first.id,
@@ -473,7 +487,7 @@ describe('PagesService', () => {
       await expect(
         movePageUseCase.execute({
           nextSiblingId: first.id,
-          ownerId: owner,
+          actorId: owner,
           pageId: third.id,
           parentPageId: null,
           previousSiblingId: second.id,
@@ -495,7 +509,7 @@ describe('PagesService', () => {
       await expect(
         movePageUseCase.execute({
           nextSiblingId: second.id,
-          ownerId: owner,
+          actorId: owner,
           pageId: third.id,
           parentPageId: null,
           previousSiblingId: first.id,
@@ -513,7 +527,7 @@ describe('PagesService', () => {
       await expect(
         movePageUseCase.execute({
           nextSiblingId: third.id,
-          ownerId: owner,
+          actorId: owner,
           pageId: moved.id,
           parentPageId: null,
           previousSiblingId: first.id,
@@ -533,7 +547,7 @@ describe('PagesService', () => {
 
       await movePageUseCase.execute({
         nextSiblingId: second.id,
-        ownerId: owner,
+        actorId: owner,
         pageId: moved.id,
         parentPageId: null,
         previousSiblingId: first.id,
@@ -552,7 +566,7 @@ describe('PagesService', () => {
       await expect(
         movePageUseCase.execute({
           nextSiblingId: third.id,
-          ownerId: owner,
+          actorId: owner,
           pageId: moved.id,
           parentPageId: null,
           previousSiblingId: first.id,
@@ -568,7 +582,7 @@ describe('PagesService', () => {
       await expect(
         movePageUseCase.execute({
           nextSiblingId: null,
-          ownerId: owner,
+          actorId: owner,
           pageId: root.id,
           parentPageId: null,
           previousSiblingId: child.id,
@@ -591,7 +605,7 @@ describe('PagesService', () => {
         movePageUseCase
           .execute({
             nextSiblingId: overrides.nextSiblingId ?? null,
-            ownerId: owner,
+            actorId: owner,
             pageId: overrides.pageId ?? page.id,
             parentPageId: overrides.parentPageId ?? null,
             previousSiblingId: overrides.previousSiblingId ?? null,
@@ -623,7 +637,7 @@ describe('PagesService', () => {
       const previous = await movePageUseCase
         .execute({
           nextSiblingId: null,
-          ownerId: owner,
+          actorId: owner,
           pageId: page.id,
           parentPageId: null,
           previousSiblingId: child.id,
@@ -632,7 +646,7 @@ describe('PagesService', () => {
       const next = await movePageUseCase
         .execute({
           nextSiblingId: child.id,
-          ownerId: owner,
+          actorId: owner,
           pageId: page.id,
           parentPageId: null,
           previousSiblingId: null,
@@ -665,7 +679,7 @@ describe('PagesService', () => {
           await movePageUseCase
             .execute({
               nextSiblingId: overrides.nextSiblingId ?? null,
-              ownerId: owner,
+              actorId: owner,
               pageId: page.id,
               parentPageId: overrides.parentPageId ?? null,
               previousSiblingId: overrides.previousSiblingId ?? null,
@@ -690,7 +704,7 @@ describe('PagesService', () => {
       const foreignError = await movePageUseCase
         .execute({
           nextSiblingId: null,
-          ownerId: stranger,
+          actorId: stranger,
           pageId: page.id,
           parentPageId: null,
           previousSiblingId: null,
@@ -699,7 +713,7 @@ describe('PagesService', () => {
       const missingError = await movePageUseCase
         .execute({
           nextSiblingId: null,
-          ownerId: stranger,
+          actorId: stranger,
           pageId: missingId,
           parentPageId: null,
           previousSiblingId: null,
@@ -719,7 +733,7 @@ describe('PagesService', () => {
       await expect(
         movePageUseCase.execute({
           nextSiblingId: null,
-          ownerId: owner,
+          actorId: owner,
           pageId: second.id,
           parentPageId: first.id,
           previousSiblingId: null,

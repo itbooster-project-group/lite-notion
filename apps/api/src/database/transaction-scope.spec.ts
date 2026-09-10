@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-
+import { PagePermissionsRepository } from '../page-permissions/page-permissions.repository';
 import { PageDocumentRepository } from '../pages/page-document/page-document.repository';
 import { PagesRepository } from '../pages/pages.repository';
 import { CreatePageUseCase } from '../pages/use-cases/create-page.use-case';
@@ -99,22 +99,27 @@ interface Case {
 const cases: Case[] = [
   {
     name: 'CreatePageUseCase',
-    repositories: 3,
-    run: (transactions, [pages, projects, documents]) =>
+    repositories: 4,
+    run: (transactions, [pages, projects, documents, permissions]) =>
       new CreatePageUseCase(
         transactions,
         pages as PagesRepository,
         projects as ProjectsRepository,
         documents as PageDocumentRepository,
-      ).execute({ ownerId: OWNER_ID, parentPageId: null, projectId: RECORD_ID, title: '' }),
+        permissions as PagePermissionsRepository,
+      ).execute({ actorId: OWNER_ID, parentPageId: null, projectId: RECORD_ID, title: '' }),
   },
   {
     name: 'MovePageUseCase',
-    repositories: 1,
-    run: (transactions, [pages]) =>
-      new MovePageUseCase(transactions, pages as PagesRepository).execute({
+    repositories: 2,
+    run: (transactions, [pages, permissions]) =>
+      new MovePageUseCase(
+        transactions,
+        pages as PagesRepository,
+        permissions as PagePermissionsRepository,
+      ).execute({
         nextSiblingId: null,
-        ownerId: OWNER_ID,
+        actorId: OWNER_ID,
         pageId: RECORD_ID,
         parentPageId: null,
         previousSiblingId: null,
@@ -122,12 +127,13 @@ const cases: Case[] = [
   },
   {
     name: 'SoftDeletePageUseCase',
-    repositories: 1,
-    run: (transactions, [pages]) =>
-      new SoftDeletePageUseCase(transactions, pages as PagesRepository).execute(
-        RECORD_ID,
-        OWNER_ID,
-      ),
+    repositories: 2,
+    run: (transactions, [pages, permissions]) =>
+      new SoftDeletePageUseCase(
+        transactions,
+        pages as PagesRepository,
+        permissions as PagePermissionsRepository,
+      ).execute(RECORD_ID, OWNER_ID),
   },
   {
     name: 'RestorePageUseCase',

@@ -27,10 +27,10 @@ export class InMemoryPageDocumentRepository extends PageDocumentRepository {
     return this;
   }
 
-  async find(pageId: string, ownerId: string): Promise<PageDocumentRecord | null> {
+  async find(pageId: string): Promise<PageDocumentRecord | null> {
     const document = this.documents.get(pageId);
 
-    return document === undefined || !this.isVisible(pageId, ownerId)
+    return document === undefined || !this.isVisible(pageId)
       ? null
       : {
           pageId,
@@ -54,7 +54,7 @@ export class InMemoryPageDocumentRepository extends PageDocumentRepository {
   async replace(input: ReplaceDocumentInput): Promise<PageDocumentRecord | null> {
     const document = this.documents.get(input.pageId);
 
-    if (document === undefined || !this.isVisible(input.pageId, input.ownerId)) {
+    if (document === undefined || !this.isVisible(input.pageId)) {
       return null;
     }
 
@@ -62,13 +62,13 @@ export class InMemoryPageDocumentRepository extends PageDocumentRepository {
     document.tiptapSchemaVersion = input.tiptapSchemaVersion;
     document.yjsState = input.yjsState;
 
-    return this.find(input.pageId, input.ownerId);
+    return this.find(input.pageId);
   }
 
-  /** Отсутствующая в хранилище страница считается живой: в базе её держит FK. */
-  private isVisible(pageId: string, ownerId: string): boolean {
+  /** Живость, а не права: роль спрашивает сервис. Отсутствующую страницу в базе держит FK. */
+  private isVisible(pageId: string): boolean {
     const page = this.pages.get(pageId);
 
-    return page === undefined || (page.deletedAt === null && page.ownerId === ownerId);
+    return page === undefined || page.deletedAt === null;
   }
 }
