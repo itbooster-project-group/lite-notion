@@ -76,6 +76,20 @@ jobs:
   collaboration:
     name: collaboration
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: lite_notion
+          POSTGRES_PASSWORD: lite_notion
+          POSTGRES_DB: lite_notion
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lite_notion -d lite_notion"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       COLLABORATION_ALLOWED_ORIGIN: http://localhost:3000
       WEBSOCKET_MAX_PAYLOAD_BYTES: 1048576
@@ -94,6 +108,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @lite-notion/database run db:migrate:deploy
       - run: pnpm --filter @lite-notion/collaboration run typecheck
       - run: pnpm --filter @lite-notion/collaboration run test
+      - run: pnpm --filter @lite-notion/collaboration run test:integration
       - run: pnpm --filter @lite-notion/collaboration run build

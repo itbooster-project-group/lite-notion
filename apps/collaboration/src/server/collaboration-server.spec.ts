@@ -255,7 +255,7 @@ describe('collaboration Hocuspocus runtime', () => {
       const firstState = Y.encodeStateAsUpdate(first);
       const secondState = Y.encodeStateAsUpdate(second);
 
-      return firstState.every((byte, index) => byte === secondState[index]);
+      return Buffer.from(firstState).equals(Buffer.from(secondState));
     });
     expect(first.getText('body').toString()).toBe(second.getText('body').toString());
     expect(first.getText('body').toString()).toContain('A');
