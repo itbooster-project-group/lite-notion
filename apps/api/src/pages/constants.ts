@@ -1,3 +1,5 @@
+export { DOCUMENT_MAX_BYTES, TIPTAP_SCHEMA_VERSION } from '@lite-notion/database';
+
 /**
  * Алфавит fractional rank в порядке ASCII-кодов; приложение сравнивает ранги по
  * code units. Совпадение с порядком в PostgreSQL держит collation `"C"` у колонки
@@ -18,11 +20,3 @@ export const TITLE_MAX_LENGTH = 255;
  * Версия Tiptap-схемы, которой размечается свежесозданный пустой документ.
  * Инкрементируется, когда меняется схема редактора.
  */
-export const TIPTAP_SCHEMA_VERSION = 1;
-
-/**
- * Предел размера Yjs state в байтах. Значение выбрано без данных о реальных
- * документах — см. openspec design.md, раздел 2b. Применяется дважды: как
- * валидация DTO и как лимит парсера тела запроса.
- */
-export const DOCUMENT_MAX_BYTES = 1024 * 1024;

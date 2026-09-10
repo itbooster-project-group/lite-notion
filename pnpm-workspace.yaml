@@ -5,6 +5,7 @@ shellEmulator: true
 
 packages:
   - "apps/*"
+  - "packages/*"
 
 allowBuilds:
   "@prisma/engines": true
@@ -15,6 +16,13 @@ allowBuilds:
   prisma: true
 
 catalog:
+  "@prisma/adapter-pg": ^7.9.1
+  "@prisma/client": ^7.9.1
   "@types/node": ^22.0.0
+  "@types/pg": ^8.21.0
+  pg: ^8.23.0
+  prisma: ^7.9.1
+  tsx: ^4.23.12
   typescript: ^5.9.0
   vitest: ^4.0.0
+  yjs: ^13.6.32

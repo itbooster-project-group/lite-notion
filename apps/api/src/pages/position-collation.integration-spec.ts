@@ -12,7 +12,7 @@ import { positionBetween } from './helpers';
  * схемы, а не кода, поэтому юнит-тесты его не видят.
  *
  * Требует поднятую базу и применённые миграции:
- *   pnpm db:up && pnpm --filter @lite-notion/api db:migrate:deploy
+ *   pnpm db:up && pnpm --filter @lite-notion/database db:migrate:deploy
  *   pnpm --filter @lite-notion/api test:integration
  */
 describe('порядок fractional rank в PostgreSQL', () => {

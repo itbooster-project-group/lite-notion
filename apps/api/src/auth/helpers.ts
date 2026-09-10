@@ -1,5 +1,5 @@
+import { Prisma } from '@lite-notion/database';
 import { NodeEnvironment } from '../config/environment';
-import { Prisma } from '../generated/prisma/client';
 import { PASSWORD_MAX_BYTES, REFRESH_COOKIE_PATH } from './constants';
 
 export function passwordByteLength(password: string): number {

@@ -6,6 +6,7 @@
 
 - `apps/web` — Next.js-приложение;
 - `apps/api` — NestJS API;
+- `apps/collaboration` — самостоятельный Hocuspocus/WebSocket runtime для Yjs-синхронизации;
 - PostgreSQL 18 в Docker Compose и Prisma для доступа к данным;
 - OpenAPI-driven TanStack Query client и MSW mocks для frontend;
 - общие команды pnpm, TypeScript, Biome и Vitest;
@@ -45,6 +46,7 @@ pnpm install
 
 ```bash
 cp apps/api/.env.example apps/api/.env
+cp apps/collaboration/.env.example apps/collaboration/.env
 cp apps/web/.env.example apps/web/.env.local
 ```
 
@@ -58,6 +60,7 @@ pnpm dev
 
 - frontend: [http://localhost:3000](http://localhost:3000);
 - API: [http://localhost:3001](http://localhost:3001);
+- collaboration runtime: ws://localhost:3002;
 - health endpoint: [http://localhost:3001/api/v1/health](http://localhost:3001/api/v1/health);
 - Swagger UI: [http://localhost:3001/api/docs](http://localhost:3001/api/docs);
 - OpenAPI JSON: [http://localhost:3001/api/openapi.json](http://localhost:3001/api/openapi.json).
@@ -111,6 +114,20 @@ Frontend использует следующие публичные переме
 | `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:3001` | Origin NestJS API для generated fetch client |
 | `NEXT_PUBLIC_API_MOCKING` | `disabled` | Значение `enabled` включает MSW browser worker только в development |
 
+Collaboration runtime использует следующие переменные окружения:
+
+| Переменная | Значение в `.env.example` | Ограничения |
+| --- | --- | --- |
+| `NODE_ENV` | `development` | `development`, `test` или `production` |
+| `PORT` | `3002` | Целое число от 1 до 65535 |
+| `COLLABORATION_ALLOWED_ORIGIN` | `http://localhost:3000` | Один точный HTTP(S) origin frontend без path, query и fragment |
+| `DATABASE_URL` | local Compose URL | PostgreSQL URL с protocol `postgresql` или `postgres` |
+| `DATABASE_CONNECTION_TIMEOUT_MS` | `5000` | Целое число от 1 до 60000 |
+| `JWT_SECRET` | `local-development-only-change-me-before-deploy` | Тот же secret, которым API подписывает access JWT; строка длиной не менее 32 символов |
+| `WEBSOCKET_MAX_PAYLOAD_BYTES` | `1048576` | Положительное целое число для одного WebSocket payload; не ограничивает итоговый Yjs-документ |
+
+Collaboration service уже можно запускать и тестировать отдельно, но текущий frontend ещё не подключён к Hocuspocus provider. До будущей миграции редактора обычный editor traffic продолжает идти через существующий REST write-path API.
+
 ### Автономная разработка frontend
 
 Для работы над frontend без API, PostgreSQL и Docker достаточно создать только web-конфигурацию:
@@ -146,28 +163,36 @@ pnpm dev:api
 PORT=4000 pnpm dev:api
 ```
 
+Для отдельной разработки collaboration runtime запустите:
+
+```bash
+pnpm dev:collaboration
+```
+
+Команда поднимает PostgreSQL или подтверждает его готовность, затем запускает только `apps/collaboration` без web/API.
+
 Все прикладные маршруты API находятся под prefix `/api/v1`. `GET /api/v1/health` проверяет доступность API и PostgreSQL, возвращая безопасный `503`, если база недоступна. Swagger UI и OpenAPI JSON доступны только при `NODE_ENV`, отличном от `production`; YAML-схема не публикуется.
 
 ## Prisma и API-контракт
 
-Текущая Prisma schema содержит модели `User` и `Session`. Основные команды:
+Текущая Prisma schema находится в `packages/database/prisma/schema.prisma` и содержит модели `User`, `Session`, `Project`, `Page` и `PageDocument`. Основные команды:
 
 ```bash
-pnpm --filter @lite-notion/api prisma:generate
-pnpm --filter @lite-notion/api db:migrate:dev
-pnpm --filter @lite-notion/api db:studio
+pnpm --filter @lite-notion/database prisma:generate
+pnpm --filter @lite-notion/database db:migrate:dev
+pnpm --filter @lite-notion/database db:studio
 ```
 
 `db:migrate:dev` создаёт новую миграцию после изменения Prisma schema и применяет все неприменённые миграции к локальной базе. Если именованный PostgreSQL volume был создан до появления текущей истории миграций либо Prisma сообщает о schema drift или непустой схеме без migration history, пересоздайте локальную базу:
 
 ```bash
-pnpm --filter @lite-notion/api exec prisma migrate reset
+pnpm --filter @lite-notion/database exec prisma migrate reset
 ```
 
 Команда `migrate reset` удаляет все данные из локальной базы, заново создаёт схему и применяет все миграции. Используйте её только для локальной разработки. В CI и production применяйте уже созданные миграции без сброса данных:
 
 ```bash
-pnpm --filter @lite-notion/api db:migrate:deploy
+pnpm --filter @lite-notion/database db:migrate:deploy
 ```
 
 После изменения Swagger decorators или DTO обновите коммитируемый OpenAPI snapshot, TanStack Query hooks и MSW handlers:
@@ -188,15 +213,16 @@ pnpm db:down
 
 | Команда | Назначение |
 | --- | --- |
-| `pnpm dev` | Поднять PostgreSQL, дождаться healthcheck и запустить frontend и API в watch mode |
+| `pnpm dev` | Поднять PostgreSQL, дождаться healthcheck и запустить frontend, API и collaboration runtime в watch mode |
 | `pnpm dev:lan` | Поднять development окружение для устройств в той же сети; при необходимости адрес задаётся через `LAN_HOST=<IP>` |
 | `pnpm dev:web` | Запустить только frontend без API и Docker; API mocking определяется web environment |
 | `pnpm dev:api` | Поднять PostgreSQL, дождаться healthcheck и запустить API в watch mode |
+| `pnpm dev:collaboration` | Поднять PostgreSQL или проверить его готовность и запустить только collaboration runtime |
 | `pnpm db:up` | Поднять локальный PostgreSQL и дождаться healthcheck |
 | `pnpm db:down` | Остановить Compose services без удаления database volume |
 | `pnpm api:generate` | Обновить OpenAPI snapshot, web client и MSW handlers |
 | `pnpm api:check` | Проверить generated API artifacts на drift |
-| `pnpm build` | Собрать оба приложения |
+| `pnpm build` | Собрать все workspace applications и packages |
 | `pnpm lint` | Проверить workspace через Biome без изменения файлов |
 | `pnpm format` | Отформатировать файлы и применить безопасные исправления Biome |
 | `pnpm typecheck` | Проверить типы обоих приложений |
@@ -208,7 +234,11 @@ pnpm db:down
 .
 ├── apps
 │   ├── api
+│   ├── collaboration
 │   └── web
+├── packages
+│   ├── auth-token
+│   └── database
 ├── openspec
 ├── biome.json
 ├── package.json

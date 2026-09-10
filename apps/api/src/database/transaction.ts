@@ -1,6 +1,6 @@
+import type { Prisma } from '@lite-notion/database';
 import { Inject, Injectable } from '@nestjs/common';
 
-import type { Prisma } from '../generated/prisma/client';
 import { PrismaService } from './prisma.service';
 
 /**
