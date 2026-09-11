@@ -209,6 +209,7 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
         onRequestDeletePage={requestPageDelete}
         onRequestDeleteProject={requestProjectDelete}
         onRenamePage={pageManagement.renamePage}
+        onOpenPageAccess={(selectedPageId) => router.push(workspacePagePath(selectedPageId))}
       />
       <SharedPagesTree
         isError={sharedPagesQuery.isError}

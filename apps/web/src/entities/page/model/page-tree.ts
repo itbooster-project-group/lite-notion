@@ -26,6 +26,7 @@ export type PageTreeItemData = Readonly<{
   childrenIds: readonly string[];
   canHaveChildren: boolean;
   hasChildren: boolean;
+  accessRole: PageTreeNodeDto['accessRole'];
   synthetic: boolean;
 }>;
 
@@ -97,6 +98,7 @@ export function buildProjectPageTree(tree: NormalizedPageTree, projectId: string
       childrenIds: rootChildren,
       canHaveChildren: true,
       hasChildren: rootChildren.length > 0,
+      accessRole: 'owner',
       synthetic: true,
     },
   };
@@ -112,6 +114,7 @@ export function buildProjectPageTree(tree: NormalizedPageTree, projectId: string
       childrenIds,
       canHaveChildren: true,
       hasChildren: childrenIds.length > 0,
+      accessRole: page.accessRole,
       synthetic: false,
     };
   }

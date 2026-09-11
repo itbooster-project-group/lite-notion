@@ -1,21 +1,27 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { getPageCapabilities, type PageAccessRole, type PageCapabilities } from '@/entities/page';
 import { useSession } from '@/entities/session';
 import {
   createCollaborativePageDocumentSession,
   type PageDocumentSession,
   pageRoomName,
 } from '@/features/page-editing';
-import type { PageTreeNodeDto } from '@/shared/api';
 import { PageEditor } from '@/widgets/page-editor';
 
 export function CollaborativePageEditor({
   accessRole,
+  capabilities,
   pageId,
-}: Readonly<{ accessRole: PageTreeNodeDto['accessRole']; pageId: string }>) {
+}: Readonly<{
+  accessRole?: PageAccessRole;
+  capabilities?: PageCapabilities;
+  pageId: string;
+}>) {
   const auth = useSession();
-  const editable = accessRole !== 'viewer';
+  const resolvedCapabilities = capabilities ?? getPageCapabilities(accessRole ?? 'viewer');
+  const editable = resolvedCapabilities.canEditContent;
   const [session, setSession] = useState<PageDocumentSession | null>(null);
   const [, rerender] = useState(0);
 

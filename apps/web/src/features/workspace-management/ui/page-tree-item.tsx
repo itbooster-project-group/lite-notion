@@ -3,7 +3,7 @@
 import type { ItemInstance } from '@headless-tree/core';
 import { ChevronDown, ChevronRight, GripVertical, MoreHorizontal, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
-import type { PageTreeItemData } from '@/entities/page';
+import type { PageCapabilities, PageTreeItemData } from '@/entities/page';
 import { Button, Input, Menu, MenuItem, MenuPopup, MenuTrigger, Tooltip } from '@/shared/ui';
 import type { PageDeleteRequest } from '../model/delete-intent';
 import { PageDraft } from './page-draft';
@@ -14,6 +14,7 @@ type PageTreeItemProps = Readonly<{
   createDraftError: string | undefined;
   createDraftPending: boolean;
   createDraftTitle: string;
+  capabilities: PageCapabilities;
   indentPx: number;
   item: ItemInstance<PageTreeItemData>;
   renameError: string | undefined;
@@ -33,6 +34,7 @@ export function PageTreeItem({
   createDraftError,
   createDraftPending,
   createDraftTitle,
+  capabilities,
   indentPx,
   item,
   renameError,
@@ -123,77 +125,92 @@ export function PageTreeItem({
           <span className="min-w-0 flex-1 truncate text-sm">{data.title}</span>
         )}
 
-        <Tooltip label={`Перетащить ${data.title}`}>
-          <button
-            {...item.getDragHandleProps()}
-            aria-label={`Перетащить ${data.title}`}
-            className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground opacity-0 focus:opacity-100 disabled:cursor-default aria-disabled:cursor-default group-hover:opacity-100"
-            type="button"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <GripVertical aria-hidden="true" className="pointer-events-none size-4 shrink-0" />
-          </button>
-        </Tooltip>
+        {capabilities.canMovePage ? (
+          <Tooltip label={`Перетащить ${data.title}`}>
+            <button
+              {...item.getDragHandleProps()}
+              aria-label={`Перетащить ${data.title}`}
+              className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground opacity-0 focus:opacity-100 disabled:cursor-default aria-disabled:cursor-default group-hover:opacity-100"
+              type="button"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <GripVertical aria-hidden="true" className="pointer-events-none size-4 shrink-0" />
+            </button>
+          </Tooltip>
+        ) : null}
 
-        <Menu
-          modal={false}
-          open={menuOpen}
-          onOpenChange={setMenuOpen}
-          onOpenChangeComplete={(open) => {
-            if (open) return;
-            if (renameRequestRef.current) {
-              item.startRenaming();
-              return;
-            }
-            if (!moveRequestRef.current) return;
-            const { returnFocus } = moveRequestRef.current;
-            moveRequestRef.current = undefined;
-            onStartMove(returnFocus);
-          }}
-        >
-          <MenuTrigger
-            ref={actionsRef}
-            aria-label={`Действия для ${data.title}`}
-            render={<Button size="icon-sm" variant="ghost" />}
-            onClick={(event) => {
-              event.stopPropagation();
-              renameRequestRef.current = false;
-              setMenuOpen(true);
+        {(capabilities.canCreateChild ||
+          capabilities.canRenamePage ||
+          capabilities.canMovePage ||
+          capabilities.canDeletePage) && (
+          <Menu
+            modal={false}
+            open={menuOpen}
+            onOpenChange={setMenuOpen}
+            onOpenChangeComplete={(open) => {
+              if (open) return;
+              if (renameRequestRef.current) {
+                item.startRenaming();
+                return;
+              }
+              if (!moveRequestRef.current) return;
+              const { returnFocus } = moveRequestRef.current;
+              moveRequestRef.current = undefined;
+              onStartMove(returnFocus);
             }}
           >
-            <MoreHorizontal aria-hidden="true" />
-          </MenuTrigger>
-          <MenuPopup finalFocus={() => !renameRequestRef.current} sideOffset={4}>
-            <MenuItem onClick={onCreateChild}>Добавить дочернюю</MenuItem>
-            <MenuItem
-              onClick={() => {
-                renameRequestRef.current = true;
+            <MenuTrigger
+              ref={actionsRef}
+              aria-label={`Действия для ${data.title}`}
+              render={<Button size="icon-sm" variant="ghost" />}
+              onClick={(event) => {
+                event.stopPropagation();
+                renameRequestRef.current = false;
+                setMenuOpen(true);
               }}
             >
-              Переименовать
-            </MenuItem>
-            <MenuItem
-              onClick={() => {
-                moveRequestRef.current = { returnFocus: actionsRef.current ?? undefined };
-              }}
-            >
-              Переместить…
-            </MenuItem>
-            <MenuItem
-              variant="destructive"
-              onClick={() =>
-                onRequestDelete({
-                  pageId: data.id,
-                  returnFocus: actionsRef.current ?? undefined,
-                  title: data.title,
-                })
-              }
-            >
-              <Trash2 aria-hidden="true" />
-              Удалить
-            </MenuItem>
-          </MenuPopup>
-        </Menu>
+              <MoreHorizontal aria-hidden="true" />
+            </MenuTrigger>
+            <MenuPopup finalFocus={() => !renameRequestRef.current} sideOffset={4}>
+              {capabilities.canCreateChild ? (
+                <MenuItem onClick={onCreateChild}>Добавить дочернюю</MenuItem>
+              ) : null}
+              {capabilities.canRenamePage ? (
+                <MenuItem
+                  onClick={() => {
+                    renameRequestRef.current = true;
+                  }}
+                >
+                  Переименовать
+                </MenuItem>
+              ) : null}
+              {capabilities.canMovePage ? (
+                <MenuItem
+                  onClick={() => {
+                    moveRequestRef.current = { returnFocus: actionsRef.current ?? undefined };
+                  }}
+                >
+                  Переместить…
+                </MenuItem>
+              ) : null}
+              {capabilities.canDeletePage ? (
+                <MenuItem
+                  variant="destructive"
+                  onClick={() =>
+                    onRequestDelete({
+                      pageId: data.id,
+                      returnFocus: actionsRef.current ?? undefined,
+                      title: data.title,
+                    })
+                  }
+                >
+                  <Trash2 aria-hidden="true" />
+                  Удалить
+                </MenuItem>
+              ) : null}
+            </MenuPopup>
+          </Menu>
+        )}
       </div>
 
       {createDraft ? (

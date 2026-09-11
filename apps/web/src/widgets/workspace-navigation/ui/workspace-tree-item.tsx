@@ -10,6 +10,8 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useRef, useState } from 'react';
+import type { PageCapabilities } from '@/entities/page';
+import { PageAccessMenuItem } from '@/features/page-access';
 import {
   type PageDeleteRequest,
   PageDraft,
@@ -24,6 +26,7 @@ type WorkspaceTreeItemProps = Readonly<{
   createDraftError: string | undefined;
   createDraftPending: boolean;
   createDraftTitle: string;
+  capabilities: PageCapabilities;
   indentPx: number;
   item: ItemInstance<WorkspaceTreeItemData>;
   renameError: string | undefined;
@@ -34,6 +37,7 @@ type WorkspaceTreeItemProps = Readonly<{
   onCreateChild: () => void;
   onRequestDeletePage: (request: PageDeleteRequest) => void;
   onRequestDeleteProject: (request: ProjectDeleteRequest) => void;
+  onOpenPageAccess: () => void;
   onStartMove: (returnFocus: HTMLElement | undefined) => void;
   onSubmitCreate: () => void;
 }>;
@@ -44,6 +48,7 @@ export function WorkspaceTreeItem({
   createDraftError,
   createDraftPending,
   createDraftTitle,
+  capabilities,
   indentPx,
   item,
   renameError,
@@ -54,6 +59,7 @@ export function WorkspaceTreeItem({
   onCreateChild,
   onRequestDeletePage,
   onRequestDeleteProject,
+  onOpenPageAccess,
   onStartMove,
   onSubmitCreate,
 }: WorkspaceTreeItemProps) {
@@ -137,7 +143,7 @@ export function WorkspaceTreeItem({
           </span>
         )}
 
-        {isPage ? (
+        {isPage && capabilities.canMovePage ? (
           <>
             <Tooltip label={`Перетащить ${data.title}`}>
               <button
@@ -150,69 +156,87 @@ export function WorkspaceTreeItem({
                 <GripVertical aria-hidden="true" className="pointer-events-none size-4 shrink-0" />
               </button>
             </Tooltip>
-            <Menu
-              modal={false}
-              open={menuOpen}
-              onOpenChange={setMenuOpen}
-              onOpenChangeComplete={(open) => {
-                if (open || !moveRequestRef.current) return;
-                const { returnFocus } = moveRequestRef.current;
-                moveRequestRef.current = undefined;
-                onStartMove(returnFocus);
-              }}
-            >
-              <MenuTrigger
-                ref={actionsRef}
-                aria-label={`Действия для ${data.title}`}
-                render={<Button size="icon-sm" variant="ghost" />}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setMenuOpen(true);
+            {(capabilities.canCreateChild ||
+              capabilities.canRenamePage ||
+              capabilities.canMovePage ||
+              capabilities.canDeletePage) && (
+              <Menu
+                modal={false}
+                open={menuOpen}
+                onOpenChange={setMenuOpen}
+                onOpenChangeComplete={(open) => {
+                  if (open || !moveRequestRef.current) return;
+                  const { returnFocus } = moveRequestRef.current;
+                  moveRequestRef.current = undefined;
+                  onStartMove(returnFocus);
                 }}
               >
-                <MoreHorizontal aria-hidden="true" />
-              </MenuTrigger>
-              <MenuPopup sideOffset={4}>
-                <MenuItem onClick={onCreateChild}>Добавить дочернюю</MenuItem>
-                <MenuItem onClick={() => item.startRenaming()}>Переименовать</MenuItem>
-                <MenuItem
-                  onClick={() => {
-                    moveRequestRef.current = { returnFocus: actionsRef.current ?? undefined };
+                <MenuTrigger
+                  ref={actionsRef}
+                  aria-label={`Действия для ${data.title}`}
+                  render={<Button size="icon-sm" variant="ghost" />}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setMenuOpen(true);
                   }}
                 >
-                  Переместить…
-                </MenuItem>
-                <MenuItem
-                  variant="destructive"
-                  onClick={() => {
-                    if (!data.pageId) return;
-                    onRequestDeletePage({
-                      pageId: data.pageId,
-                      returnFocus: actionsRef.current ?? undefined,
-                      title: data.title,
-                    });
-                  }}
-                >
-                  <Trash2 aria-hidden="true" />
-                  Удалить
-                </MenuItem>
-              </MenuPopup>
-            </Menu>
+                  <MoreHorizontal aria-hidden="true" />
+                </MenuTrigger>
+                <MenuPopup sideOffset={4}>
+                  {capabilities.canCreateChild ? (
+                    <MenuItem onClick={onCreateChild}>Добавить дочернюю</MenuItem>
+                  ) : null}
+                  {capabilities.canRenamePage ? (
+                    <MenuItem onClick={() => item.startRenaming()}>Переименовать</MenuItem>
+                  ) : null}
+                  {capabilities.canMovePage ? (
+                    <MenuItem
+                      onClick={() => {
+                        moveRequestRef.current = { returnFocus: actionsRef.current ?? undefined };
+                      }}
+                    >
+                      Переместить…
+                    </MenuItem>
+                  ) : null}
+                  {capabilities.canDeletePage ? (
+                    <MenuItem
+                      variant="destructive"
+                      onClick={() => {
+                        if (!data.pageId) return;
+                        onRequestDeletePage({
+                          pageId: data.pageId,
+                          returnFocus: actionsRef.current ?? undefined,
+                          title: data.title,
+                        });
+                      }}
+                    >
+                      <Trash2 aria-hidden="true" />
+                      Удалить
+                    </MenuItem>
+                  ) : null}
+                  {capabilities.canManageAccess ? (
+                    <PageAccessMenuItem onSelect={onOpenPageAccess} />
+                  ) : null}
+                </MenuPopup>
+              </Menu>
+            )}
           </>
         ) : (
           <>
-            <Button
-              aria-label={`Создать страницу в ${data.title}`}
-              size="icon-sm"
-              type="button"
-              variant="ghost"
-              onClick={(event) => {
-                event.stopPropagation();
-                onCreateChild();
-              }}
-            >
-              <Plus aria-hidden="true" />
-            </Button>
+            {capabilities.canCreateChild ? (
+              <Button
+                aria-label={`Создать страницу в ${data.title}`}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onCreateChild();
+                }}
+              >
+                <Plus aria-hidden="true" />
+              </Button>
+            ) : null}
             <Menu modal={false} open={menuOpen} onOpenChange={setMenuOpen}>
               <MenuTrigger
                 ref={actionsRef}

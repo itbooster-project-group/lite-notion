@@ -24,6 +24,7 @@ type WorkspaceNavigationProps = Readonly<{
   onRenamePage: (pageId: string, title: string) => Promise<void>;
   onRequestDeletePage: (request: PageDeleteRequest) => void;
   onRequestDeleteProject: (request: ProjectDeleteRequest) => void;
+  onOpenPageAccess?: (pageId: string) => void;
   projects: readonly ProjectDto[];
 }>;
 

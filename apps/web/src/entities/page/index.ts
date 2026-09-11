@@ -1,3 +1,8 @@
+export {
+  getPageCapabilities,
+  type PageAccessRole,
+  type PageCapabilities,
+} from './model/page-capabilities';
 export { pageTitleSchema, parsePageTitle } from './model/page-title';
 export {
   buildProjectPageTree,

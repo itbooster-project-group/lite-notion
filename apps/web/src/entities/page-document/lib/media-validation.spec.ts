@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   clampPageDocumentWidthPercent,
   createPageDocumentImageAttributes,
+  createPageDocumentNodeId,
   createPageDocumentVideoAttributes,
   createPageDocumentYoutubeAttributes,
   isPageDocumentNodeId,
@@ -58,6 +59,25 @@ describe('page document URL validation', () => {
     );
     expect(normalizePageDocumentVideoUrl('https://example.com/demo.mov')).toBeUndefined();
     expect(normalizePageDocumentVideoUrl('blob:https://example.com/id')).toBeUndefined();
+  });
+});
+
+describe('page document node IDs', () => {
+  it('создаёт UUID v4 без обязательного randomUUID', () => {
+    const originalRandomUUID = globalThis.crypto.randomUUID;
+    Object.defineProperty(globalThis.crypto, 'randomUUID', {
+      configurable: true,
+      value: undefined,
+    });
+
+    try {
+      expect(isPageDocumentNodeId(createPageDocumentNodeId())).toBe(true);
+    } finally {
+      Object.defineProperty(globalThis.crypto, 'randomUUID', {
+        configurable: true,
+        value: originalRandomUUID,
+      });
+    }
   });
 });
 

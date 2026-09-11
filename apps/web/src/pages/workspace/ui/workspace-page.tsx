@@ -3,7 +3,7 @@
 import { MoreHorizontal, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { type FormEvent, useMemo, useRef, useState } from 'react';
-import { buildProjectPageTree } from '@/entities/page';
+import { buildProjectPageTree, getPageCapabilities } from '@/entities/page';
 import {
   DeleteConfirmationDialog,
   type DeleteConfirmationIntent,
@@ -160,6 +160,7 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
           <WorkspaceMain
             activePageId={activePage?.id}
             activePage={activePage}
+            pageCapabilities={activePage ? getPageCapabilities(activePage.accessRole) : undefined}
             normalizedTree={normalizedTree}
             onCreatePage={createPage}
             onMovePage={pageManagement.movePage}

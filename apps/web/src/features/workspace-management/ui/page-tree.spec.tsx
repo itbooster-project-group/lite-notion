@@ -10,10 +10,11 @@ function page(
   parentPageId: string | null,
   children: PageTreeNodeDto[] = [],
   title = id,
+  accessRole: PageTreeNodeDto['accessRole'] = 'owner',
 ): PageTreeNodeDto {
   return {
     accessMode: 'inherit',
-    accessRole: 'owner',
+    accessRole,
     children,
     createdAt: '2026-08-29T00:00:00.000Z',
     createdById: 'user-1',
@@ -57,6 +58,49 @@ function renderTree(activePageId: string | undefined = undefined) {
 }
 
 describe('workspace page tree', () => {
+  it('гейтит действия по роли конкретного target node', async () => {
+    const viewerSource = [page('viewer-page', null, [], 'Viewer page', 'viewer')];
+    const normalizedTree = normalizePageTree(viewerSource);
+    render(
+      <PageTree
+        activePageId="viewer-page"
+        normalizedTree={normalizedTree}
+        projectTree={buildProjectPageTree(normalizedTree, 'project-a')}
+        onCreatePage={vi.fn().mockResolvedValue(undefined)}
+        onMovePage={vi.fn().mockResolvedValue(undefined)}
+        onRenamePage={vi.fn().mockResolvedValue(undefined)}
+        onRequestDeletePage={vi.fn()}
+        onSelectPage={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText('Viewer page')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'Действия для Viewer page' })).toBeNull();
+  });
+
+  it('оставляет editor create/rename, но скрывает owner-only move/delete', async () => {
+    const editorSource = [page('editor-page', null, [], 'Editor page', 'editor')];
+    const normalizedTree = normalizePageTree(editorSource);
+    render(
+      <PageTree
+        activePageId="editor-page"
+        normalizedTree={normalizedTree}
+        projectTree={buildProjectPageTree(normalizedTree, 'project-a')}
+        onCreatePage={vi.fn().mockResolvedValue(undefined)}
+        onMovePage={vi.fn().mockResolvedValue(undefined)}
+        onRenamePage={vi.fn().mockResolvedValue(undefined)}
+        onRequestDeletePage={vi.fn()}
+        onSelectPage={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Действия для Editor page' }));
+    expect(await screen.findByRole('menuitem', { name: 'Добавить дочернюю' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Переименовать' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Переместить…' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Удалить' })).toBeNull();
+  });
+
   it('рендерит ARIA tree в server order и раскрывает ancestor chain active page', async () => {
     renderTree('a-1-1');
 
