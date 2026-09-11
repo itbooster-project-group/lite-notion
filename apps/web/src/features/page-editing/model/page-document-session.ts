@@ -1,6 +1,7 @@
 import type * as Y from 'yjs';
 
 export type PageDocumentSessionStatus = 'loading' | 'ready' | 'error';
+export type PageDocumentConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'offline';
 
 export type PageDocumentErrorCode =
   | 'unsupported-schema-version'
@@ -17,6 +18,8 @@ export type PageDocumentSession = Readonly<{
   editable: boolean;
   status: PageDocumentSessionStatus;
   error?: PageDocumentError;
+  connectionStatus?: PageDocumentConnectionStatus;
+  subscribe?(listener: () => void): () => void;
   destroy(): void;
 }>;
 

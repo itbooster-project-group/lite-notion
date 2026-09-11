@@ -141,16 +141,25 @@ API MUST публиковать защищённый `PUT /api/v1/pages/{pageId}
 - **THEN** среди документированных ответов есть `403` в едином формате HTTP-ошибок
 
 ### Requirement: Document write ownership transitions to collaboration without dual writers
-System MUST считать `PageDocument.yjsState` canonical binary Yjs state для page content. Пока frontend всё ещё использует REST document writes, existing REST write path MUST оставаться доступным, чтобы introducing collaboration runtime не ломал current editing flows.
+System MUST считать `PageDocument.yjsState` canonical binary Yjs state для page content. Existing authenticated REST `PUT /api/v1/pages/{pageId}/document` MUST remain available unchanged as a temporary compatibility path for legacy clients until a separate removal change.
 
-В этом change collaboration runtime MUST NOT получать ordinary editor traffic из `apps/web`, потому что frontend provider migration находится вне scope. После подключения frontend к Hocuspocus в будущем change collaboration runtime MUST стать единственным permanent writer `PageDocument.yjsState`. Future web provider migration MUST отключить или удалить REST autosave/write path в том же change, который включает WebSocket document writing, чтобы final architecture не держала одновременно browser REST writes и Hocuspocus persistence, пишущие один document state.
+После миграции web editor MUST NOT читать или записывать document content через REST, выполнять REST autosave или использовать REST PUT как fallback при ошибках WebSocket. Все штатные frontend document writes MUST идти через Yjs/Hocuspocus, а collaboration runtime MUST быть единственным writer-ом, используемым migrated web editor. Удаление backend REST writer оформляется отдельным change после проверки collaboration end-to-end.
 
-#### Scenario: Current REST document write remains during collaboration service introduction
-- **WHEN** collaboration runtime существует, но frontend ещё не migrated to Hocuspocus provider
-- **THEN** existing REST document write path остаётся доступным для current frontend
-- **AND** ordinary editor traffic не использует collaboration runtime
+#### Scenario: REST PUT remains a compatibility path
+- **WHEN** legacy client вызывает authenticated `PUT /api/v1/pages/{pageId}/document`
+- **THEN** API сохраняет существующий REST behavior и validation contract
+- **AND** endpoint остаётся доступным до отдельного change по его удалению
 
-#### Scenario: Future WebSocket migration avoids competing writers
-- **WHEN** future change подключает frontend editor к Hocuspocus для document writes
-- **THEN** REST autosave/write path, который конкурировал бы с collaboration persistence, отключается или удаляется в том же change
-- **AND** у `PageDocument.yjsState` есть один permanent writer
+#### Scenario: Migrated web editor does not use REST document content
+- **WHEN** migrated web editor synchronizes or changes page content
+- **THEN** он использует Yjs/Hocuspocus и не вызывает document GET, PUT или REST autosave
+- **AND** metadata страниц продолжает работать через REST
+
+#### Scenario: WebSocket failure does not fall back to REST
+- **WHEN** collaboration WebSocket disconnected, reconnecting или завершился authentication failure
+- **THEN** web editor не вызывает REST PUT для сохранения document content
+
+#### Scenario: Collaboration is the migrated editor writer
+- **WHEN** migrated editor changes `PageDocument.yjsState`
+- **THEN** изменение сохраняется collaboration runtime
+- **AND** backend REST writer не удаляется в этом change и будет рассмотрен отдельным migration change

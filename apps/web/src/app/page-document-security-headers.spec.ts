@@ -8,9 +8,9 @@ import {
 } from './page-document-security-headers';
 
 describe('page document security headers', () => {
-  it('задаёт CSP только для разрешённых external media origins', () => {
+  it('разрешает API и configured collaboration connections', () => {
     expect(PAGE_DOCUMENT_CONTENT_SECURITY_POLICY).toBe(
-      "img-src 'self' https:; media-src 'self' https:; frame-src https://www.youtube-nocookie.com; object-src 'none'",
+      "connect-src 'self' http://localhost:3001 ws://localhost:3002; img-src 'self' https:; media-src 'self' https:; frame-src https://www.youtube-nocookie.com; object-src 'none'",
     );
   });
 

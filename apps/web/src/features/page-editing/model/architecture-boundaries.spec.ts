@@ -46,7 +46,7 @@ describe('page editor architecture boundaries', () => {
     expect(entryPointSources).not.toMatch(/from ['"]@\/features\/page-editing/);
   });
 
-  it('не монтирует editor core в workspace до reviewed production composition', () => {
+  it('монтирует editor через отдельную page composition', () => {
     const workspaceMainSource = readFileSync(
       resolve(SOURCE_ROOT, 'pages/workspace/ui/workspace-main.tsx'),
       'utf8',
@@ -54,6 +54,6 @@ describe('page editor architecture boundaries', () => {
 
     expect(workspaceMainSource).not.toMatch(/from ['"]@\/widgets\/page-editor/);
     expect(workspaceMainSource).not.toMatch(/from ['"]@\/features\/page-editing/);
-    expect(workspaceMainSource).toContain('Редактор страницы появится в следующем обновлении.');
+    expect(workspaceMainSource).toContain('CollaborativePageEditor');
   });
 });
