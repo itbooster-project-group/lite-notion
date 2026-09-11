@@ -56,13 +56,9 @@ function SharedPagesList({
   nodes: readonly PageTreeNodeDto[];
   onSelectPage: (pageId: string) => void;
 }>) {
-  return (
-    <ul className="space-y-0.5">
-      {nodes.map((node) => (
-        <SharedPageItem key={node.id} node={node} onSelectPage={onSelectPage} />
-      ))}
-    </ul>
-  );
+  return nodes.map((node) => (
+    <SharedPageItem key={node.id} node={node} onSelectPage={onSelectPage} />
+  ));
 }
 
 function SharedPageItem({

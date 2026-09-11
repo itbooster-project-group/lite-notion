@@ -37,6 +37,10 @@ describe('SharedPagesTree', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Child' }));
 
     expect(onSelectPage).toHaveBeenCalledWith('child');
+    const pagesList = screen.getByRole('list', { name: 'Доступные страницы' });
+    expect(pagesList.querySelector(':scope > ul')).toBeNull();
+    expect(pagesList.querySelectorAll(':scope > li')).toHaveLength(1);
+    expect(pagesList.querySelector('li > ul > li')).not.toBeNull();
   });
 
   it('показывает empty state', () => {

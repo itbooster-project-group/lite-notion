@@ -261,6 +261,69 @@ describe('workspace page', () => {
     expect(await screen.findByRole('heading', { name: 'Ничего не найдено' })).toBeInTheDocument();
   });
 
+  it('показывает workspace error и повторяет projects query для owned page', async () => {
+    currentTree = [page('owned', 'project-a', null, 'Owned page')];
+    let attempts = 0;
+    server.use(
+      http.get('*/api/v1/projects', () => {
+        attempts += 1;
+        return attempts === 1
+          ? HttpResponse.json({ message: 'Projects failure' }, { status: 500 })
+          : HttpResponse.json(currentProjects);
+      }),
+    );
+
+    renderWorkspace({ pageId: 'owned', type: 'page' });
+
+    expect(
+      await screen.findByRole('heading', { name: 'Ошибка загрузки рабочей области' }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Повторить' }));
+    expect(await screen.findByRole('heading', { name: 'Owned page' })).toBeInTheDocument();
+    expect(attempts).toBe(2);
+  });
+
+  it('открывает shared page при ошибке projects и строит shared breadcrumbs', async () => {
+    currentTree = [];
+    server.use(
+      http.get('*/api/v1/projects', () =>
+        HttpResponse.json({ message: 'Projects failure' }, { status: 500 }),
+      ),
+      http.get('*/api/v1/pages/shared', () =>
+        HttpResponse.json([page('shared', 'foreign-project', null, 'Shared page', [], 'viewer')]),
+      ),
+    );
+
+    renderWorkspace({ pageId: 'shared', type: 'page' });
+
+    expect(await screen.findByRole('heading', { name: 'Shared page' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Хлебные крошки' })).toHaveTextContent(
+      'Доступные мне/Shared page',
+    );
+  });
+
+  it('строит shared breadcrumbs, пока projects query pending', async () => {
+    currentTree = [];
+    const projects = createDeferred();
+    server.use(
+      http.get('*/api/v1/projects', async () => {
+        await projects.promise;
+        return HttpResponse.json(currentProjects);
+      }),
+      http.get('*/api/v1/pages/shared', () =>
+        HttpResponse.json([page('shared', 'foreign-project', null, 'Shared page', [], 'viewer')]),
+      ),
+    );
+
+    renderWorkspace({ pageId: 'shared', type: 'page' });
+
+    expect(await screen.findByRole('heading', { name: 'Shared page' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Хлебные крошки' })).toHaveTextContent(
+      'Доступные мне/Shared page',
+    );
+    projects.resolve();
+  });
+
   it('ждёт shared query после owned miss и не показывает unavailable во время pending', async () => {
     currentTree = [];
     const shared = createDeferred();

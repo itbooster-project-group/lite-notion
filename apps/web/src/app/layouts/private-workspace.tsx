@@ -70,16 +70,18 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
   const pageManagement = usePageManagement(routeContext);
   const projectDeletion = useProjectDeletion(routeContext);
   const pageId = routeContext?.type === 'page' ? routeContext.pageId : undefined;
-  const projectId = routeContext?.type === 'project' ? routeContext.projectId : undefined;
   const pageContext = useMemo(
     () => resolvePageRouteContext(tree, sharedTree, pageId),
     [pageId, sharedTree, tree],
   );
   const page = pageContext?.page;
-  const project = projectsQuery.data?.find(
-    (item) =>
-      item.id === (projectId ?? (pageContext?.source === 'owned' ? page?.projectId : undefined)),
-  );
+  const effectiveProjectId =
+    routeContext?.type === 'project'
+      ? routeContext.projectId
+      : pageContext?.source === 'owned'
+        ? page?.projectId
+        : undefined;
+  const project = projectsQuery.data?.find((item) => item.id === effectiveProjectId);
   const pending = projectsQuery.isPending || treeQuery.isPending;
   const failed = projectsQuery.isError || treeQuery.isError;
 
@@ -89,7 +91,14 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
 
   const crumbs = [{ title: 'Проекты', href: '/' }];
   if (pathname === '/profile') crumbs.push({ title: 'Профиль', href: '/profile' });
-  else if (!pending && !failed && pageContext?.source === 'shared' && page) {
+  else if (
+    !treeQuery.isPending &&
+    !treeQuery.isError &&
+    !sharedPagesQuery.isPending &&
+    !sharedPagesQuery.isError &&
+    pageContext?.source === 'shared' &&
+    page
+  ) {
     crumbs.push({ title: 'Доступные мне', href: '/' });
     crumbs.push(
       ...getBreadcrumbs(sharedTree, page.id).map((item) => ({

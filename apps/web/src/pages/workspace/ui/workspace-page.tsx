@@ -53,12 +53,16 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
   const [deletePending, setDeletePending] = useState(false);
 
   const activePage = pageContext?.page;
-  const projectId = route.type === 'project' ? route.projectId : undefined;
-  const ownedPageProjectId = pageContext?.source === 'owned' ? activePage?.projectId : undefined;
-  const project = projects.find((item) => item.id === (projectId ?? ownedPageProjectId));
+  const effectiveProjectId =
+    route.type === 'project'
+      ? route.projectId
+      : pageContext?.source === 'owned'
+        ? activePage?.projectId
+        : undefined;
+  const project = projects.find((item) => item.id === effectiveProjectId);
   const projectTree = useMemo(
-    () => buildProjectPageTree(normalizedTree, projectId ?? 'unavailable'),
-    [normalizedTree, projectId],
+    () => buildProjectPageTree(normalizedTree, effectiveProjectId ?? 'unavailable'),
+    [effectiveProjectId, normalizedTree],
   );
 
   const metadataPending = route.type !== 'page' && (projectsPending || pageTreePending);
@@ -76,13 +80,15 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
 
   const pageRouteError =
     route.type === 'page' && pageContext?.source !== 'owned' && sharedPagesError;
-  if ((projectsError && route.type !== 'page') || pageTreeError || pageRouteError) {
+  const ownedProjectsError =
+    projectsError && (route.type !== 'page' || pageContext?.source === 'owned');
+  if (ownedProjectsError || pageTreeError || pageRouteError) {
     return (
       <WorkspaceError
         pageLevel={Boolean(pageRouteError)}
         onRetry={() => {
           void refetchPageTree();
-          if (route.type !== 'page') void refetchProjects();
+          if (route.type !== 'page' || pageContext?.source === 'owned') void refetchProjects();
           if (route.type === 'page' && pageContext?.source !== 'owned') void refetchSharedPages();
         }}
       />
@@ -95,8 +101,8 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
   }
 
   async function createPage(parentPageId: string | null, title: string) {
-    if (!projectId) throw new Error('Create unavailable');
-    await pageManagement.createPage(projectId, parentPageId, title);
+    if (!effectiveProjectId) throw new Error('Create unavailable');
+    await pageManagement.createPage(effectiveProjectId, parentPageId, title);
   }
 
   function requestPageDelete(request: PageDeleteRequest) {
