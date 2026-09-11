@@ -4,7 +4,6 @@ import { Button as ButtonPrimitive } from '@base-ui/react/button';
 import { cva, type VariantProps } from 'class-variance-authority';
 import type { ComponentProps } from 'react';
 import { cn } from '@/shared/lib/cn';
-import { Tooltip } from '../tooltip';
 
 const buttonVariants = cva(
   "group/button cursor-pointer disabled:cursor-default aria-disabled:cursor-default inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-xs/relaxed font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-2 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
@@ -45,18 +44,12 @@ export type ButtonProps = ComponentProps<typeof ButtonPrimitive> &
   VariantProps<typeof buttonVariants>;
 
 function Button({ className, variant = 'default', size = 'default', ...props }: ButtonProps) {
-  const button = (
+  return (
     <ButtonPrimitive
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />
-  );
-  const label = props['aria-label'];
-  return size?.startsWith('icon') && label && !props.disabled && !props['aria-disabled'] ? (
-    <Tooltip label={label}>{button}</Tooltip>
-  ) : (
-    button
   );
 }
 

@@ -1,8 +1,7 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { Input } from './input';
-import { Button } from './shadcn/button';
+import { Button, Input } from '@/shared/ui';
 
 afterEach(cleanup);
 
