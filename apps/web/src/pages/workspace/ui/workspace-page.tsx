@@ -3,7 +3,6 @@
 import { MoreHorizontal, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { type FormEvent, useMemo, useRef, useState } from 'react';
-import { useWorkspaceData } from '@/app/layouts/workspace-data-context';
 import { buildProjectPageTree } from '@/entities/page';
 import {
   DeleteConfirmationDialog,
@@ -17,7 +16,7 @@ import {
 import type { ProjectDto } from '@/shared/api';
 import { type WorkspaceRouteContext, workspaceProjectPath } from '@/shared/routing';
 import { Button, Heading, Input, Menu, MenuItem, MenuPopup, MenuTrigger, Text } from '@/shared/ui';
-
+import { useWorkspaceData } from '../model/workspace-data-context';
 import { WorkspaceMain } from './workspace-main';
 
 type WorkspacePageProps = Readonly<{

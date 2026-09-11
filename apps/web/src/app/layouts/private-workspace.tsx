@@ -13,6 +13,7 @@ import {
   useProjectDeletion,
   useWorkspaceDeleteCleanupCoordinator,
 } from '@/features/workspace-management';
+import { WorkspaceDataProvider } from '@/pages/workspace';
 import {
   type PageTreeNodeDto,
   type ProjectDto,
@@ -33,7 +34,6 @@ import {
   WorkspaceTree,
   WorkspaceTreeExpansionProvider,
 } from '@/widgets/workspace-navigation';
-import { WorkspaceDataProvider } from './workspace-data-context';
 
 type WorkspaceDeleteIntent =
   | (PageDeleteRequest & Readonly<{ kind: 'page' }>)
