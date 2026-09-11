@@ -3,9 +3,7 @@
 ## Purpose
 
 Определяет наблюдаемое поведение единой рабочей области Lite Notion: дерево проектов и страниц, маршруты и операции над страницами.
-
 ## Requirements
-
 ### Requirement: Единая приватная рабочая область
 
 Web-приложение ДОЛЖНО (MUST) показывать единую рабочую область на `/`, `/projects/{projectId}` и `/pages/{pageId}`. `/` ДОЛЖЕН показывать список всех проектов и создание проекта; на широком экране поле названия и кнопка формы располагаются в одну строку. `/projects/{projectId}` ДОЛЖЕН выбирать проект без активной страницы; `/pages/{pageId}` ДОЛЖЕН выбирать страницу независимо от глубины. Недоступные идентификаторы ДОЛЖНЫ показывать единое безопасное состояние со ссылкой на `/`.
@@ -257,3 +255,23 @@ New icon-only controls MUST use the current project icon convention based on `lu
 - **WHEN** destructive action trigger отображается как иконка без видимого текста
 - **THEN** control имеет русское accessible name, описывающее действие и ресурс
 - **AND** сама иконка не дублирует это имя для screen reader
+
+### Requirement: Page routes compose the collaborative editor
+
+Workspace page route MUST создавать и уничтожать page document session вместе с active `pageId` и MUST передавать session в существующий PageEditor через page-level composition. Navigation, page title и page metadata MUST продолжать работать независимо от WebSocket connection state.
+
+#### Scenario: Active page mounts its editor
+- **WHEN** workspace resolves a live page route
+- **THEN** page composition создаёт collaboration session для этого page id
+- **AND** editor отображает loading state до initial Yjs sync
+
+#### Scenario: Active page changes
+- **WHEN** user navigates from page A to page B
+- **THEN** session A destroyed
+- **AND** session B подключается к room `page:<pageBId>` без утечки listeners или Y.Doc A
+
+#### Scenario: Collaboration is unavailable
+- **WHEN** metadata page loaded, но collaboration service недоступен
+- **THEN** page title и workspace navigation остаются доступными
+- **AND** editor показывает безопасное состояние ошибки/соединения
+

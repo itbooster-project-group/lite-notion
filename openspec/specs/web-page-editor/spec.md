@@ -3,9 +3,7 @@
 ## Purpose
 
 Определяет versioned persisted contract содержимого страницы, transport-neutral editor core, доступные editing flows и безопасное представление schema v1 в интерактивном и будущем статическом renderer.
-
 ## Requirements
-
 ### Requirement: Schema metadata, Yjs и collaboration field образуют editable persisted contract
 
 Система MUST использовать `Y.Doc` как единственный authoritative mutable state. Система MUST NOT создавать authoritative TipTap JSON, block CRUD или вторую mutable-копию content в TanStack Query. Версия TipTap/ProseMirror schema MUST храниться отдельно в `PAGE_DOCUMENTS.tiptap_schema_version` рядом с `PAGE_DOCUMENTS.yjs_state`; `Y.Doc` сам по себе MUST NOT считаться носителем schema version. Schema v1 MUST использовать `PAGE_CONTENT_YJS_FIELD` со стабильным значением `default` как canonical имя `Y.XmlFragment`/TipTap Collaboration `field`; стандартный history extension MUST быть отключён при Collaboration/Yjs.
@@ -249,3 +247,18 @@ Bubble и slash menus с `position: fixed` MUST использовать общ�
 #### Scenario: Presentation read-only включён
 - **WHEN** session или composition устанавливает `editable=false`
 - **THEN** ввод, slash, history, reorder, link и media controls недоступны, content читаемо, а server authorization по-прежнему обязателен в future integration
+
+### Requirement: Collaborative session preserves the editor document contract
+
+Collaborative page editing MUST использовать существующий `PAGE_CONTENT_YJS_FIELD`, versioned editor schema и текущие Tiptap/Yjs extensions. Editor MUST NOT создавать REST-loaded TipTap JSON или другую authoritative mutable content copy.
+
+#### Scenario: Collaborative document uses the canonical field
+- **WHEN** synced Y.Doc передаётся в editor
+- **THEN** editor читает content из `PAGE_CONTENT_YJS_FIELD`
+- **AND** persisted changes остаются binary Yjs updates
+
+#### Scenario: Reconnect does not replace document state
+- **WHEN** provider reconnects после временного disconnect
+- **THEN** editor продолжает использовать исходный Y.Doc
+- **AND** document state не сбрасывается в пустой или REST snapshot
+
