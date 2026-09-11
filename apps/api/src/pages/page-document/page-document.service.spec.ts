@@ -4,9 +4,13 @@ import { Test } from '@nestjs/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { TransactionRunner } from '../../database/transaction';
 import { InMemoryTransactionRunner } from '../../database/transaction.in-memory';
+import { PagePermissionsRepository } from '../../page-permissions/page-permissions.repository';
+import { InMemoryPagePermissionsRepository } from '../../page-permissions/page-permissions.repository.in-memory';
+import { PagePermissionsService } from '../../page-permissions/page-permissions.service';
 import { ProjectsRepository } from '../../projects/projects.repository';
 import { InMemoryProjectsRepository } from '../../projects/projects.repository.in-memory';
 import { ProjectsService } from '../../projects/projects.service';
+import { UsersService } from '../../users/users.service';
 import { TIPTAP_SCHEMA_VERSION } from '../constants';
 import { PageNotFoundError } from '../errors';
 import { PagesRepository } from '../pages.repository';
@@ -38,7 +42,12 @@ describe('PageDocumentService', () => {
 
     projectIds.set(ownerId, projectId);
 
-    return createPageUseCase.execute({ ownerId, parentPageId: null, projectId, title: 'page' });
+    return createPageUseCase.execute({
+      actorId: ownerId,
+      parentPageId: null,
+      projectId,
+      title: 'page',
+    });
   };
 
   beforeEach(async () => {
@@ -60,6 +69,12 @@ describe('PageDocumentService', () => {
         { provide: PagesRepository, useValue: pages },
         { provide: PageDocumentRepository, useValue: documents },
         { provide: ProjectsRepository, useValue: projects },
+        PagePermissionsService,
+        { provide: UsersService, useValue: { findByEmail: async () => null } },
+        {
+          provide: PagePermissionsRepository,
+          useValue: new InMemoryPagePermissionsRepository(pages.pages, projects.records),
+        },
         { provide: TransactionRunner, useValue: new InMemoryTransactionRunner() },
       ],
     }).compile();
@@ -84,7 +99,7 @@ describe('PageDocumentService', () => {
     const state = new Uint8Array([1, 2, 3]);
 
     await service.replace({
-      ownerId: owner,
+      actorId: owner,
       pageId: page.id,
       tiptapSchemaVersion: 2,
       yjsState: state,
@@ -101,13 +116,13 @@ describe('PageDocumentService', () => {
     const page = await createPage();
 
     await service.replace({
-      ownerId: owner,
+      actorId: owner,
       pageId: page.id,
       tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
       yjsState: new Uint8Array([1, 2, 3, 4]),
     });
     await service.replace({
-      ownerId: owner,
+      actorId: owner,
       pageId: page.id,
       tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
       yjsState: new Uint8Array([9]),
@@ -122,13 +137,13 @@ describe('PageDocumentService', () => {
     const page = await createPage();
 
     await service.replace({
-      ownerId: owner,
+      actorId: owner,
       pageId: page.id,
       tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
       yjsState: new Uint8Array([1]),
     });
     await service.replace({
-      ownerId: owner,
+      actorId: owner,
       pageId: page.id,
       tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
       yjsState: new Uint8Array(),
@@ -144,7 +159,7 @@ describe('PageDocumentService', () => {
     const state = new Uint8Array(randomBytes(512));
 
     await service.replace({
-      ownerId: owner,
+      actorId: owner,
       pageId: page.id,
       tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
       yjsState: state,
@@ -159,13 +174,13 @@ describe('PageDocumentService', () => {
     const page = await createPage();
 
     await service.replace({
-      ownerId: owner,
+      actorId: owner,
       pageId: page.id,
       tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
       yjsState: new Uint8Array([1]),
     });
     await service.replace({
-      ownerId: owner,
+      actorId: owner,
       pageId: page.id,
       tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
       yjsState: new Uint8Array([2]),
@@ -195,7 +210,7 @@ describe('PageDocumentService', () => {
 
     const foreignError = await service
       .replace({
-        ownerId: owner,
+        actorId: owner,
         pageId: foreign.id,
         tiptapSchemaVersion: 7,
         yjsState: new Uint8Array([1]),
@@ -203,7 +218,7 @@ describe('PageDocumentService', () => {
       .catch((error) => error);
     const missingError = await service
       .replace({
-        ownerId: owner,
+        actorId: owner,
         pageId: missingId,
         tiptapSchemaVersion: 7,
         yjsState: new Uint8Array([1]),
@@ -233,7 +248,7 @@ describe('PageDocumentService', () => {
     const state = new Uint8Array([1, 2, 3]);
 
     await service.replace({
-      ownerId: owner,
+      actorId: owner,
       pageId: page.id,
       tiptapSchemaVersion: 2,
       yjsState: state,
@@ -244,7 +259,6 @@ describe('PageDocumentService', () => {
     // происходит как раз после неё — проверка живости обязана быть в самой записи.
     await expect(
       documents.replace({
-        ownerId: owner,
         pageId: page.id,
         tiptapSchemaVersion: 9,
         yjsState: new Uint8Array([9, 9]),
@@ -260,7 +274,7 @@ describe('PageDocumentService', () => {
     const page = await createPage();
 
     await service.replace({
-      ownerId: owner,
+      actorId: owner,
       pageId: page.id,
       tiptapSchemaVersion: 3,
       yjsState: new Uint8Array([1, 2]),

@@ -1,12 +1,11 @@
+import { type PageAccessMode, PageDeletionOrigin } from '@lite-notion/database/enums';
 import { Inject, Injectable } from '@nestjs/common';
-
 import { PrismaService } from '../database/prisma.service';
 import {
   type DatabaseClient,
   databaseClientOf,
   type TransactionScope,
 } from '../database/transaction';
-import { PageDeletionOrigin } from '../generated/prisma/enums';
 
 /**
  * Prisma отдаёт и принимает колонку `Bytes` как Uint8Array поверх обычного
@@ -23,6 +22,7 @@ export interface PageRecord {
   createdById: string;
   title: string;
   position: string;
+  accessMode: PageAccessMode;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -69,6 +69,7 @@ export interface SiblingRecord {
 }
 
 const PAGE_FIELDS = {
+  accessMode: true,
   createdAt: true,
   createdById: true,
   id: true,
@@ -86,7 +87,11 @@ const DELETED_PAGE_FIELDS = { ...PAGE_FIELDS, deletedAt: true, deletedOrigin: tr
  * Доступ к таблице страниц. Абстрактный класс служит DI-токеном; тесты подставляют
  * in-memory реализацию. Решений здесь нет — они в юзкейсах модуля.
  *
- * Метода «найти страницу по id без владельца» нет намеренно.
+ * Раньше метода «найти страницу по id без владельца» здесь не было намеренно: фильтр
+ * по владельцу в SQL был последней линией обороны. Теперь доступ решает
+ * `PagePermissionsService`, и `findLiveById` существует — но зовётся только **после**
+ * успешной проверки прав, а не вместо неё. Owner-scoped методы корзины и
+ * восстановления остаются owner-scoped: эти операции по контракту принадлежат владельцу.
  */
 @Injectable()
 export abstract class PagesRepository {
@@ -100,12 +105,22 @@ export abstract class PagesRepository {
 
   abstract findByIdForOwner(id: string, ownerId: string): Promise<PageRecord | null>;
 
+  /** Живая страница без фильтра по владельцу. Только после проверки прав. */
+  abstract findLiveById(id: string): Promise<PageRecord | null>;
+
   abstract insert(input: InsertPageInput): Promise<PageRecord>;
 
   /** Ранг последней страницы уровня. `null`, когда уровень пуст. */
   abstract findLastPositionAtLevel(level: SiblingLevel): Promise<string | null>;
 
-  abstract rename(id: string, ownerId: string, title: string): Promise<PageRecord | null>;
+  /**
+   * Без фильтра по владельцу: права проверяет вызывающий, а второй фильтр в `UPDATE`
+   * лишь маскировал бы расхождение между проверкой и записью.
+   */
+  abstract rename(id: string, title: string): Promise<PageRecord | null>;
+
+  /** Меняет только режим наследования. Идемпотентно: то же значение — не ошибка. */
+  abstract setAccessMode(id: string, accessMode: PageAccessMode): Promise<PageRecord | null>;
 
   /**
    * Идентификаторы всех предков узла, включая его самого. Подъём по дереву —
@@ -214,6 +229,10 @@ export class PrismaPagesRepository extends PagesRepository {
     });
   }
 
+  findLiveById(id: string): Promise<PageRecord | null> {
+    return this.client.page.findFirst({ select: PAGE_FIELDS, where: { deletedAt: null, id } });
+  }
+
   insert(input: InsertPageInput): Promise<PageRecord> {
     return this.client.page.create({
       data: {
@@ -244,13 +263,22 @@ export class PrismaPagesRepository extends PagesRepository {
     return last?.position ?? null;
   }
 
-  async rename(id: string, ownerId: string, title: string): Promise<PageRecord | null> {
+  async rename(id: string, title: string): Promise<PageRecord | null> {
     const { count } = await this.client.page.updateMany({
       data: { title },
-      where: { deletedAt: null, id, ownerId },
+      where: { deletedAt: null, id },
     });
 
-    return count === 0 ? null : this.findByIdForOwner(id, ownerId);
+    return count === 0 ? null : this.findLiveById(id);
+  }
+
+  async setAccessMode(id: string, accessMode: PageAccessMode): Promise<PageRecord | null> {
+    const { count } = await this.client.page.updateMany({
+      data: { accessMode },
+      where: { deletedAt: null, id },
+    });
+
+    return count === 0 ? null : this.findLiveById(id);
   }
 
   async findAncestorIds(pageId: string): Promise<string[]> {

@@ -1,11 +1,10 @@
 import { randomUUID } from 'node:crypto';
-
+import { PrismaClient } from '@lite-notion/database';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-
 import type { PrismaService } from '../database/prisma.service';
 import { type DatabaseClient, PrismaTransactionRunner } from '../database/transaction';
-import { PrismaClient } from '../generated/prisma/client';
+import { PrismaPagePermissionsRepository } from '../page-permissions/page-permissions.repository';
 import { PrismaProjectsRepository } from '../projects/projects.repository';
 import { SiblingsNotAdjacentError } from './errors';
 import { PrismaPageDocumentRepository } from './page-document/page-document.repository';
@@ -28,10 +27,16 @@ describe('смежность соседей при перемещении на �
   let projectId: string;
 
   const add = (title: string) =>
-    createPage.execute({ ownerId, parentPageId: null, projectId, title });
+    createPage.execute({ actorId: ownerId, parentPageId: null, projectId, title });
 
   const move = (pageId: string, previousSiblingId: string | null, nextSiblingId: string | null) =>
-    movePage.execute({ nextSiblingId, ownerId, pageId, parentPageId: null, previousSiblingId });
+    movePage.execute({
+      nextSiblingId,
+      actorId: ownerId,
+      pageId,
+      parentPageId: null,
+      previousSiblingId,
+    });
 
   const order = async () =>
     (
@@ -56,8 +61,13 @@ describe('смежность соседей при перемещении на �
       pages,
       new PrismaProjectsRepository(client),
       new PrismaPageDocumentRepository(client),
+      new PrismaPagePermissionsRepository(client),
     );
-    movePage = new MovePageUseCase(transactions, pages);
+    movePage = new MovePageUseCase(
+      transactions,
+      pages,
+      new PrismaPagePermissionsRepository(client),
+    );
 
     await prisma.user.create({
       data: { email: `${ownerId}@adjacency.test`, id: ownerId, name: 'adj', passwordHash: 'hash' },
@@ -112,7 +122,7 @@ describe('смежность соседей при перемещении на �
     await add('second');
     const third = await add('third');
     const child = await createPage.execute({
-      ownerId,
+      actorId: ownerId,
       parentPageId: first.id,
       projectId,
       title: 'child',

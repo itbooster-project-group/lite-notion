@@ -9,16 +9,27 @@ import { resolveLanHost } from './lan-host.mjs';
 
 export const API_PORT = '3001';
 export const WEB_PORT = '3000';
+export const COLLABORATION_PORT = '3002';
 
 const PNPM_COMMAND = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 
 export function createLanProcessConfig(lanHost, baseEnv = process.env) {
   const webOrigin = `http://${lanHost}:${WEB_PORT}`;
   const apiOrigin = `http://${lanHost}:${API_PORT}`;
+  const collaborationUrl = `ws://${lanHost}:${COLLABORATION_PORT}`;
 
   return {
     apiOrigin,
     processes: [
+      {
+        args: ['--filter', '@lite-notion/collaboration', 'dev'],
+        env: {
+          ...baseEnv,
+          COLLABORATION_ALLOWED_ORIGIN: webOrigin,
+          PORT: COLLABORATION_PORT,
+        },
+        label: 'Collaboration',
+      },
       {
         args: ['--filter', '@lite-notion/api', 'dev'],
         env: {
@@ -35,6 +46,7 @@ export function createLanProcessConfig(lanHost, baseEnv = process.env) {
           LAN_HOST: lanHost,
           NEXT_PUBLIC_API_BASE_URL: apiOrigin,
           NEXT_PUBLIC_API_MOCKING: 'disabled',
+          NEXT_PUBLIC_COLLABORATION_URL: collaborationUrl,
         },
         label: 'Web',
       },

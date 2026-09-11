@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto';
-
+import { PrismaClient } from '@lite-notion/database';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-
 import type { PrismaService } from '../database/prisma.service';
 import {
   type DatabaseClient,
@@ -10,7 +9,7 @@ import {
   PrismaTransactionRunner,
   type TransactionScope,
 } from '../database/transaction';
-import { PrismaClient } from '../generated/prisma/client';
+import { PrismaPagePermissionsRepository } from '../page-permissions/page-permissions.repository';
 import { PrismaProjectsRepository } from '../projects/projects.repository';
 import { PrismaPageDocumentRepository } from './page-document/page-document.repository';
 import { PrismaPagesRepository } from './pages.repository';
@@ -43,6 +42,7 @@ describe('очистка корзины страниц на живой базе'
     });
 
     const transactions = new PrismaTransactionRunner(prisma as unknown as PrismaService);
+    const permissions = new PrismaPagePermissionsRepository(prisma as unknown as PrismaService);
 
     pages = new PrismaPagesRepository(prisma as unknown as DatabaseClient);
     createPage = new CreatePageUseCase(
@@ -50,8 +50,9 @@ describe('очистка корзины страниц на живой базе'
       pages,
       new PrismaProjectsRepository(prisma as unknown as DatabaseClient),
       new PrismaPageDocumentRepository(prisma as unknown as DatabaseClient),
+      permissions,
     );
-    softDeletePage = new SoftDeletePageUseCase(transactions, pages);
+    softDeletePage = new SoftDeletePageUseCase(transactions, pages, permissions);
     purgeTrash = new PurgePagesTrashUseCase(transactions, pages);
 
     await prisma.user.create({
@@ -70,7 +71,7 @@ describe('очистка корзины страниц на живой базе'
   });
 
   const addPage = (parentPageId: string | null, title: string) =>
-    createPage.execute({ ownerId, parentPageId, projectId, title });
+    createPage.execute({ actorId: ownerId, parentPageId, projectId, title });
 
   it('не оставляет частичного результата, когда отказывает в середине', async () => {
     const root = await addPage(null, 'root');

@@ -1,10 +1,10 @@
+import type { AccessTokenPayload } from '@lite-notion/auth-token';
 import { Inject, Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
 import { type ApplicationConfig, applicationConfig } from '../config/application-config';
 import { JWT_STRATEGY_NAME } from './constants';
-import type { AccessTokenPayload } from './crypto/token.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, JWT_STRATEGY_NAME) {

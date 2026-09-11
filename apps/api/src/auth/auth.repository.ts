@@ -1,7 +1,7 @@
+import type { Prisma } from '@lite-notion/database';
 import { Inject, Injectable } from '@nestjs/common';
 
 import { PrismaService } from '../database/prisma.service';
-import type { Prisma } from '../generated/prisma/client';
 import type { CreateUserInput, UserRecord } from '../users/users.service';
 import { EmailAlreadyRegisteredError } from './errors';
 import { isUniqueEmailViolation } from './helpers';

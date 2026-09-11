@@ -2,6 +2,9 @@ import { Test } from '@nestjs/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { TransactionRunner } from '../database/transaction';
 import { InMemoryTransactionRunner } from '../database/transaction.in-memory';
+import { PagePermissionsRepository } from '../page-permissions/page-permissions.repository';
+import { InMemoryPagePermissionsRepository } from '../page-permissions/page-permissions.repository.in-memory';
+import { PagePermissionsService } from '../page-permissions/page-permissions.service';
 import { ProjectNotFoundError } from '../projects/errors';
 import { ProjectsRepository } from '../projects/projects.repository';
 import {
@@ -10,6 +13,7 @@ import {
 } from '../projects/projects.repository.in-memory';
 import { ProjectsService } from '../projects/projects.service';
 import { SoftDeleteProjectUseCase } from '../projects/use-cases/soft-delete-project.use-case';
+import { UsersService } from '../users/users.service';
 import {
   PageNotFoundError,
   PageRestoreProjectDeletedError,
@@ -51,7 +55,7 @@ describe('PagesService: корзина', () => {
 
   const createPage = async (overrides: { parentPageId?: string | null; title?: string } = {}) =>
     createPageUseCase.execute({
-      ownerId: owner,
+      actorId: owner,
       parentPageId: overrides.parentPageId ?? null,
       projectId,
       title: overrides.title ?? '',
@@ -75,12 +79,18 @@ describe('PagesService: корзина', () => {
         RestorePageUseCase,
         SoftDeletePageUseCase,
         SoftDeleteProjectUseCase,
+        PagePermissionsService,
         { provide: PagesRepository, useValue: pages },
         {
           provide: PageDocumentRepository,
           useValue: new InMemoryPageDocumentRepository(pages.documents, pages.pages),
         },
         { provide: ProjectsRepository, useValue: projects },
+        { provide: UsersService, useValue: { findByEmail: async () => null } },
+        {
+          provide: PagePermissionsRepository,
+          useValue: new InMemoryPagePermissionsRepository(pageStore, projectStore),
+        },
         { provide: TransactionRunner, useValue: new InMemoryTransactionRunner() },
       ],
     }).compile();
@@ -428,7 +438,7 @@ describe('PagesService: корзина', () => {
       const page = await createPage({ title: 'page' });
       const other = await projects.create({ name: 'Other', ownerId: owner });
       const existing = await createPageUseCase.execute({
-        ownerId: owner,
+        actorId: owner,
         parentPageId: null,
         projectId: other.id,
         title: 'existing',

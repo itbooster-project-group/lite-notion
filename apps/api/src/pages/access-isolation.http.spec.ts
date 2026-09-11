@@ -1,3 +1,4 @@
+import { PageRole } from '@lite-notion/page-permissions';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { IS_PUBLIC_KEY } from '../common/decorators/public.decorator';
@@ -95,6 +96,75 @@ describe('изоляция по владельцу и защита маршру�
           timestamp: undefined,
         });
       });
+    }
+  });
+
+  describe('видимая страница с нехваткой роли отвечает запретом', () => {
+    /** Операции, которым роли `viewer` не хватает. */
+    const elevatedOperations: {
+      method: 'patch' | 'put' | 'delete' | 'post';
+      path: (id: string) => string;
+      send?: Record<string, unknown>;
+    }[] = [
+      { method: 'patch', path: (id) => `/api/v1/pages/${id}`, send: { title: 'x' } },
+      {
+        method: 'put',
+        path: (id) => `/api/v1/pages/${id}/document`,
+        send: { tiptapSchemaVersion: 1, yjsState: '' },
+      },
+      { method: 'delete', path: (id) => `/api/v1/pages/${id}` },
+      { method: 'post', path: (id) => `/api/v1/pages/${id}/move`, send: { parentPageId: null } },
+    ];
+
+    for (const operation of elevatedOperations) {
+      it(`${operation.method.toUpperCase()} ${operation.path(':pageId')} отвечает 403 читателю`, async () => {
+        context.permissions.grant(foreignPageId, owner, PageRole.VIEWER);
+
+        const test = request(context.app.getHttpServer())
+          [operation.method](operation.path(foreignPageId))
+          .set('Authorization', authorization);
+        const response =
+          operation.send === undefined ? await test.send() : await test.send(operation.send);
+
+        expect(response.status).toBe(403);
+      });
+    }
+
+    it('редактору хватает роли на переименование, но не на удаление', async () => {
+      context.permissions.grant(foreignPageId, owner, PageRole.EDITOR);
+
+      const renamed = await request(context.app.getHttpServer())
+        .patch(`/api/v1/pages/${foreignPageId}`)
+        .set('Authorization', authorization)
+        .send({ title: 'renamed' });
+      const deleted = await request(context.app.getHttpServer())
+        .delete(`/api/v1/pages/${foreignPageId}`)
+        .set('Authorization', authorization)
+        .send();
+
+      expect(renamed.status).toBe(200);
+      expect(deleted.status).toBe(403);
+    });
+
+    it('оставляет чтение доступным ровно тогда, когда изменение запрещено', async () => {
+      context.permissions.grant(foreignPageId, owner, PageRole.VIEWER);
+
+      const read = await request(context.app.getHttpServer())
+        .get(`/api/v1/pages/${foreignPageId}`)
+        .set('Authorization', authorization)
+        .send();
+
+      expect(read.status).toBe(200);
+      expect(read.body).toMatchObject({ accessRole: PageRole.VIEWER, id: foreignPageId });
+    });
+  });
+
+  it('без разрешения ни одна операция не отвечает запретом', async () => {
+    // Обратная сторона правила: `403` допустим только там, где страница видна.
+    for (const operation of pageOperations) {
+      const response = await call(operation, foreignPageId, { Authorization: authorization });
+
+      expect(response.status).not.toBe(403);
     }
   });
 

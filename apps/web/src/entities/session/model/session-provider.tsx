@@ -16,6 +16,7 @@ import {
   type AuthResponseDto,
   clearAccessToken,
   configureAuthTransport,
+  getAccessToken,
   getGetCurrentUserQueryKey,
   getGetCurrentUserQueryOptions,
   refreshAccessToken,
@@ -34,6 +35,8 @@ type SessionContextValue = Readonly<{
   restoreSession: () => Promise<void>;
   status: SessionStatus;
   user: UserProfileDto | undefined;
+  getAccessToken: () => string | undefined;
+  refreshAccessToken: () => Promise<void>;
 }>;
 
 const SessionContext = createContext<SessionContextValue | undefined>(undefined);
@@ -56,6 +59,11 @@ export function SessionProvider({ children }: SessionProviderProps) {
     queryClient.removeQueries({ queryKey: getGetCurrentUserQueryKey() });
     setStatus('unauthenticated');
   }, [queryClient]);
+
+  const getCurrentAccessToken = useCallback(() => getAccessToken(), []);
+  const refreshCurrentAccessToken = useCallback(async () => {
+    await refreshAccessToken();
+  }, []);
 
   useEffect(() => {
     const removeConfiguration = configureAuthTransport({
@@ -143,8 +151,18 @@ export function SessionProvider({ children }: SessionProviderProps) {
       restoreSession,
       status,
       user: currentUserQuery.data,
+      getAccessToken: getCurrentAccessToken,
+      refreshAccessToken: refreshCurrentAccessToken,
     }),
-    [authenticate, clearSession, currentUserQuery.data, restoreSession, status],
+    [
+      authenticate,
+      clearSession,
+      currentUserQuery.data,
+      getCurrentAccessToken,
+      refreshCurrentAccessToken,
+      restoreSession,
+      status,
+    ],
   );
 
   if (!transportReady) {

@@ -1,12 +1,11 @@
 import { randomUUID } from 'node:crypto';
-
+import { PrismaClient } from '@lite-notion/database';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-
 import { PurgeConfirmationRequiredError } from '../common/errors';
 import type { PrismaService } from '../database/prisma.service';
 import { PrismaTransactionRunner } from '../database/transaction';
-import { PrismaClient } from '../generated/prisma/client';
+import { PrismaPagePermissionsRepository } from '../page-permissions/page-permissions.repository';
 import { PrismaProjectsRepository } from '../projects/projects.repository';
 import { PurgeProjectUseCase } from '../projects/use-cases/purge-project.use-case';
 import { RestoreProjectUseCase } from '../projects/use-cases/restore-project.use-case';
@@ -44,7 +43,7 @@ describe('корзина страниц и проектов на живой ба
 
   const createPage = async (parentPageId: string | null, title: string) =>
     createPageUseCase.execute({
-      ownerId,
+      actorId: ownerId,
       parentPageId,
       projectId,
       title,
@@ -67,6 +66,7 @@ describe('корзина страниц и проектов на живой ба
     pages = new PrismaPagesRepository(prisma as unknown as PrismaService);
     projects = new PrismaProjectsRepository(prisma as unknown as PrismaService);
     const transactions = new PrismaTransactionRunner(prisma as unknown as PrismaService);
+    const permissions = new PrismaPagePermissionsRepository(prisma as unknown as PrismaService);
 
     softDeleteProject = new SoftDeleteProjectUseCase(transactions, projects, pages);
     restoreProject = new RestoreProjectUseCase(transactions, projects, pages);
@@ -76,8 +76,9 @@ describe('корзина страниц и проектов на живой ба
       pages,
       projects,
       new PrismaPageDocumentRepository(prisma as unknown as PrismaService),
+      permissions,
     );
-    softDeletePageUseCase = new SoftDeletePageUseCase(transactions, pages);
+    softDeletePageUseCase = new SoftDeletePageUseCase(transactions, pages, permissions);
     restorePageUseCase = new RestorePageUseCase(transactions, pages, projects);
     purgePageUseCase = new PurgePageUseCase(transactions, pages);
     purgePagesTrashUseCase = new PurgePagesTrashUseCase(transactions, pages);
@@ -242,7 +243,7 @@ describe('корзина страниц и проектов на живой ба
       const page = await createPage(null, 'page');
       const other = (await projects.create({ name: 'Other', ownerId })).id;
       const existing = await createPageUseCase.execute({
-        ownerId,
+        actorId: ownerId,
         parentPageId: null,
         projectId: other,
         title: 'existing',

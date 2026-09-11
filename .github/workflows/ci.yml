@@ -29,6 +29,9 @@ jobs:
   web:
     name: web
     runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:3001
+      NEXT_PUBLIC_COLLABORATION_URL: ws://localhost:3002
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -72,3 +75,81 @@ jobs:
       - run: pnpm --filter @lite-notion/api run typecheck
       - run: pnpm --filter @lite-notion/api run test
       - run: pnpm --filter @lite-notion/api run build
+
+  packages:
+    name: packages
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: lite_notion
+          POSTGRES_PASSWORD: lite_notion
+          POSTGRES_DB: lite_notion
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lite_notion -d lite_notion"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_CONNECTION_TIMEOUT_MS: 5000
+      DATABASE_URL: postgresql://lite_notion:lite_notion@localhost:5432/lite_notion?schema=public
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.21.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @lite-notion/database run db:migrate:deploy
+      - run: pnpm --filter "./packages/*" run typecheck
+      - run: pnpm --filter "./packages/*" run test
+      - run: pnpm --filter @lite-notion/page-permissions run test:integration
+      - run: pnpm --filter "./packages/*" run build
+
+  collaboration:
+    name: collaboration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: lite_notion
+          POSTGRES_PASSWORD: lite_notion
+          POSTGRES_DB: lite_notion
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lite_notion -d lite_notion"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      COLLABORATION_ALLOWED_ORIGIN: http://localhost:3000
+      WEBSOCKET_MAX_PAYLOAD_BYTES: 1048576
+      DATABASE_CONNECTION_TIMEOUT_MS: 5000
+      DATABASE_URL: postgresql://lite_notion:lite_notion@localhost:5432/lite_notion?schema=public
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      NODE_ENV: test
+      PORT: 3002
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.21.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @lite-notion/database run db:migrate:deploy
+      - run: pnpm --filter @lite-notion/collaboration run typecheck
+      - run: pnpm --filter @lite-notion/collaboration run test
+      - run: pnpm --filter @lite-notion/collaboration run test:integration
+      - run: pnpm --filter @lite-notion/collaboration run build

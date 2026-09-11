@@ -45,6 +45,8 @@ function page(
   children: PageTreeNodeDto[] = [],
 ): PageTreeNodeDto {
   return {
+    accessMode: 'inherit',
+    accessRole: 'owner',
     children,
     createdAt: '2026-08-29T00:00:00.000Z',
     createdById: 'user-1',
@@ -191,9 +193,9 @@ describe('workspace page', () => {
       'aria-selected',
       'true',
     );
-    expect(
-      screen.getByText('Редактор страницы появится в следующем обновлении.'),
-    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(document.querySelector('[data-collaboration-status]')).not.toBeNull(),
+    );
     expect(screen.queryByRole('textbox', { name: 'Содержимое страницы' })).toBeNull();
   });
 

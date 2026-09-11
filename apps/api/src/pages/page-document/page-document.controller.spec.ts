@@ -49,7 +49,7 @@ describe('PageDocumentController', () => {
     });
 
     expect(documents.replace).toHaveBeenCalledWith({
-      ownerId: user.id,
+      actorId: user.id,
       pageId,
       tiptapSchemaVersion: 2,
       yjsState: new Uint8Array(state),

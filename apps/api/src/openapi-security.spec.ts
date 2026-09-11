@@ -21,9 +21,12 @@ const SECURED_OPERATION_IDS = [
   'getCurrentUser',
   'getPage',
   'getPageDocument',
+  'getPagePermissions',
   'getPageTrash',
   'getPageTree',
   'getProjectTrash',
+  'getSharedPages',
+  'grantPagePermission',
   'listProjects',
   'logout',
   'logoutEverywhere',
@@ -35,6 +38,8 @@ const SECURED_OPERATION_IDS = [
   'renamePage',
   'restorePage',
   'restoreProject',
+  'revokePagePermission',
+  'setPageAccessMode',
   'updatePageDocument',
 ];
 

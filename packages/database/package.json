@@ -1,0 +1,43 @@
+{
+  "name": "@lite-notion/database",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:studio": "prisma studio",
+    "prisma:generate": "prisma generate",
+    "prebuild": "prisma generate",
+    "pretypecheck": "prisma generate",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    },
+    "./client": {
+      "types": "./dist/src/generated/prisma/client.d.ts",
+      "default": "./dist/src/generated/prisma/client.js"
+    },
+    "./enums": {
+      "types": "./dist/src/generated/prisma/enums.d.ts",
+      "default": "./dist/src/generated/prisma/enums.js"
+    }
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "catalog:",
+    "@prisma/client": "catalog:",
+    "pg": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/pg": "catalog:",
+    "dotenv": "^17.4.2",
+    "prisma": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

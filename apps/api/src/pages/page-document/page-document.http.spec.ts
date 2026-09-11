@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 
+import { PageRole } from '@lite-notion/page-permissions';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -161,5 +162,72 @@ describe('page document HTTP contract', () => {
       .delete(`/api/v1/pages/${pageId}/document`)
       .set('Authorization', authorization)
       .expect(404);
+  });
+
+  describe('доступ по ролям', () => {
+    const stranger = '22222222-2222-2222-2222-222222222222';
+    const missingId = '33333333-3333-4333-8333-333333333333';
+    let foreignPageId: string;
+    let foreignAuthorization: string;
+
+    beforeEach(async () => {
+      // Актор здесь — посторонний: он смотрит на страницу владельца из `owner`.
+      foreignAuthorization = `Bearer ${await context.signAccessToken(stranger)}`;
+      foreignPageId = pageId;
+    });
+
+    const readAs = (auth: string, id: string) =>
+      request(context.app.getHttpServer())
+        .get(`/api/v1/pages/${id}/document`)
+        .set('Authorization', auth);
+
+    const writeAs = (auth: string, id: string) =>
+      request(context.app.getHttpServer())
+        .put(`/api/v1/pages/${id}/document`)
+        .set('Authorization', auth)
+        .send({ tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION, yjsState: 'AQI=' });
+
+    it('пускает читателя на чтение', async () => {
+      context.permissions.grant(foreignPageId, stranger, PageRole.VIEWER);
+
+      const response = await readAs(foreignAuthorization, foreignPageId);
+
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({ tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION });
+    });
+
+    it('отказывает читателю в записи, не меняя содержимого', async () => {
+      context.permissions.grant(foreignPageId, stranger, PageRole.VIEWER);
+      const before = await readAs(foreignAuthorization, foreignPageId);
+
+      const written = await writeAs(foreignAuthorization, foreignPageId);
+
+      expect(written.status).toBe(403);
+      const after = await readAs(foreignAuthorization, foreignPageId);
+      expect(after.body).toEqual(before.body);
+    });
+
+    it('пускает редактора на запись', async () => {
+      context.permissions.grant(foreignPageId, stranger, PageRole.EDITOR);
+
+      const written = await writeAs(foreignAuthorization, foreignPageId);
+
+      expect(written.status).toBe(200);
+      // Владелец видит записанное редактором: документ у страницы один.
+      await expect(read().then((response) => response.body.yjsState)).resolves.toBe('AQI=');
+    });
+
+    it('отвечает одинаково на недоступную и на несуществующую страницу', async () => {
+      const foreign = await readAs(foreignAuthorization, foreignPageId);
+      const missing = await readAs(foreignAuthorization, missingId);
+
+      expect(foreign.status).toBe(404);
+      expect(missing.status).toBe(404);
+      expect({ ...foreign.body, path: undefined, timestamp: undefined }).toEqual({
+        ...missing.body,
+        path: undefined,
+        timestamp: undefined,
+      });
+    });
   });
 });

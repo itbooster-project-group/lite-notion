@@ -7,12 +7,15 @@
 ## Requirements
 
 ### Requirement: Обычный development запуск остаётся localhost-совместимым
-Workspace MUST сохранять существующее поведение `pnpm dev`: команда поднимает локальные development dependencies и запускает web и API с текущей localhost-конфигурацией без требования LAN IP.
+Workspace MUST сохранять localhost-совместимое поведение `pnpm dev`: команда поднимает локальные development dependencies и запускает web, API и collaboration runtime с локальной development-конфигурацией без требования LAN IP.
+
+Если текущий root script уже запускает workspace apps через `--filter "./apps/*"`, добавление `apps/collaboration` с собственным `dev` script MUST использовать этот механизм и MUST NOT менять root `pnpm dev` без необходимости.
 
 #### Scenario: Обычный запуск не требует LAN configuration
 - **WHEN** разработчик запускает `pnpm dev`
 - **THEN** workspace запускает существующее development окружение без необходимости задавать `LAN_HOST`
 - **AND** web продолжает использовать localhost API configuration из обычного frontend environment
+- **AND** collaboration runtime запускается на локальном development port
 
 ### Requirement: LAN development запуск публикует web и API в private network
 Workspace MUST предоставлять команду `pnpm dev:lan`, которая поднимает существующие development dependencies, запускает web на `0.0.0.0:3000`, разрешает Next.js development resources/HMR для выбранного LAN host, запускает API через существующий development script на `3001`, настраивает frontend API base URL как `http://<LAN_IP>:3001`, отключает frontend API mocking для LAN web process, настраивает API CORS origin как `http://<LAN_IP>:3000` и печатает адреса `Web: http://<LAN_IP>:3000` и `API: http://<LAN_IP>:3001`.
@@ -78,3 +81,15 @@ The runner MUST avoid orphan API or web processes, but it MUST NOT introduce a g
 - **WHEN** no private non-internal IPv4 address is available and `LAN_HOST` is not provided
 - **THEN** `pnpm dev:lan` exits with a non-zero status before starting web or API
 - **AND** the error tells the developer to retry with `LAN_HOST=<IP> pnpm dev:lan`
+
+### Requirement: Collaboration service can be started independently in development
+Workspace MUST предоставить development command для запуска только collaboration service после готовности required local development dependencies. Команда MUST запускать PostgreSQL или проверять, что PostgreSQL уже готов, и MUST NOT запускать web или API processes. Эта команда MUST NOT менять behavior существующих `dev:web` или `dev:api`.
+
+#### Scenario: Developer starts only collaboration runtime
+- **WHEN** разработчик запускает collaboration-only development command
+- **THEN** PostgreSQL запущен или подтверждён ready
+- **AND** collaboration runtime запускается без запуска web или API processes
+
+#### Scenario: Existing scoped dev commands remain unchanged
+- **WHEN** разработчик запускает `pnpm dev:web` или `pnpm dev:api`
+- **THEN** эти команды сохраняют своё existing scoped behavior

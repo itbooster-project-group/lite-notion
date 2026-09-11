@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
-
+import type { PageAccessMode, PageDeletionOrigin } from '@lite-notion/database/enums';
 import type { TransactionScope } from '../database/transaction';
-import type { PageDeletionOrigin } from '../generated/prisma/enums';
 import { compareSiblings } from './helpers';
 import type {
   Bytes,
@@ -91,8 +90,15 @@ export class InMemoryPagesRepository extends PagesRepository {
       : this.toRecord(page);
   }
 
+  async findLiveById(id: string): Promise<PageRecord | null> {
+    const page = this.pages.get(id);
+
+    return page === undefined || page.deletedAt !== null ? null : this.toRecord(page);
+  }
+
   async insert(input: InsertPageInput): Promise<PageRecord> {
     const page: StoredPage = {
+      accessMode: 'INHERIT',
       createdAt: new Date(),
       createdById: input.createdById,
       deletedAt: null,
@@ -119,10 +125,22 @@ export class InMemoryPagesRepository extends PagesRepository {
     return siblings.at(-1)?.position ?? null;
   }
 
-  async rename(id: string, ownerId: string, title: string): Promise<PageRecord | null> {
+  async setAccessMode(id: string, accessMode: PageAccessMode): Promise<PageRecord | null> {
     const page = this.pages.get(id);
 
-    if (page === undefined || page.deletedAt !== null || page.ownerId !== ownerId) {
+    if (page === undefined || page.deletedAt !== null) {
+      return null;
+    }
+
+    page.accessMode = accessMode;
+
+    return this.toRecord(page);
+  }
+
+  async rename(id: string, title: string): Promise<PageRecord | null> {
+    const page = this.pages.get(id);
+
+    if (page === undefined || page.deletedAt !== null) {
       return null;
     }
 

@@ -16,7 +16,6 @@ export interface PageDocumentRecord {
 
 export interface ReplaceDocumentInput {
   pageId: string;
-  ownerId: string;
   tiptapSchemaVersion: number;
   yjsState: Bytes;
 }
@@ -26,15 +25,15 @@ const DOCUMENT_FIELDS = { pageId: true, tiptapSchemaVersion: true, yjsState: tru
 /**
  * Абстрактный класс служит DI-токеном; тесты подставляют in-memory реализацию.
  *
- * Живость и владелец проверяются условием самого запроса через связь с `Page`: у
- * документа своих прав нет, а отдельное чтение страницы открыло бы окно между
- * проверкой и обращением к строке.
+ * Живость проверяется условием самого запроса через связь с `Page`: отдельное
+ * чтение страницы открыло бы окно между проверкой и обращением к строке. Права
+ * здесь не проверяются — у документа их нет своих, и роль спрашивает сервис.
  */
 @Injectable()
 export abstract class PageDocumentRepository {
   abstract bind(scope: TransactionScope): PageDocumentRepository;
 
-  abstract find(pageId: string, ownerId: string): Promise<PageDocumentRecord | null>;
+  abstract find(pageId: string): Promise<PageDocumentRecord | null>;
 
   /**
    * Пустой документ создаваемой страницы. Владелец не проверяется: строка страницы
@@ -42,7 +41,7 @@ export abstract class PageDocumentRepository {
    */
   abstract insertEmpty(pageId: string, tiptapSchemaVersion: number): Promise<void>;
 
-  /** `null`, когда страницы нет, она чужая или лежит в корзине. */
+  /** `null`, когда страницы нет либо она лежит в корзине. */
   abstract replace(input: ReplaceDocumentInput): Promise<PageDocumentRecord | null>;
 }
 
@@ -56,10 +55,10 @@ export class PrismaPageDocumentRepository extends PageDocumentRepository {
     return new PrismaPageDocumentRepository(databaseClientOf(scope));
   }
 
-  find(pageId: string, ownerId: string): Promise<PageDocumentRecord | null> {
+  find(pageId: string): Promise<PageDocumentRecord | null> {
     return this.client.pageDocument.findFirst({
       select: DOCUMENT_FIELDS,
-      where: { page: { deletedAt: null, ownerId }, pageId },
+      where: { page: { deletedAt: null }, pageId },
     });
   }
 
@@ -77,10 +76,10 @@ export class PrismaPageDocumentRepository extends PageDocumentRepository {
         yjsState: input.yjsState,
       },
       // Мягкое удаление строку документа не трогает, поэтому одного `pageId` мало:
-      // условие по связи делает проверку и запись одним UPDATE.
-      where: { page: { deletedAt: null, ownerId: input.ownerId }, pageId: input.pageId },
+      // условие по связи делает проверку живости и запись одним UPDATE.
+      where: { page: { deletedAt: null }, pageId: input.pageId },
     });
 
-    return count === 0 ? null : this.find(input.pageId, input.ownerId);
+    return count === 0 ? null : this.find(input.pageId);
   }
 }

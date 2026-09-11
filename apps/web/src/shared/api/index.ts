@@ -2,6 +2,7 @@ export { type ApiFetchOptions, apiFetch, type ErrorType } from './api-fetch';
 export {
   clearAccessToken,
   configureAuthTransport,
+  getAccessToken,
   refreshAccessToken,
   setAccessToken,
 } from './auth-session';

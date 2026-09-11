@@ -1,3 +1,4 @@
+import { createPrismaClientOptions, PrismaClient } from '@lite-notion/database';
 import {
   Inject,
   Injectable,
@@ -5,22 +6,15 @@ import {
   type OnModuleDestroy,
   type OnModuleInit,
 } from '@nestjs/common';
-import { PrismaPg } from '@prisma/adapter-pg';
 
 import { type ApplicationConfig, applicationConfig } from '../config/application-config';
-import { PrismaClient } from '../generated/prisma/client';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleDestroy, OnModuleInit {
   private readonly logger = new Logger(PrismaService.name);
 
   constructor(@Inject(applicationConfig.KEY) config: ApplicationConfig) {
-    const adapter = new PrismaPg({
-      connectionString: config.databaseUrl,
-      connectionTimeoutMillis: config.databaseConnectionTimeoutMs,
-    });
-
-    super({ adapter });
+    super(createPrismaClientOptions(config));
   }
 
   async checkConnection(): Promise<void> {

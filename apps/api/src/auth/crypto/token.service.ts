@@ -1,14 +1,10 @@
 import { createHash, randomBytes } from 'node:crypto';
+import type { AccessTokenPayload } from '@lite-notion/auth-token';
 import { Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 
 import { type ApplicationConfig, applicationConfig } from '../../config/application-config';
 import { REFRESH_TOKEN_BYTES } from '../constants';
-
-export interface AccessTokenPayload {
-  sub: string;
-  sid: string;
-}
 
 @Injectable()
 export class TokenService {

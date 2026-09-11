@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
-
+import { PrismaClient } from '@lite-notion/database';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PurgeConfirmationRequiredError } from '../common/errors';
 import type { PrismaService } from '../database/prisma.service';
 import { PrismaTransactionRunner } from '../database/transaction';
-import { PrismaClient } from '../generated/prisma/client';
+import { PrismaPagePermissionsRepository } from '../page-permissions/page-permissions.repository';
 import { ProjectNotFoundError } from '../projects/errors';
 import { PrismaProjectsRepository } from '../projects/projects.repository';
 import { PurgeProjectUseCase } from '../projects/use-cases/purge-project.use-case';
@@ -45,7 +45,7 @@ describe('гонки вокруг мягкого удаления', () => {
 
   const createPage = (parentPageId: string | null, title: string) =>
     createPageUseCase.execute({
-      ownerId,
+      actorId: ownerId,
       parentPageId,
       projectId,
       title,
@@ -62,12 +62,19 @@ describe('гонки вокруг мягкого удаления', () => {
     projects = new PrismaProjectsRepository(prisma as unknown as PrismaService);
     documents = new PrismaPageDocumentRepository(prisma as unknown as PrismaService);
     const transactions = new PrismaTransactionRunner(prisma as unknown as PrismaService);
+    const permissions = new PrismaPagePermissionsRepository(prisma as unknown as PrismaService);
 
     softDeleteProject = new SoftDeleteProjectUseCase(transactions, projects, pages);
     purgeProject = new PurgeProjectUseCase(transactions, projects, pages);
-    createPageUseCase = new CreatePageUseCase(transactions, pages, projects, documents);
-    softDeletePageUseCase = new SoftDeletePageUseCase(transactions, pages);
-    movePageUseCase = new MovePageUseCase(transactions, pages);
+    createPageUseCase = new CreatePageUseCase(
+      transactions,
+      pages,
+      projects,
+      documents,
+      permissions,
+    );
+    softDeletePageUseCase = new SoftDeletePageUseCase(transactions, pages, permissions);
+    movePageUseCase = new MovePageUseCase(transactions, pages, permissions);
     restorePageUseCase = new RestorePageUseCase(transactions, pages, projects);
 
     await prisma.user.create({
@@ -125,7 +132,7 @@ describe('гонки вокруг мягкого удаления', () => {
       () =>
         movePageUseCase.execute({
           nextSiblingId: null,
-          ownerId,
+          actorId: ownerId,
           pageId: moved.id,
           parentPageId: parent.id,
           previousSiblingId: null,
@@ -154,7 +161,7 @@ describe('гонки вокруг мягкого удаления', () => {
       const moving = movePageUseCase
         .execute({
           nextSiblingId: null,
-          ownerId,
+          actorId: ownerId,
           pageId: moved.id,
           parentPageId: parent.id,
           previousSiblingId: null,
@@ -318,7 +325,6 @@ describe('гонки вокруг мягкого удаления', () => {
 
     await expect(
       documents.replace({
-        ownerId,
         pageId: page.id,
         tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
         yjsState: new Uint8Array([1, 2, 3]),
@@ -331,7 +337,6 @@ describe('гонки вокруг мягкого удаления', () => {
     const state = new Uint8Array([1, 2, 3]);
 
     await documents.replace({
-      ownerId,
       pageId: page.id,
       tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
       yjsState: state,
@@ -343,7 +348,6 @@ describe('гонки вокруг мягкого удаления', () => {
     // без условия в самом UPDATE содержимое ушло бы в уже удалённую страницу.
     await expect(
       documents.replace({
-        ownerId,
         pageId: page.id,
         tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION + 1,
         yjsState: new Uint8Array([9, 9]),

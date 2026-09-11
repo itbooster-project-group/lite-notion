@@ -5,6 +5,8 @@
  * HTTP API for Lite Notion
  * OpenAPI spec version: 1.0
  */
+import type { PageTreeNodeDtoAccessMode } from './pageTreeNodeDtoAccessMode';
+import type { PageTreeNodeDtoAccessRole } from './pageTreeNodeDtoAccessRole';
 
 export interface PageTreeNodeDto {
   id: string;
@@ -16,6 +18,10 @@ export interface PageTreeNodeDto {
   title: string;
   /** Fractional rank among siblings. Server-generated, ordered lexicographically. */
   position: string;
+  /** Where permission inheritance stops. `inherit` looks up the parent chain, `restricted` stops at this page. */
+  accessMode: PageTreeNodeDtoAccessMode;
+  /** Effective role of the current user on this page. Absence of access is not a value: an inaccessible page is not returned at all. */
+  accessRole: PageTreeNodeDtoAccessRole;
   createdAt: string;
   updatedAt: string;
   children: PageTreeNodeDto[];
