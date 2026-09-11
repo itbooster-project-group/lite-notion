@@ -252,6 +252,34 @@ describe('workspace page', () => {
     expect(screen.queryByText('Ничего не найдено')).not.toBeInTheDocument();
   });
 
+  it('сохраняет unavailable для owned page без matching project', async () => {
+    currentProjects = [{ id: 'project-b', name: 'Project Beta', ownerId: 'user-1' }];
+    currentTree = [page('owned', 'project-a', null, 'Owned page')];
+
+    renderWorkspace({ pageId: 'owned', type: 'page' });
+
+    expect(await screen.findByRole('heading', { name: 'Ничего не найдено' })).toBeInTheDocument();
+  });
+
+  it('ждёт shared query после owned miss и не показывает unavailable во время pending', async () => {
+    currentTree = [];
+    const shared = createDeferred();
+    server.use(
+      http.get('*/api/v1/pages/shared', async () => {
+        await shared.promise;
+        return HttpResponse.json([]);
+      }),
+    );
+
+    renderWorkspace({ pageId: 'missing', type: 'page' });
+
+    expect(await screen.findByText('Загружаем рабочую область…')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Ничего не найдено' })).not.toBeInTheDocument();
+
+    shared.resolve();
+    expect(await screen.findByRole('heading', { name: 'Ничего не найдено' })).toBeInTheDocument();
+  });
+
   it('открывает owned page, а shared error оставляет локальным', async () => {
     currentTree = [page('owned', 'project-a', null, 'Owned page')];
     server.use(

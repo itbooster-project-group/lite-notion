@@ -34,7 +34,7 @@ describe('SharedPagesTree', () => {
 
     expect(screen.getByRole('heading', { name: 'Доступные мне' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Раскрыть Parent' }));
-    fireEvent.click(screen.getByRole('treeitem', { name: 'Child' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Child' }));
 
     expect(onSelectPage).toHaveBeenCalledWith('child');
   });

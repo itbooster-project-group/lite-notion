@@ -41,9 +41,9 @@ export function SharedPagesTree({
       ) : pages.length === 0 ? (
         <Text variant="caption">Пока нет доступных страниц.</Text>
       ) : (
-        <div aria-label="Доступные страницы" className="space-y-0.5" role="tree">
+        <ul aria-label="Доступные страницы" className="space-y-0.5">
           <SharedPagesList nodes={pages} onSelectPage={onSelectPage} />
-        </div>
+        </ul>
       )}
     </section>
   );
@@ -57,11 +57,11 @@ function SharedPagesList({
   onSelectPage: (pageId: string) => void;
 }>) {
   return (
-    <div className="space-y-0.5">
+    <ul className="space-y-0.5">
       {nodes.map((node) => (
         <SharedPageItem key={node.id} node={node} onSelectPage={onSelectPage} />
       ))}
-    </div>
+    </ul>
   );
 }
 
@@ -77,7 +77,7 @@ function SharedPageItem({
   const hasChildren = node.children.length > 0;
 
   return (
-    <div>
+    <li>
       <div className="flex min-h-9 items-center gap-1 rounded-md pr-1 hover:bg-accent/60">
         {hasChildren ? (
           <button
@@ -93,7 +93,6 @@ function SharedPageItem({
         )}
         <button
           className="min-w-0 flex-1 truncate rounded px-1 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-          role="treeitem"
           type="button"
           onClick={() => onSelectPage(node.id)}
         >
@@ -101,10 +100,10 @@ function SharedPageItem({
         </button>
       </div>
       {expanded && hasChildren ? (
-        <div className="ml-4">
+        <ul className="ml-4">
           <SharedPagesList nodes={node.children} onSelectPage={onSelectPage} />
-        </div>
+        </ul>
       ) : null}
-    </div>
+    </li>
   );
 }

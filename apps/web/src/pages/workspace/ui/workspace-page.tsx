@@ -3,12 +3,8 @@
 import { MoreHorizontal, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { type FormEvent, useMemo, useRef, useState } from 'react';
-import {
-  buildProjectPageTree,
-  normalizePageTree,
-  resolvePageRouteContext,
-  selectPage,
-} from '@/entities/page';
+import { useWorkspaceData } from '@/app/layouts/workspace-data-context';
+import { buildProjectPageTree } from '@/entities/page';
 import {
   DeleteConfirmationDialog,
   type DeleteConfirmationIntent,
@@ -18,13 +14,7 @@ import {
   useProjectCreation,
   useProjectDeletion,
 } from '@/features/workspace-management';
-import {
-  type PageTreeNodeDto,
-  type ProjectDto,
-  useGetPageTree,
-  useGetSharedPages,
-  useListProjects,
-} from '@/shared/api';
+import type { ProjectDto } from '@/shared/api';
 import { type WorkspaceRouteContext, workspaceProjectPath } from '@/shared/routing';
 import { Button, Heading, Input, Menu, MenuItem, MenuPopup, MenuTrigger, Text } from '@/shared/ui';
 
@@ -41,9 +31,20 @@ type WorkspaceDeleteIntent =
   | (ProjectDeleteRequest & Readonly<{ kind: 'project' }>);
 
 export function WorkspacePage({ route }: WorkspacePageProps) {
-  const projectsQuery = useListProjects<ProjectDto[]>();
-  const pageTreeQuery = useGetPageTree<PageTreeNodeDto[]>();
-  const sharedPagesQuery = useGetSharedPages<PageTreeNodeDto[]>();
+  const {
+    pageContext,
+    pageTree: normalizedTree,
+    projects,
+    projectsError,
+    projectsPending,
+    pageTreeError,
+    pageTreePending,
+    refetchPageTree,
+    refetchProjects,
+    refetchSharedPages,
+    sharedPagesError,
+    sharedPagesPending,
+  } = useWorkspaceData();
   const pageManagement = usePageManagement(route);
   const projectCreation = useProjectCreation();
   const projectDeletion = useProjectDeletion(route);
@@ -52,31 +53,20 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
   const [deleteError, setDeleteError] = useState<string>();
   const [deletePending, setDeletePending] = useState(false);
 
-  const pageTree = pageTreeQuery.data ?? [];
-  const normalizedTree = useMemo(() => normalizePageTree(pageTree), [pageTree]);
-  const sharedTree = useMemo(
-    () => normalizePageTree(sharedPagesQuery.data ?? []),
-    [sharedPagesQuery.data],
-  );
-  const ownedPage = route.type === 'page' ? selectPage(normalizedTree, route.pageId) : undefined;
-  const pageContext =
-    route.type === 'page'
-      ? resolvePageRouteContext(normalizedTree, sharedTree, route.pageId)
-      : undefined;
   const activePage = pageContext?.page;
-  const needsSharedPageQuery = route.type === 'page' && !ownedPage;
   const projectId = route.type === 'project' ? route.projectId : undefined;
-  const projects = projectsQuery.data ?? [];
-  const project = projectId ? projects.find((item) => item.id === projectId) : undefined;
+  const ownedPageProjectId = pageContext?.source === 'owned' ? activePage?.projectId : undefined;
+  const project = projects.find((item) => item.id === (projectId ?? ownedPageProjectId));
   const projectTree = useMemo(
     () => buildProjectPageTree(normalizedTree, projectId ?? 'unavailable'),
     [normalizedTree, projectId],
   );
 
-  const metadataPending =
-    route.type !== 'page' && (projectsQuery.isPending || pageTreeQuery.isPending);
+  const metadataPending = route.type !== 'page' && (projectsPending || pageTreePending);
   const routePending =
-    pageTreeQuery.isPending || (needsSharedPageQuery && sharedPagesQuery.isPending);
+    pageTreePending ||
+    (route.type === 'page' && pageContext?.source === 'owned' && projectsPending) ||
+    (route.type === 'page' && pageContext?.source !== 'owned' && sharedPagesPending);
   if (metadataPending || routePending) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center" aria-busy="true">
@@ -85,21 +75,23 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
     );
   }
 
-  const pageRouteError = needsSharedPageQuery && sharedPagesQuery.isError;
-  if ((projectsQuery.isError && route.type !== 'page') || pageTreeQuery.isError || pageRouteError) {
+  const pageRouteError =
+    route.type === 'page' && pageContext?.source !== 'owned' && sharedPagesError;
+  if ((projectsError && route.type !== 'page') || pageTreeError || pageRouteError) {
     return (
       <WorkspaceError
         pageLevel={Boolean(pageRouteError)}
         onRetry={() => {
-          void pageTreeQuery.refetch();
-          if (route.type !== 'page') void projectsQuery.refetch();
-          if (needsSharedPageQuery) void sharedPagesQuery.refetch();
+          void refetchPageTree();
+          if (route.type !== 'page') void refetchProjects();
+          if (route.type === 'page' && pageContext?.source !== 'owned') void refetchSharedPages();
         }}
       />
     );
   }
 
-  if (route.type !== 'root' && (route.type === 'project' ? !project : !activePage)) {
+  const pageUnavailable = !activePage || (pageContext?.source === 'owned' && !project);
+  if (route.type !== 'root' && (route.type === 'project' ? !project : pageUnavailable)) {
     return <WorkspaceUnavailable />;
   }
 

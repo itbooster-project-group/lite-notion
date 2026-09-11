@@ -33,6 +33,7 @@ import {
   WorkspaceTree,
   WorkspaceTreeExpansionProvider,
 } from '@/widgets/workspace-navigation';
+import { WorkspaceDataProvider } from './workspace-data-context';
 
 type WorkspaceDeleteIntent =
   | (PageDeleteRequest & Readonly<{ kind: 'page' }>)
@@ -210,24 +211,42 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
     </>
   );
 
+  const workspaceData = {
+    pageTree: tree,
+    sharedTree,
+    pageContext,
+    projects: projectsQuery.data ?? [],
+    projectsPending: projectsQuery.isPending,
+    projectsError: projectsQuery.isError,
+    pageTreePending: treeQuery.isPending,
+    pageTreeError: treeQuery.isError,
+    sharedPagesPending: sharedPagesQuery.isPending,
+    sharedPagesError: sharedPagesQuery.isError,
+    refetchProjects: projectsQuery.refetch,
+    refetchPageTree: treeQuery.refetch,
+    refetchSharedPages: sharedPagesQuery.refetch,
+  } satisfies Parameters<typeof WorkspaceDataProvider>[0]['value'];
+
   return (
-    <WorkspaceTreeExpansionProvider>
-      <AppShell pageTree={navigation}>
-        {({ mobileNavigationTrigger }) => (
-          <>
-            <PrivateShell breadcrumbs={breadcrumbs} headerStart={mobileNavigationTrigger}>
-              {children}
-            </PrivateShell>
-            <DeleteConfirmationDialog
-              error={deleteError}
-              intent={toDeleteConfirmationIntent(deleteIntent)}
-              pending={deletePending}
-              onCancel={closeDeleteDialog}
-              onConfirm={() => void submitDelete()}
-            />
-          </>
-        )}
-      </AppShell>
-    </WorkspaceTreeExpansionProvider>
+    <WorkspaceDataProvider value={workspaceData}>
+      <WorkspaceTreeExpansionProvider>
+        <AppShell pageTree={navigation}>
+          {({ mobileNavigationTrigger }) => (
+            <>
+              <PrivateShell breadcrumbs={breadcrumbs} headerStart={mobileNavigationTrigger}>
+                {children}
+              </PrivateShell>
+              <DeleteConfirmationDialog
+                error={deleteError}
+                intent={toDeleteConfirmationIntent(deleteIntent)}
+                pending={deletePending}
+                onCancel={closeDeleteDialog}
+                onConfirm={() => void submitDelete()}
+              />
+            </>
+          )}
+        </AppShell>
+      </WorkspaceTreeExpansionProvider>
+    </WorkspaceDataProvider>
   );
 }
