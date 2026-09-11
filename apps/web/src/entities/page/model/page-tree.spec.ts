@@ -12,6 +12,7 @@ import {
   removePageSubtreeFromTree,
   removeProjectPagesFromTree,
   renamePageInTree,
+  resolvePageRouteContext,
 } from './page-tree';
 
 function page(
@@ -180,5 +181,27 @@ describe('page tree domain model', () => {
     expect([...collectPageSubtreeIds(normalized, 'a')].sort()).toEqual(['a', 'a-child']);
     expect(isPageInSubtree(normalized, 'a', 'a-child')).toBe(true);
     expect(isPageInSubtree(normalized, 'a', 'b')).toBe(false);
+  });
+
+  it('разрешает shared page без project lookup и сохраняет источники раздельными', () => {
+    const ownedTree = normalizePageTree([page('owned', 'owned-project', null)]);
+    const sharedTree = normalizePageTree([page('shared', 'foreign-project', null)]);
+
+    expect(resolvePageRouteContext(ownedTree, sharedTree, 'shared')).toMatchObject({
+      page: { id: 'shared', projectId: 'foreign-project' },
+      source: 'shared',
+      tree: sharedTree,
+    });
+    expect(resolvePageRouteContext(ownedTree, sharedTree, 'shared')?.tree).not.toBe(ownedTree);
+  });
+
+  it('использует owned page как defensive fallback при совпадении id', () => {
+    const ownedTree = normalizePageTree([page('same', 'owned-project', null)]);
+    const sharedTree = normalizePageTree([page('same', 'foreign-project', null)]);
+
+    expect(resolvePageRouteContext(ownedTree, sharedTree, 'same')).toMatchObject({
+      page: { projectId: 'owned-project' },
+      source: 'owned',
+    });
   });
 });

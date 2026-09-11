@@ -3,7 +3,12 @@
 import { MoreHorizontal, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { type FormEvent, useMemo, useRef, useState } from 'react';
-import { buildProjectPageTree, normalizePageTree, selectPage } from '@/entities/page';
+import {
+  buildProjectPageTree,
+  normalizePageTree,
+  resolvePageRouteContext,
+  selectPage,
+} from '@/entities/page';
 import {
   DeleteConfirmationDialog,
   type DeleteConfirmationIntent,
@@ -17,6 +22,7 @@ import {
   type PageTreeNodeDto,
   type ProjectDto,
   useGetPageTree,
+  useGetSharedPages,
   useListProjects,
 } from '@/shared/api';
 import { type WorkspaceRouteContext, workspaceProjectPath } from '@/shared/routing';
@@ -37,6 +43,7 @@ type WorkspaceDeleteIntent =
 export function WorkspacePage({ route }: WorkspacePageProps) {
   const projectsQuery = useListProjects<ProjectDto[]>();
   const pageTreeQuery = useGetPageTree<PageTreeNodeDto[]>();
+  const sharedPagesQuery = useGetSharedPages<PageTreeNodeDto[]>();
   const pageManagement = usePageManagement(route);
   const projectCreation = useProjectCreation();
   const projectDeletion = useProjectDeletion(route);
@@ -47,8 +54,18 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
 
   const pageTree = pageTreeQuery.data ?? [];
   const normalizedTree = useMemo(() => normalizePageTree(pageTree), [pageTree]);
-  const activePage = route.type === 'page' ? selectPage(normalizedTree, route.pageId) : undefined;
-  const projectId = route.type === 'project' ? route.projectId : activePage?.projectId;
+  const sharedTree = useMemo(
+    () => normalizePageTree(sharedPagesQuery.data ?? []),
+    [sharedPagesQuery.data],
+  );
+  const ownedPage = route.type === 'page' ? selectPage(normalizedTree, route.pageId) : undefined;
+  const pageContext =
+    route.type === 'page'
+      ? resolvePageRouteContext(normalizedTree, sharedTree, route.pageId)
+      : undefined;
+  const activePage = pageContext?.page;
+  const needsSharedPageQuery = route.type === 'page' && !ownedPage;
+  const projectId = route.type === 'project' ? route.projectId : undefined;
   const projects = projectsQuery.data ?? [];
   const project = projectId ? projects.find((item) => item.id === projectId) : undefined;
   const projectTree = useMemo(
@@ -56,7 +73,11 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
     [normalizedTree, projectId],
   );
 
-  if (projectsQuery.isPending || pageTreeQuery.isPending) {
+  const metadataPending =
+    route.type !== 'page' && (projectsQuery.isPending || pageTreeQuery.isPending);
+  const routePending =
+    pageTreeQuery.isPending || (needsSharedPageQuery && sharedPagesQuery.isPending);
+  if (metadataPending || routePending) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center" aria-busy="true">
         <Text variant="caption">Загружаем рабочую область…</Text>
@@ -64,18 +85,21 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
     );
   }
 
-  if (projectsQuery.isError || pageTreeQuery.isError) {
+  const pageRouteError = needsSharedPageQuery && sharedPagesQuery.isError;
+  if ((projectsQuery.isError && route.type !== 'page') || pageTreeQuery.isError || pageRouteError) {
     return (
       <WorkspaceError
+        pageLevel={Boolean(pageRouteError)}
         onRetry={() => {
-          void projectsQuery.refetch();
           void pageTreeQuery.refetch();
+          if (route.type !== 'page') void projectsQuery.refetch();
+          if (needsSharedPageQuery) void sharedPagesQuery.refetch();
         }}
       />
     );
   }
 
-  if (route.type !== 'root' && (!project || (route.type === 'page' && !activePage))) {
+  if (route.type !== 'root' && (route.type === 'project' ? !project : !activePage)) {
     return <WorkspaceUnavailable />;
   }
 
@@ -138,6 +162,7 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
         ) : (
           <WorkspaceMain
             activePageId={activePage?.id}
+            activePage={activePage}
             normalizedTree={normalizedTree}
             onCreatePage={createPage}
             onMovePage={pageManagement.movePage}
@@ -304,14 +329,21 @@ function WorkspaceUnavailable() {
   );
 }
 
-function WorkspaceError({ onRetry }: Readonly<{ onRetry: () => void }>) {
+function WorkspaceError({
+  onRetry,
+  pageLevel = false,
+}: Readonly<{ onRetry: () => void; pageLevel?: boolean }>) {
   return (
     <section className="flex min-h-[60vh] items-center justify-center px-page-inline">
       <section className="max-w-lg space-y-4 text-center">
         <Heading as="h1" variant="page">
-          Ошибка загрузки рабочей области
+          {pageLevel ? 'Ошибка загрузки страницы' : 'Ошибка загрузки рабочей области'}
         </Heading>
-        <Text variant="caption">Проверьте соединение и попробуйте ещё раз.</Text>
+        <Text variant="caption">
+          {pageLevel
+            ? 'Не удалось определить доступ к странице. Попробуйте ещё раз.'
+            : 'Проверьте соединение и попробуйте ещё раз.'}
+        </Text>
         <Button type="button" onClick={onRetry}>
           Повторить
         </Button>

@@ -1,9 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { getBreadcrumbs, normalizePageTree, selectPage } from '@/entities/page';
+import { getBreadcrumbs, normalizePageTree, resolvePageRouteContext } from '@/entities/page';
 import {
   DeleteConfirmationDialog,
   type DeleteConfirmationIntent,
@@ -17,6 +17,7 @@ import {
   type PageTreeNodeDto,
   type ProjectDto,
   useGetPageTree,
+  useGetSharedPages,
   useListProjects,
 } from '@/shared/api';
 import {
@@ -27,7 +28,11 @@ import {
 import { Button, Text } from '@/shared/ui';
 import { AppShell } from '@/widgets/app-shell';
 import { PrivateShell } from '@/widgets/private-shell';
-import { WorkspaceTree, WorkspaceTreeExpansionProvider } from '@/widgets/workspace-navigation';
+import {
+  SharedPagesTree,
+  WorkspaceTree,
+  WorkspaceTreeExpansionProvider,
+} from '@/widgets/workspace-navigation';
 
 type WorkspaceDeleteIntent =
   | (PageDeleteRequest & Readonly<{ kind: 'page' }>)
@@ -46,21 +51,34 @@ function toDeleteConfirmationIntent(
 
 export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>) {
   const pathname = usePathname() ?? '/';
+  const router = useRouter();
   const projectsQuery = useListProjects<ProjectDto[]>();
   const treeQuery = useGetPageTree<PageTreeNodeDto[]>();
+  const sharedPagesQuery = useGetSharedPages<PageTreeNodeDto[]>();
   const [deleteIntent, setDeleteIntent] = useState<WorkspaceDeleteIntent>();
   const [deleteError, setDeleteError] = useState<string>();
   const [deletePending, setDeletePending] = useState(false);
   const deletePendingRef = useRef(false);
   const tree = useMemo(() => normalizePageTree(treeQuery.data ?? []), [treeQuery.data]);
+  const sharedTree = useMemo(
+    () => normalizePageTree(sharedPagesQuery.data ?? []),
+    [sharedPagesQuery.data],
+  );
   const routeContext = useMemo(() => parseWorkspaceRoutePathname(pathname), [pathname]);
   const deleteCleanupCoordinator = useWorkspaceDeleteCleanupCoordinator();
   const pageManagement = usePageManagement(routeContext);
   const projectDeletion = useProjectDeletion(routeContext);
   const pageId = routeContext?.type === 'page' ? routeContext.pageId : undefined;
   const projectId = routeContext?.type === 'project' ? routeContext.projectId : undefined;
-  const page = selectPage(tree, pageId);
-  const project = projectsQuery.data?.find((item) => item.id === (projectId ?? page?.projectId));
+  const pageContext = useMemo(
+    () => resolvePageRouteContext(tree, sharedTree, pageId),
+    [pageId, sharedTree, tree],
+  );
+  const page = pageContext?.page;
+  const project = projectsQuery.data?.find(
+    (item) =>
+      item.id === (projectId ?? (pageContext?.source === 'owned' ? page?.projectId : undefined)),
+  );
   const pending = projectsQuery.isPending || treeQuery.isPending;
   const failed = projectsQuery.isError || treeQuery.isError;
 
@@ -70,7 +88,15 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
 
   const crumbs = [{ title: 'Проекты', href: '/' }];
   if (pathname === '/profile') crumbs.push({ title: 'Профиль', href: '/profile' });
-  else if (!pending && !failed && project && (!pageId || page)) {
+  else if (!pending && !failed && pageContext?.source === 'shared' && page) {
+    crumbs.push({ title: 'Доступные мне', href: '/' });
+    crumbs.push(
+      ...getBreadcrumbs(sharedTree, page.id).map((item) => ({
+        title: item.title,
+        href: workspacePagePath(item.id),
+      })),
+    );
+  } else if (!pending && !failed && project && (!pageId || page)) {
     crumbs.push({ title: project.name, href: workspaceProjectPath(project.id) });
     if (page)
       crumbs.push(
@@ -87,7 +113,7 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
     <nav aria-label="Хлебные крошки" className="min-w-0">
       <ol className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
         {crumbs.map((crumb, index) => (
-          <li className="flex min-w-0 items-center gap-2" key={crumb.href}>
+          <li className="flex min-w-0 items-center gap-2" key={`${crumb.href}-${crumb.title}`}>
             {index > 0 ? <span aria-hidden="true">/</span> : null}
             {index === crumbs.length - 1 ? (
               <span className="break-all" aria-current="page">
@@ -162,17 +188,26 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
       </Button>
     </div>
   ) : (
-    <WorkspaceTree
-      activePageId={page?.id}
-      activeProjectId={project?.id}
-      normalizedTree={tree}
-      projects={projectsQuery.data ?? []}
-      onCreatePage={pageManagement.createPage}
-      onMovePage={pageManagement.movePage}
-      onRequestDeletePage={requestPageDelete}
-      onRequestDeleteProject={requestProjectDelete}
-      onRenamePage={pageManagement.renamePage}
-    />
+    <>
+      <WorkspaceTree
+        activePageId={pageContext?.source === 'owned' ? page?.id : undefined}
+        activeProjectId={project?.id}
+        normalizedTree={tree}
+        projects={projectsQuery.data ?? []}
+        onCreatePage={pageManagement.createPage}
+        onMovePage={pageManagement.movePage}
+        onRequestDeletePage={requestPageDelete}
+        onRequestDeleteProject={requestProjectDelete}
+        onRenamePage={pageManagement.renamePage}
+      />
+      <SharedPagesTree
+        isError={sharedPagesQuery.isError}
+        isLoading={sharedPagesQuery.isPending}
+        onRetry={() => void sharedPagesQuery.refetch()}
+        onSelectPage={(selectedPageId) => router.push(workspacePagePath(selectedPageId))}
+        pages={sharedPagesQuery.data ?? []}
+      />
+    </>
   );
 
   return (

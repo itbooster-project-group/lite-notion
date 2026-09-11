@@ -1,6 +1,7 @@
 import { HttpResponse, http } from 'msw';
 
 import { getAuthMock, getHealthMock } from '../generated/index.msw';
+import { getGetSharedPagesMockHandler } from '../generated/pages/pages.msw';
 
 const defaultGuestSession = http.post('*/api/v1/auth/refresh', () =>
   HttpResponse.json(
@@ -15,4 +16,9 @@ const defaultGuestSession = http.post('*/api/v1/auth/refresh', () =>
   ),
 );
 
-export const handlers = [defaultGuestSession, ...getHealthMock(), ...getAuthMock()];
+export const handlers = [
+  defaultGuestSession,
+  getGetSharedPagesMockHandler([]),
+  ...getHealthMock(),
+  ...getAuthMock(),
+];
