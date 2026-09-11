@@ -43,10 +43,11 @@ function page(
   parentPageId: string | null,
   title: string,
   children: PageTreeNodeDto[] = [],
+  accessRole: PageTreeNodeDto['accessRole'] = 'owner',
 ): PageTreeNodeDto {
   return {
     accessMode: 'inherit',
-    accessRole: 'owner',
+    accessRole,
     children,
     createdAt: '2026-08-29T00:00:00.000Z',
     createdById: 'user-1',
@@ -208,6 +209,181 @@ describe('workspace page', () => {
     expect(screen.getByRole('navigation', { name: 'Хлебные крошки' })).toHaveTextContent(
       'Без названия',
     );
+  });
+
+  it('открывает shared page без matching owned project', async () => {
+    currentTree = [];
+    const permissionsRequests = vi.fn();
+    server.use(
+      http.get('*/api/v1/pages/shared', () =>
+        HttpResponse.json([page('shared', 'Shared page', null, 'Shared page', [], 'viewer')]),
+      ),
+      http.get('*/api/v1/pages/:pageId/permissions', () => {
+        permissionsRequests();
+        return HttpResponse.json([]);
+      }),
+    );
+
+    renderWorkspace({ pageId: 'shared', type: 'page' });
+
+    expect(
+      await screen.findByRole('heading', { name: 'Shared page', level: 1 }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Хлебные крошки' })).toHaveTextContent(
+      'Доступные мне/Shared page',
+    );
+    expect(screen.queryByRole('heading', { name: 'Ничего не найдено' })).not.toBeInTheDocument();
+    expect(permissionsRequests).not.toHaveBeenCalled();
+  });
+
+  it('открывает owned page сразу, пока shared query загружается', async () => {
+    server.use(
+      http.get('*/api/v1/pages/shared', async () => {
+        await delay(100);
+        return HttpResponse.json([]);
+      }),
+    );
+
+    renderWorkspace({ pageId: 'child', type: 'page' });
+
+    expect(
+      await screen.findByRole('heading', { name: 'Child page', level: 1 }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Ничего не найдено')).not.toBeInTheDocument();
+  });
+
+  it('сохраняет unavailable для owned page без matching project', async () => {
+    currentProjects = [{ id: 'project-b', name: 'Project Beta', ownerId: 'user-1' }];
+    currentTree = [page('owned', 'project-a', null, 'Owned page')];
+
+    renderWorkspace({ pageId: 'owned', type: 'page' });
+
+    expect(await screen.findByRole('heading', { name: 'Ничего не найдено' })).toBeInTheDocument();
+  });
+
+  it('показывает workspace error и повторяет projects query для owned page', async () => {
+    currentTree = [page('owned', 'project-a', null, 'Owned page')];
+    let attempts = 0;
+    server.use(
+      http.get('*/api/v1/projects', () => {
+        attempts += 1;
+        return attempts === 1
+          ? HttpResponse.json({ message: 'Projects failure' }, { status: 500 })
+          : HttpResponse.json(currentProjects);
+      }),
+    );
+
+    renderWorkspace({ pageId: 'owned', type: 'page' });
+
+    expect(
+      await screen.findByRole('heading', { name: 'Ошибка загрузки рабочей области' }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Повторить' }));
+    expect(await screen.findByRole('heading', { name: 'Owned page' })).toBeInTheDocument();
+    expect(attempts).toBe(2);
+  });
+
+  it('открывает shared page при ошибке projects и строит shared breadcrumbs', async () => {
+    currentTree = [];
+    server.use(
+      http.get('*/api/v1/projects', () =>
+        HttpResponse.json({ message: 'Projects failure' }, { status: 500 }),
+      ),
+      http.get('*/api/v1/pages/shared', () =>
+        HttpResponse.json([page('shared', 'foreign-project', null, 'Shared page', [], 'viewer')]),
+      ),
+    );
+
+    renderWorkspace({ pageId: 'shared', type: 'page' });
+
+    expect(await screen.findByRole('heading', { name: 'Shared page' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Хлебные крошки' })).toHaveTextContent(
+      'Доступные мне/Shared page',
+    );
+  });
+
+  it('строит shared breadcrumbs, пока projects query pending', async () => {
+    currentTree = [];
+    const projects = createDeferred();
+    server.use(
+      http.get('*/api/v1/projects', async () => {
+        await projects.promise;
+        return HttpResponse.json(currentProjects);
+      }),
+      http.get('*/api/v1/pages/shared', () =>
+        HttpResponse.json([page('shared', 'foreign-project', null, 'Shared page', [], 'viewer')]),
+      ),
+    );
+
+    renderWorkspace({ pageId: 'shared', type: 'page' });
+
+    expect(await screen.findByRole('heading', { name: 'Shared page' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Хлебные крошки' })).toHaveTextContent(
+      'Доступные мне/Shared page',
+    );
+    projects.resolve();
+  });
+
+  it('ждёт shared query после owned miss и не показывает unavailable во время pending', async () => {
+    currentTree = [];
+    const shared = createDeferred();
+    server.use(
+      http.get('*/api/v1/pages/shared', async () => {
+        await shared.promise;
+        return HttpResponse.json([]);
+      }),
+    );
+
+    renderWorkspace({ pageId: 'missing', type: 'page' });
+
+    expect(await screen.findByText('Загружаем рабочую область…')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Ничего не найдено' })).not.toBeInTheDocument();
+
+    shared.resolve();
+    expect(await screen.findByRole('heading', { name: 'Ничего не найдено' })).toBeInTheDocument();
+  });
+
+  it('открывает owned page, а shared error оставляет локальным', async () => {
+    currentTree = [page('owned', 'project-a', null, 'Owned page')];
+    server.use(
+      http.get('*/api/v1/pages/shared', () =>
+        HttpResponse.json({ message: 'Shared failure' }, { status: 500 }),
+      ),
+    );
+
+    renderWorkspace({ pageId: 'owned', type: 'page' });
+
+    expect(
+      await screen.findByRole('heading', { name: 'Owned page', level: 1 }),
+    ).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Не удалось загрузить доступные страницы.',
+    );
+    expect(
+      screen.queryByRole('heading', { name: 'Ошибка загрузки страницы' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('показывает page-level retry при shared error после owned miss', async () => {
+    currentTree = [];
+    let attempts = 0;
+    server.use(
+      http.get('*/api/v1/pages/shared', () => {
+        attempts += 1;
+        return attempts === 1
+          ? HttpResponse.json({ message: 'Shared failure' }, { status: 500 })
+          : HttpResponse.json([]);
+      }),
+    );
+
+    renderWorkspace({ pageId: 'missing', type: 'page' });
+
+    expect(
+      await screen.findByRole('heading', { name: 'Ошибка загрузки страницы' }),
+    ).toBeInTheDocument();
+    const retryButtons = screen.getAllByRole('button', { name: 'Повторить' });
+    fireEvent.click(retryButtons.at(-1) as HTMLButtonElement);
+    expect(await screen.findByRole('heading', { name: 'Ничего не найдено' })).toBeInTheDocument();
   });
 
   it.each([

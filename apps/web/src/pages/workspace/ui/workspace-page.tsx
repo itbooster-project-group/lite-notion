@@ -3,7 +3,7 @@
 import { MoreHorizontal, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { type FormEvent, useMemo, useRef, useState } from 'react';
-import { buildProjectPageTree, normalizePageTree, selectPage } from '@/entities/page';
+import { buildProjectPageTree } from '@/entities/page';
 import {
   DeleteConfirmationDialog,
   type DeleteConfirmationIntent,
@@ -13,15 +13,10 @@ import {
   useProjectCreation,
   useProjectDeletion,
 } from '@/features/workspace-management';
-import {
-  type PageTreeNodeDto,
-  type ProjectDto,
-  useGetPageTree,
-  useListProjects,
-} from '@/shared/api';
+import type { ProjectDto } from '@/shared/api';
 import { type WorkspaceRouteContext, workspaceProjectPath } from '@/shared/routing';
 import { Button, Heading, Input, Menu, MenuItem, MenuPopup, MenuTrigger, Text } from '@/shared/ui';
-
+import { useWorkspaceData } from '../model/workspace-data-context';
 import { WorkspaceMain } from './workspace-main';
 
 type WorkspacePageProps = Readonly<{
@@ -35,8 +30,20 @@ type WorkspaceDeleteIntent =
   | (ProjectDeleteRequest & Readonly<{ kind: 'project' }>);
 
 export function WorkspacePage({ route }: WorkspacePageProps) {
-  const projectsQuery = useListProjects<ProjectDto[]>();
-  const pageTreeQuery = useGetPageTree<PageTreeNodeDto[]>();
+  const {
+    pageContext,
+    pageTree: normalizedTree,
+    projects,
+    projectsError,
+    projectsPending,
+    pageTreeError,
+    pageTreePending,
+    refetchPageTree,
+    refetchProjects,
+    refetchSharedPages,
+    sharedPagesError,
+    sharedPagesPending,
+  } = useWorkspaceData();
   const pageManagement = usePageManagement(route);
   const projectCreation = useProjectCreation();
   const projectDeletion = useProjectDeletion(route);
@@ -45,18 +52,25 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
   const [deleteError, setDeleteError] = useState<string>();
   const [deletePending, setDeletePending] = useState(false);
 
-  const pageTree = pageTreeQuery.data ?? [];
-  const normalizedTree = useMemo(() => normalizePageTree(pageTree), [pageTree]);
-  const activePage = route.type === 'page' ? selectPage(normalizedTree, route.pageId) : undefined;
-  const projectId = route.type === 'project' ? route.projectId : activePage?.projectId;
-  const projects = projectsQuery.data ?? [];
-  const project = projectId ? projects.find((item) => item.id === projectId) : undefined;
+  const activePage = pageContext?.page;
+  const effectiveProjectId =
+    route.type === 'project'
+      ? route.projectId
+      : pageContext?.source === 'owned'
+        ? activePage?.projectId
+        : undefined;
+  const project = projects.find((item) => item.id === effectiveProjectId);
   const projectTree = useMemo(
-    () => buildProjectPageTree(normalizedTree, projectId ?? 'unavailable'),
-    [normalizedTree, projectId],
+    () => buildProjectPageTree(normalizedTree, effectiveProjectId ?? 'unavailable'),
+    [effectiveProjectId, normalizedTree],
   );
 
-  if (projectsQuery.isPending || pageTreeQuery.isPending) {
+  const metadataPending = route.type !== 'page' && (projectsPending || pageTreePending);
+  const routePending =
+    pageTreePending ||
+    (route.type === 'page' && pageContext?.source === 'owned' && projectsPending) ||
+    (route.type === 'page' && pageContext?.source !== 'owned' && sharedPagesPending);
+  if (metadataPending || routePending) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center" aria-busy="true">
         <Text variant="caption">Загружаем рабочую область…</Text>
@@ -64,24 +78,31 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
     );
   }
 
-  if (projectsQuery.isError || pageTreeQuery.isError) {
+  const pageRouteError =
+    route.type === 'page' && pageContext?.source !== 'owned' && sharedPagesError;
+  const ownedProjectsError =
+    projectsError && (route.type !== 'page' || pageContext?.source === 'owned');
+  if (ownedProjectsError || pageTreeError || pageRouteError) {
     return (
       <WorkspaceError
+        pageLevel={Boolean(pageRouteError)}
         onRetry={() => {
-          void projectsQuery.refetch();
-          void pageTreeQuery.refetch();
+          void refetchPageTree();
+          if (route.type !== 'page' || pageContext?.source === 'owned') void refetchProjects();
+          if (route.type === 'page' && pageContext?.source !== 'owned') void refetchSharedPages();
         }}
       />
     );
   }
 
-  if (route.type !== 'root' && (!project || (route.type === 'page' && !activePage))) {
+  const pageUnavailable = !activePage || (pageContext?.source === 'owned' && !project);
+  if (route.type !== 'root' && (route.type === 'project' ? !project : pageUnavailable)) {
     return <WorkspaceUnavailable />;
   }
 
   async function createPage(parentPageId: string | null, title: string) {
-    if (!projectId) throw new Error('Create unavailable');
-    await pageManagement.createPage(projectId, parentPageId, title);
+    if (!effectiveProjectId) throw new Error('Create unavailable');
+    await pageManagement.createPage(effectiveProjectId, parentPageId, title);
   }
 
   function requestPageDelete(request: PageDeleteRequest) {
@@ -138,6 +159,7 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
         ) : (
           <WorkspaceMain
             activePageId={activePage?.id}
+            activePage={activePage}
             normalizedTree={normalizedTree}
             onCreatePage={createPage}
             onMovePage={pageManagement.movePage}
@@ -304,14 +326,21 @@ function WorkspaceUnavailable() {
   );
 }
 
-function WorkspaceError({ onRetry }: Readonly<{ onRetry: () => void }>) {
+function WorkspaceError({
+  onRetry,
+  pageLevel = false,
+}: Readonly<{ onRetry: () => void; pageLevel?: boolean }>) {
   return (
     <section className="flex min-h-[60vh] items-center justify-center px-page-inline">
       <section className="max-w-lg space-y-4 text-center">
         <Heading as="h1" variant="page">
-          Ошибка загрузки рабочей области
+          {pageLevel ? 'Ошибка загрузки страницы' : 'Ошибка загрузки рабочей области'}
         </Heading>
-        <Text variant="caption">Проверьте соединение и попробуйте ещё раз.</Text>
+        <Text variant="caption">
+          {pageLevel
+            ? 'Не удалось определить доступ к странице. Попробуйте ещё раз.'
+            : 'Проверьте соединение и попробуйте ещё раз.'}
+        </Text>
         <Button type="button" onClick={onRetry}>
           Повторить
         </Button>

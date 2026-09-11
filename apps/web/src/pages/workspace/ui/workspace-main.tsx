@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import {
   getPageDisplayTitle,
   type MoveIntent,
+  type NormalizedPage,
   type NormalizedPageTree,
   type ProjectPageTree,
   selectPage,
@@ -15,6 +16,7 @@ import { CollaborativePageEditor } from './collaborative-page-editor';
 
 type WorkspaceMainProps = Readonly<{
   activePageId: string | undefined;
+  activePage: NormalizedPage | undefined;
   normalizedTree: NormalizedPageTree;
   onCreatePage: (parentPageId: string | null, title: string) => Promise<void>;
   onMovePage: (intent: MoveIntent) => Promise<void>;
@@ -26,6 +28,7 @@ type WorkspaceMainProps = Readonly<{
 
 export function WorkspaceMain({
   activePageId,
+  activePage,
   normalizedTree,
   onCreatePage,
   onMovePage,
@@ -35,7 +38,7 @@ export function WorkspaceMain({
   projectTree,
 }: WorkspaceMainProps) {
   const router = useRouter();
-  const page = selectPage(normalizedTree, activePageId);
+  const page = activePage ?? selectPage(normalizedTree, activePageId);
 
   if (!page) {
     return (
@@ -65,7 +68,7 @@ export function WorkspaceMain({
         <Heading as="h1" variant="page">
           {getPageDisplayTitle(page.title)}
         </Heading>
-        <CollaborativePageEditor pageId={page.id} />
+        <CollaborativePageEditor accessRole={page.accessRole} pageId={page.id} />
       </div>
     </section>
   );

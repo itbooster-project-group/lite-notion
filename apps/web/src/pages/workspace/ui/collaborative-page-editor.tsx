@@ -7,10 +7,15 @@ import {
   type PageDocumentSession,
   pageRoomName,
 } from '@/features/page-editing';
+import type { PageTreeNodeDto } from '@/shared/api';
 import { PageEditor } from '@/widgets/page-editor';
 
-export function CollaborativePageEditor({ pageId }: Readonly<{ pageId: string }>) {
+export function CollaborativePageEditor({
+  accessRole,
+  pageId,
+}: Readonly<{ accessRole: PageTreeNodeDto['accessRole']; pageId: string }>) {
   const auth = useSession();
+  const editable = accessRole !== 'viewer';
   const [session, setSession] = useState<PageDocumentSession | null>(null);
   const [, rerender] = useState(0);
 
@@ -20,6 +25,7 @@ export function CollaborativePageEditor({ pageId }: Readonly<{ pageId: string }>
     const nextSession = createCollaborativePageDocumentSession({
       roomName: pageRoomName(pageId),
       url: process.env.NEXT_PUBLIC_COLLABORATION_URL ?? '',
+      editable,
       getAccessToken: getToken,
       refreshAccessToken: refreshToken,
     });
@@ -30,7 +36,7 @@ export function CollaborativePageEditor({ pageId }: Readonly<{ pageId: string }>
       nextSession.destroy();
       setSession((current) => (current === nextSession ? null : current));
     };
-  }, [auth.getAccessToken, auth.refreshAccessToken, pageId]);
+  }, [auth.getAccessToken, auth.refreshAccessToken, editable, pageId]);
 
   if (!session) return <div aria-busy="true">Подготавливаем документ…</div>;
 

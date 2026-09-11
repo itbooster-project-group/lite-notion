@@ -12,6 +12,12 @@ export type NormalizedPageTree = Readonly<{
   rootIdsByProjectId: Readonly<Record<string, readonly string[]>>;
 }>;
 
+export type PageRouteContext = Readonly<{
+  page: NormalizedPage;
+  source: 'owned' | 'shared';
+  tree: NormalizedPageTree;
+}>;
+
 export type PageTreeItemData = Readonly<{
   id: string;
   title: string;
@@ -118,6 +124,18 @@ export function selectPage(
   pageId: string | null | undefined,
 ): NormalizedPage | undefined {
   return pageId ? tree.nodesById[pageId] : undefined;
+}
+
+export function resolvePageRouteContext(
+  ownedTree: NormalizedPageTree,
+  sharedTree: NormalizedPageTree,
+  pageId: string | null | undefined,
+): PageRouteContext | undefined {
+  const ownedPage = selectPage(ownedTree, pageId);
+  if (ownedPage) return { page: ownedPage, source: 'owned', tree: ownedTree };
+
+  const sharedPage = selectPage(sharedTree, pageId);
+  return sharedPage ? { page: sharedPage, source: 'shared', tree: sharedTree } : undefined;
 }
 
 export function getAncestorChain(tree: NormalizedPageTree, pageId: string): NormalizedPage[] {
