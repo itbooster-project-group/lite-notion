@@ -54,7 +54,7 @@ export function createCollaborativePageDocumentSession({
     return refreshed;
   };
 
-  if (!url || !roomName) {
+  if (!isValidCollaborationUrl(url) || !roomName) {
     sessionStatus = 'error';
     connectionStatus = 'offline';
   } else {
@@ -87,6 +87,7 @@ export function createCollaborativePageDocumentSession({
                 : 'reconnecting',
           ),
         onSynced: () => {
+          authRetried = false;
           sessionStatus = 'ready';
           connectionStatus = 'connected';
           notify();
@@ -138,4 +139,13 @@ export function createCollaborativePageDocumentSession({
     },
     destroy: lifecycle.destroy,
   };
+}
+
+function isValidCollaborationUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'ws:' || url.protocol === 'wss:';
+  } catch {
+    return false;
+  }
 }

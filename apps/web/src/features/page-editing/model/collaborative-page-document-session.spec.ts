@@ -17,6 +17,22 @@ describe('collaborative page document session', () => {
     session.destroy();
   });
 
+  it('fails safely before creating a transport for an invalid URL', () => {
+    const transportFactory = vi.fn();
+    const session = createCollaborativePageDocumentSession({
+      roomName: 'page:page-id',
+      url: 'not-a-websocket-url',
+      getAccessToken: () => 'token',
+      refreshAccessToken: async () => undefined,
+      transportFactory,
+    });
+
+    expect(session.status).toBe('error');
+    expect(session.connectionStatus).toBe('offline');
+    expect(transportFactory).not.toHaveBeenCalled();
+    session.destroy();
+  });
+
   it('ignores subscription callbacks after cleanup', () => {
     const session = createCollaborativePageDocumentSession({
       roomName: '',
@@ -65,5 +81,60 @@ describe('collaborative page document session', () => {
     session.destroy();
     expect(destroy).toHaveBeenCalledOnce();
     expect(session.doc).toBe(document);
+  });
+
+  it('allows a second auth retry cycle after successful synchronization', async () => {
+    let callbacks: CollaborationTransportCallbacks | undefined;
+    const connect = vi.fn();
+    const refresh = vi.fn(async () => undefined);
+    const session = createCollaborativePageDocumentSession({
+      roomName: 'page:page-id',
+      url: 'ws://collaboration.test',
+      getAccessToken: () => 'token',
+      refreshAccessToken: refresh,
+      transportFactory: (options) => {
+        callbacks = options.callbacks;
+        return { provider: { connect }, destroy: vi.fn() };
+      },
+    });
+
+    callbacks?.onAuthenticationFailed?.({ reason: 'expired' });
+    await vi.waitFor(() => expect(connect).toHaveBeenCalledOnce());
+    callbacks?.onSynced?.();
+
+    callbacks?.onAuthenticationFailed?.({ reason: 'expired-again' });
+    await vi.waitFor(() => expect(connect).toHaveBeenCalledTimes(2));
+    callbacks?.onSynced?.();
+
+    expect(refresh).toHaveBeenCalledTimes(2);
+    expect(session.status).toBe('ready');
+    expect(session.connectionStatus).toBe('connected');
+    session.destroy();
+  });
+
+  it('enters terminal error after two auth failures without synchronization', async () => {
+    let callbacks: CollaborationTransportCallbacks | undefined;
+    const connect = vi.fn();
+    const refresh = vi.fn(async () => undefined);
+    const session = createCollaborativePageDocumentSession({
+      roomName: 'page:page-id',
+      url: 'ws://collaboration.test',
+      getAccessToken: () => 'token',
+      refreshAccessToken: refresh,
+      transportFactory: (options) => {
+        callbacks = options.callbacks;
+        return { provider: { connect }, destroy: vi.fn() };
+      },
+    });
+
+    callbacks?.onAuthenticationFailed?.({ reason: 'expired' });
+    await vi.waitFor(() => expect(connect).toHaveBeenCalledOnce());
+    callbacks?.onAuthenticationFailed?.({ reason: 'still-expired' });
+
+    expect(session.status).toBe('error');
+    expect(session.connectionStatus).toBe('offline');
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(connect).toHaveBeenCalledOnce();
+    session.destroy();
   });
 });
