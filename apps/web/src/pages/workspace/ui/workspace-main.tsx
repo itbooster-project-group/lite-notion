@@ -14,7 +14,7 @@ import {
 import { PageAccessPanel } from '@/features/page-access';
 import { type PageDeleteRequest, PageTree } from '@/features/workspace-management';
 import { workspacePagePath } from '@/shared/routing';
-import { Heading } from '@/shared/ui';
+import { ContentContainer, Heading } from '@/shared/ui';
 import { CollaborativePageEditor } from './collaborative-page-editor';
 
 type WorkspaceMainProps = Readonly<{
@@ -47,7 +47,7 @@ export function WorkspaceMain({
 
   if (!page) {
     return (
-      <section className="min-w-0 p-6 sm:p-8">
+      <ContentContainer as="section" className="min-w-0">
         <PageTree
           activePageId={undefined}
           header={
@@ -63,12 +63,12 @@ export function WorkspaceMain({
           onRequestDeletePage={onRequestDeletePage}
           onSelectPage={(pageId) => router.push(workspacePagePath(pageId))}
         />
-      </section>
+      </ContentContainer>
     );
   }
 
   return (
-    <section className="min-w-0 p-6 sm:p-8">
+    <ContentContainer as="section" className="min-w-0">
       <div className="space-y-6">
         <div className="flex items-start justify-between gap-4">
           <Heading as="h1" variant="page">
@@ -81,6 +81,6 @@ export function WorkspaceMain({
           pageId={page.id}
         />
       </div>
-    </section>
+    </ContentContainer>
   );
 }

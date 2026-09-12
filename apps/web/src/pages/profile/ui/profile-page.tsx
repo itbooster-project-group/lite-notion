@@ -1,17 +1,21 @@
 'use client';
 
 import { useSession } from '@/entities/session';
-import { Heading, Text } from '@/shared/ui';
+import { ContentContainer, Heading, Text } from '@/shared/ui';
 
 export function ProfilePage() {
   const { user } = useSession();
 
   if (user === undefined) {
-    return <Text variant="caption">Загружаем профиль…</Text>;
+    return (
+      <ContentContainer>
+        <Text variant="caption">Загружаем профиль…</Text>
+      </ContentContainer>
+    );
   }
 
   return (
-    <div className="mx-auto max-w-shell px-page-inline py-12">
+    <ContentContainer>
       <section className="space-y-6" aria-labelledby="profile-title">
         <Heading as="h1" variant="page" id="profile-title">
           Профиль
@@ -22,7 +26,7 @@ export function ProfilePage() {
           <ProfileField label="Дата регистрации" value={formatDate(user.createdAt)} />
         </dl>
       </section>
-    </div>
+    </ContentContainer>
   );
 }
 
