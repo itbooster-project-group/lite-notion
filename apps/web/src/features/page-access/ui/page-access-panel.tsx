@@ -28,8 +28,10 @@ export function PageAccessPanel({ onOpenChange, open, page }: PageAccessPanelPro
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'viewer' | 'editor'>('viewer');
   const [error, setError] = useState<string>();
+  const [modeError, setModeError] = useState<string>();
   const [mode, setMode] = useState(page.accessMode);
   const [modeToConfirm, setModeToConfirm] = useState<typeof mode>();
+  const [revokeError, setRevokeError] = useState<string>();
   const [revokeUserId, setRevokeUserId] = useState<string>();
 
   const isMutationPending =
@@ -60,23 +62,25 @@ export function PageAccessPanel({ onOpenChange, open, page }: PageAccessPanelPro
   async function confirmModeChange() {
     if (!modeToConfirm) return;
     setError(undefined);
+    setModeError(undefined);
     try {
       const updated = await access.setAccessMode(modeToConfirm);
       setMode(updated.accessMode);
       setModeToConfirm(undefined);
     } catch {
-      setError('Не удалось изменить режим доступа. Попробуйте ещё раз.');
+      setModeError('Не удалось изменить режим доступа. Попробуйте ещё раз.');
     }
   }
 
   async function confirmRevoke() {
     if (!revokeUserId) return;
     setError(undefined);
+    setRevokeError(undefined);
     try {
       await access.revoke(revokeUserId);
       setRevokeUserId(undefined);
     } catch {
-      setError('Не удалось отозвать доступ. Попробуйте ещё раз.');
+      setRevokeError('Не удалось отозвать доступ. Попробуйте ещё раз.');
     }
   }
 
@@ -121,7 +125,10 @@ export function PageAccessPanel({ onOpenChange, open, page }: PageAccessPanelPro
               ]}
               value={mode}
               onValueChange={(next) => {
-                if (next !== mode) setModeToConfirm(next as typeof mode);
+                if (next !== mode) {
+                  setModeError(undefined);
+                  setModeToConfirm(next as typeof mode);
+                }
               }}
             />
           </div>
@@ -202,6 +209,7 @@ export function PageAccessPanel({ onOpenChange, open, page }: PageAccessPanelPro
                     disabled={isMutationPending}
                     onClick={() => {
                       setError(undefined);
+                      setRevokeError(undefined);
                       setRevokeUserId(grant.userId);
                     }}
                     type="button"
@@ -224,13 +232,23 @@ export function PageAccessPanel({ onOpenChange, open, page }: PageAccessPanelPro
 
       <Dialog
         open={Boolean(revokeUserId)}
-        onOpenChange={(nextOpen) => !nextOpen && setRevokeUserId(undefined)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            setRevokeError(undefined);
+            setRevokeUserId(undefined);
+          }
+        }}
       >
         <DialogContent showCloseButton={false}>
           <DialogTitle>Отозвать доступ?</DialogTitle>
           <DialogDescription>
             Пользователь больше не сможет пользоваться прямым разрешением этой страницы.
           </DialogDescription>
+          {revokeError ? (
+            <Text role="alert" variant="error">
+              {revokeError}
+            </Text>
+          ) : null}
           <div className="flex justify-end gap-2">
             <DialogClose
               render={
@@ -257,7 +275,12 @@ export function PageAccessPanel({ onOpenChange, open, page }: PageAccessPanelPro
 
       <Dialog
         open={Boolean(modeToConfirm)}
-        onOpenChange={(open) => !open && setModeToConfirm(undefined)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setModeError(undefined);
+            setModeToConfirm(undefined);
+          }
+        }}
       >
         <DialogContent showCloseButton={false}>
           <DialogTitle>Изменить режим доступа?</DialogTitle>
@@ -265,6 +288,11 @@ export function PageAccessPanel({ onOpenChange, open, page }: PageAccessPanelPro
             Это может повлиять на доступ к странице и её поддереву. Конкретные роли пользователей не
             вычисляются в интерфейсе.
           </DialogDescription>
+          {modeError ? (
+            <Text role="alert" variant="error">
+              {modeError}
+            </Text>
+          ) : null}
           <div className="flex justify-end gap-2">
             <DialogClose
               render={

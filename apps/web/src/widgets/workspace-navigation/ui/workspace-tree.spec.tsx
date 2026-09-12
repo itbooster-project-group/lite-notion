@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { normalizePageTree } from '@/entities/page';
@@ -18,10 +18,11 @@ function page(
   parentPageId: string | null,
   title: string,
   children: PageTreeNodeDto[] = [],
+  accessRole: PageTreeNodeDto['accessRole'] = 'owner',
 ): PageTreeNodeDto {
   return {
     accessMode: 'inherit',
-    accessRole: 'owner',
+    accessRole,
     children,
     createdAt: '2026-08-29T00:00:00.000Z',
     createdById: 'user-1',
@@ -192,5 +193,32 @@ describe('workspace tree', () => {
       projectId: 'project-a',
       returnFocus: trigger,
     });
+  });
+
+  it('показывает editor page actions без move/delete/access и не использует project branch', async () => {
+    const editor = page('editor', 'project-a', null, 'Editor page', [], 'editor');
+    render(tree([editor]).ui);
+
+    const pageItem = await screen.findByRole('treeitem', { name: 'Editor page' });
+    expect(screen.queryByRole('button', { name: 'Перетащить Editor page' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Действия для проекта Editor page' })).toBeNull();
+
+    fireEvent.click(within(pageItem).getByRole('button', { name: 'Действия для Editor page' }));
+    expect(await screen.findByRole('menuitem', { name: 'Добавить дочернюю' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Переименовать' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Переместить…' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Удалить' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Настроить доступ' })).toBeNull();
+  });
+
+  it('скрывает все page mutation actions для viewer и не использует project branch', async () => {
+    const viewer = page('viewer', 'project-a', null, 'Viewer page', [], 'viewer');
+    render(tree([viewer]).ui);
+
+    await screen.findByRole('treeitem', { name: 'Viewer page' });
+    expect(screen.queryByRole('button', { name: 'Перетащить Viewer page' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Создать страницу в Viewer page' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Действия для Viewer page' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Действия для проекта Viewer page' })).toBeNull();
   });
 });
