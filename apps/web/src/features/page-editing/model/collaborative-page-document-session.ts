@@ -1,17 +1,22 @@
 import * as Y from 'yjs';
-import { createCollaborationTransport } from '@/shared/collaboration';
+import { type CollaborationTransport, createCollaborationTransport } from '@/shared/collaboration';
 
 import {
   createPageDocumentSessionLifecycle,
   type PageDocumentConnectionStatus,
+  type PageDocumentEditorCollaboration,
   type PageDocumentError,
+  type PageDocumentPresence,
   type PageDocumentSession,
+  type PresenceUser,
 } from './page-document-session';
+import { getPresenceColor, getPresenceUsers } from './presence';
 
 type Options = Readonly<{
   roomName: string;
   url: string;
   editable?: boolean;
+  user?: Readonly<{ id: string; name: string }>;
   getAccessToken: () => string | undefined;
   refreshAccessToken: () => Promise<void>;
   transportFactory?: typeof createCollaborationTransport;
@@ -25,6 +30,7 @@ export function createCollaborativePageDocumentSession({
   roomName,
   url,
   editable = true,
+  user,
   getAccessToken,
   refreshAccessToken,
   transportFactory = createCollaborationTransport,
@@ -32,10 +38,12 @@ export function createCollaborativePageDocumentSession({
   const lifecycle = createPageDocumentSessionLifecycle();
   const doc = new Y.Doc();
   const listeners = new Set<() => void>();
+  const presenceListeners = new Set<() => void>();
+  let presenceUsers: readonly PresenceUser[] = [];
   let sessionStatus: PageDocumentSession['status'] = 'loading';
   let connectionStatus: PageDocumentConnectionStatus = 'connecting';
   let authRetried = false;
-  let transport: ReturnType<typeof createCollaborationTransport> | undefined;
+  let transport: CollaborationTransport | undefined;
   const notify = lifecycle.guard(() => {
     listeners.forEach((listener) => {
       listener();
@@ -43,6 +51,19 @@ export function createCollaborativePageDocumentSession({
   });
   const setConnection = lifecycle.guard((next: PageDocumentConnectionStatus) => {
     connectionStatus = next;
+    notify();
+  });
+  const notifyPresence = lifecycle.guard(() => {
+    presenceListeners.forEach((listener) => {
+      listener();
+    });
+  });
+  const updatePresence = lifecycle.guard(() => {
+    const awareness = transport?.provider.awareness;
+    const nextUsers = awareness ? getPresenceUsers(awareness) : [];
+    if (samePresenceUsers(presenceUsers, nextUsers)) return;
+    presenceUsers = nextUsers;
+    notifyPresence();
     notify();
   });
   const token = async () => {
@@ -109,13 +130,38 @@ export function createCollaborativePageDocumentSession({
         },
       },
     });
+    const awareness = transport.provider.awareness;
+    if (awareness) {
+      awareness.on('change', updatePresence);
+      lifecycle.addCleanup(() => awareness.off('change', updatePresence));
+      updatePresence();
+    }
   }
 
   lifecycle.addCleanup(() => {
     transport?.destroy();
     listeners.clear();
+    presenceListeners.clear();
+    presenceUsers = [];
     doc.destroy();
   });
+
+  const presence: PageDocumentPresence = {
+    get users() {
+      return presenceUsers;
+    },
+    subscribe(listener) {
+      presenceListeners.add(listener);
+      return () => presenceListeners.delete(listener);
+    },
+  };
+  const editorCollaboration: PageDocumentEditorCollaboration | undefined =
+    transport && user && isValidPresenceIdentity(user)
+      ? {
+          provider: transport.provider,
+          user: { id: user.id, name: user.name, color: getPresenceColor(user.id) },
+        }
+      : undefined;
 
   return {
     get doc() {
@@ -130,6 +176,8 @@ export function createCollaborativePageDocumentSession({
     get connectionStatus() {
       return connectionStatus;
     },
+    presence,
+    ...(editorCollaboration ? { editorCollaboration } : {}),
     ...(sessionStatus === 'error' ? { error: CONFIG_ERROR } : {}),
     subscribe(listener) {
       listeners.add(listener);
@@ -139,6 +187,30 @@ export function createCollaborativePageDocumentSession({
     },
     destroy: lifecycle.destroy,
   };
+}
+
+function isValidPresenceIdentity(user: Readonly<{ id: string; name: string }>): boolean {
+  return (
+    typeof user.id === 'string' &&
+    user.id.length > 0 &&
+    typeof user.name === 'string' &&
+    user.name.length > 0
+  );
+}
+
+function samePresenceUsers(
+  current: readonly PresenceUser[],
+  next: readonly PresenceUser[],
+): boolean {
+  return (
+    current.length === next.length &&
+    current.every(
+      (user, index) =>
+        user.id === next[index]?.id &&
+        user.name === next[index]?.name &&
+        user.color === next[index]?.color,
+    )
+  );
 }
 
 function isValidCollaborationUrl(value: string): boolean {

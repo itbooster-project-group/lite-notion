@@ -1,7 +1,7 @@
 import { Editor, type JSONContent } from '@tiptap/core';
 import { afterEach, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
-
+import type { CollaborationProvider } from '@/shared/collaboration';
 import { renderPageDocumentToHTML } from '../lib/static-rendering';
 import {
   createPageDocumentEditorExtensions,
@@ -33,6 +33,29 @@ function createEditor() {
 }
 
 describe('page document schema version 1', () => {
+  it('подключает CollaborationCaret к тому же provider и user contract', () => {
+    const document = new Y.Doc();
+    const provider: CollaborationProvider = {
+      awareness: null,
+      connect: async () => undefined,
+    };
+    const extensions = createPageDocumentEditorExtensions(document, {
+      provider,
+      user: { id: 'user-a', name: 'Ada', color: '#2563eb' },
+    });
+    const caret = extensions.find((extension) => extension.name === 'collaborationCaret');
+
+    expect(caret?.options).toMatchObject({
+      provider,
+      user: { id: 'user-a', name: 'Ada', color: '#2563eb' },
+    });
+    expect(caret?.options.selectionRender({ color: '#123456' })).toEqual({
+      class: 'collaboration-carets__selection',
+      style: 'background-color: #12345670',
+    });
+    document.destroy();
+  });
+
   it('экспортирует стабильные schema version и collaboration field', () => {
     expect(PAGE_DOCUMENT_SCHEMA_VERSION).toBe(1);
     expect(PAGE_CONTENT_YJS_FIELD).toBe('default');

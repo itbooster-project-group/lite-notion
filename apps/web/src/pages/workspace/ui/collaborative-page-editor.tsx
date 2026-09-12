@@ -6,6 +6,7 @@ import { useSession } from '@/entities/session';
 import {
   createCollaborativePageDocumentSession,
   type PageDocumentSession,
+  Participants,
   pageRoomName,
 } from '@/features/page-editing';
 import { PageEditor } from '@/widgets/page-editor';
@@ -20,6 +21,8 @@ export function CollaborativePageEditor({
   pageId: string;
 }>) {
   const auth = useSession();
+  const userId = auth.user?.id;
+  const userName = auth.user?.name;
   const resolvedCapabilities = capabilities ?? getPageCapabilities(accessRole ?? 'viewer');
   const editable = resolvedCapabilities.canEditContent;
   const [session, setSession] = useState<PageDocumentSession | null>(null);
@@ -34,6 +37,7 @@ export function CollaborativePageEditor({
       editable,
       getAccessToken: getToken,
       refreshAccessToken: refreshToken,
+      ...(userId && userName ? { user: { id: userId, name: userName } } : {}),
     });
     setSession(nextSession);
     const unsubscribe = nextSession.subscribe?.(() => rerender((value) => value + 1));
@@ -42,14 +46,17 @@ export function CollaborativePageEditor({
       nextSession.destroy();
       setSession((current) => (current === nextSession ? null : current));
     };
-  }, [auth.getAccessToken, auth.refreshAccessToken, editable, pageId]);
+  }, [auth.getAccessToken, auth.refreshAccessToken, editable, pageId, userId, userName]);
 
   if (!session) return <div aria-busy="true">Подготавливаем документ…</div>;
 
   return (
     <div className="space-y-3">
-      <div aria-live="polite" data-collaboration-status={session.connectionStatus ?? 'offline'}>
-        {connectionLabel(session.connectionStatus)}
+      <div className="flex items-center justify-between gap-3">
+        <div aria-live="polite" data-collaboration-status={session.connectionStatus ?? 'offline'}>
+          {connectionLabel(session.connectionStatus)}
+        </div>
+        {session.presence ? <Participants presence={session.presence} /> : null}
       </div>
       <PageEditor session={session} />
     </div>
