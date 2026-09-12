@@ -17,6 +17,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   buildProjectPageTree,
   getAncestorChain,
+  getPageCapabilities,
   isMoveIntentValid,
   type MoveIntent,
   type NormalizedPageTree,
@@ -51,6 +52,7 @@ type WorkspaceTreeProps = Readonly<{
   onRenamePage: (pageId: string, title: string) => Promise<void>;
   onRequestDeletePage: (request: PageDeleteRequest) => void;
   onRequestDeleteProject: (request: ProjectDeleteRequest) => void;
+  onOpenPageAccess?: (pageId: string) => void;
   projects: readonly ProjectDto[];
 }>;
 
@@ -69,6 +71,7 @@ export function WorkspaceTree({
   onRenamePage,
   onRequestDeletePage,
   onRequestDeleteProject,
+  onOpenPageAccess,
   projects,
 }: WorkspaceTreeProps) {
   const router = useRouter();
@@ -133,6 +136,7 @@ export function WorkspaceTree({
     canHaveChildren: true,
     childrenIds: [],
     hasChildren: false,
+    accessRole: 'owner',
     id: model.rootItemId,
     kind: 'root' as const,
     pageId: null,
@@ -142,15 +146,25 @@ export function WorkspaceTree({
   };
 
   const tree = useTree<WorkspaceTreeItemData>({
-    canDrag: (items) => items.length === 1 && items[0]?.getItemData().kind === 'page',
+    canDrag: (items) => {
+      const data = items[0]?.getItemData();
+      return (
+        items.length === 1 &&
+        data?.kind === 'page' &&
+        getPageCapabilities(data.accessRole).canMovePage
+      );
+    },
     canDrop: (items, target) => {
       const pageId = items[0]?.getItemData().pageId;
       const dropTarget = toWorkspaceDropTarget(target);
-      return pageId && dropTarget
+      const page = pageId ? normalizedTree.nodesById[pageId] : undefined;
+      return pageId && page && getPageCapabilities(page.accessRole).canMovePage && dropTarget
         ? isMoveIntentValid(normalizedTree, toMoveIntent(pageId, dropTarget))
         : false;
     },
-    canRename: (item) => item.getItemData().kind === 'page',
+    canRename: (item) =>
+      item.getItemData().kind === 'page' &&
+      getPageCapabilities(item.getItemData().accessRole).canRenamePage,
     dataLoader: {
       getChildren: (itemId) => model.items[itemId]?.childrenIds.slice() ?? [],
       getItem: (itemId) => model.items[itemId] ?? rootData,
@@ -296,6 +310,7 @@ export function WorkspaceTree({
               createDraftError={draftError}
               createDraftPending={creating}
               createDraftTitle={draftTitle}
+              capabilities={getPageCapabilities(data.accessRole)}
               indentPx={TREE_INDENT_PX}
               item={item}
               key={item.getKey()}
@@ -309,6 +324,9 @@ export function WorkspaceTree({
               }}
               onRequestDeletePage={onRequestDeletePage}
               onRequestDeleteProject={onRequestDeleteProject}
+              onOpenPageAccess={() => {
+                if (data.pageId) onOpenPageAccess?.(data.pageId);
+              }}
               onStartMove={(returnFocus) => {
                 setMoveReturnFocus(returnFocus);
                 setMovingPageId(pageId ?? undefined);

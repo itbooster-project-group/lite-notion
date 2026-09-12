@@ -180,6 +180,18 @@ describe('workspace page', () => {
     expect(navigation.push).toHaveBeenCalledWith('/pages/beta');
   });
 
+  it('открывает access panel из sidebar без navigation', async () => {
+    renderWorkspace({ projectId: 'project-a', type: 'project' });
+
+    const actions = (await screen.findAllByRole('button', { name: 'Действия для Alpha page' }))[0];
+    if (!actions) throw new Error('Page actions are unavailable');
+    fireEvent.click(actions);
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Настроить доступ' }));
+
+    expect(await screen.findByRole('heading', { name: 'Доступ к странице' })).toBeInTheDocument();
+    expect(navigation.push).not.toHaveBeenCalled();
+  });
+
   it('разрешает прямую ссылку страницы и показывает единые breadcrumbs и heading', async () => {
     renderWorkspace({ pageId: 'child', type: 'page' });
 
@@ -194,6 +206,8 @@ describe('workspace page', () => {
       'aria-selected',
       'true',
     );
+    fireEvent.click(await screen.findByRole('button', { name: 'Настроить доступ' }));
+    expect(await screen.findByRole('heading', { name: 'Доступ к странице' })).toBeInTheDocument();
     await waitFor(() =>
       expect(document.querySelector('[data-collaboration-status]')).not.toBeNull(),
     );
@@ -233,6 +247,7 @@ describe('workspace page', () => {
       'Доступные мне/Shared page',
     );
     expect(screen.queryByRole('heading', { name: 'Ничего не найдено' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Доступ к странице' })).not.toBeInTheDocument();
     expect(permissionsRequests).not.toHaveBeenCalled();
   });
 
@@ -488,7 +503,8 @@ describe('workspace page', () => {
     item.focus();
 
     fireEvent.keyDown(item, { code: 'F2', key: 'F2' });
-    const input = await screen.findByRole('textbox');
+    const [input] = await screen.findAllByRole('textbox');
+    if (!input) throw new Error('Rename input was not rendered');
     fireEvent.change(input, { target: { value: 'Renamed child' } });
     fireEvent.keyDown(input, { code: 'Enter', key: 'Enter' });
 
@@ -510,13 +526,14 @@ describe('workspace page', () => {
     item.focus();
 
     fireEvent.keyDown(item, { code: 'F2', key: 'F2' });
-    const input = await screen.findByRole('textbox');
+    const [input] = await screen.findAllByRole('textbox');
+    if (!input) throw new Error('Rename input was not rendered');
     fireEvent.change(input, { target: { value: 'Draft rename' } });
     fireEvent.keyDown(input, { code: 'Enter', key: 'Enter' });
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Ошибка переименования страницы');
     expect(screen.getByRole('heading', { name: 'Child page' })).toBeInTheDocument();
-    expect(screen.getByRole('textbox')).toHaveValue('Draft rename');
+    expect(screen.getAllByRole('textbox')[0]).toHaveValue('Draft rename');
     expect(screen.queryByText('Raw rename detail')).not.toBeInTheDocument();
   });
 

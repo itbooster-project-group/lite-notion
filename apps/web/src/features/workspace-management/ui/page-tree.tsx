@@ -16,6 +16,7 @@ import { Plus } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import {
   getAncestorChain,
+  getPageCapabilities,
   isMoveIntentValid,
   type MoveIntent,
   type NormalizedPageTree,
@@ -84,6 +85,7 @@ export function PageTree({
     canHaveChildren: true,
     childrenIds: [],
     hasChildren: false,
+    accessRole: 'owner',
     id: projectTree.rootItemId,
     parentPageId: null,
     projectId: projectTree.projectId,
@@ -92,15 +94,31 @@ export function PageTree({
   };
 
   const tree = useTree<PageTreeItemData>({
-    canDrag: (items) => items.length === 1 && !items[0]?.getItemData().synthetic,
+    canDrag: (items) => {
+      const item = items[0]?.getItemData();
+      return (
+        items.length === 1 &&
+        Boolean(item && !item.synthetic && getPageCapabilities(item.accessRole).canMovePage)
+      );
+    },
     canDrop: (items, target) => {
       const pageId = items[0]?.getId();
       const dropTarget = toPageDropTarget(target);
-      return pageId && dropTarget
-        ? isMoveIntentValid(normalizedTree, toMoveIntent(pageId, dropTarget))
+      const page = pageId ? normalizedTree.nodesById[pageId] : undefined;
+      return pageId && page && getPageCapabilities(page.accessRole).canMovePage && dropTarget
+        ? isMoveIntentValid(normalizedTree, toMoveIntent(pageId, dropTarget)) &&
+            (dropTarget.parentPageId === null ||
+              Boolean(
+                normalizedTree.nodesById[dropTarget.parentPageId] &&
+                  getPageCapabilities(
+                    normalizedTree.nodesById[dropTarget.parentPageId]?.accessRole ?? 'viewer',
+                  ).canMovePage,
+              ))
         : false;
     },
-    canRename: (item) => !item.getItemData().synthetic,
+    canRename: (item) =>
+      !item.getItemData().synthetic &&
+      getPageCapabilities(item.getItemData().accessRole).canRenamePage,
     dataLoader: {
       getChildren: (itemId) => projectTree.items[itemId]?.childrenIds.slice() ?? [],
       getItem: (itemId) => projectTree.items[itemId] ?? rootData,
@@ -240,6 +258,7 @@ export function PageTree({
             createDraftError={draftError}
             createDraftPending={creating}
             createDraftTitle={draftTitle}
+            capabilities={getPageCapabilities(item.getItemData().accessRole)}
             indentPx={TREE_INDENT_PX}
             item={item}
             key={item.getKey()}

@@ -15,6 +15,7 @@ export type WorkspaceTreeItemData = Readonly<{
   childrenIds: readonly string[];
   canHaveChildren: boolean;
   hasChildren: boolean;
+  accessRole: NonNullable<NormalizedPageTree['nodesById'][string]>['accessRole'];
 }>;
 
 export type WorkspaceTreeModel = Readonly<{
@@ -46,6 +47,7 @@ export function buildWorkspaceTree(
       childrenIds: projectItemIds,
       canHaveChildren: true,
       hasChildren: projectItemIds.length > 0,
+      accessRole: 'owner',
     },
   };
 
@@ -62,6 +64,7 @@ export function buildWorkspaceTree(
       childrenIds,
       canHaveChildren: true,
       hasChildren: childrenIds.length > 0,
+      accessRole: 'owner',
     };
   }
 
@@ -77,6 +80,7 @@ export function buildWorkspaceTree(
       childrenIds,
       canHaveChildren: true,
       hasChildren: childrenIds.length > 0,
+      accessRole: page.accessRole,
     };
   }
 
