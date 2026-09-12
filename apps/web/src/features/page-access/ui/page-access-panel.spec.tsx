@@ -94,6 +94,43 @@ describe('PageAccessPanel', () => {
     await waitFor(() => expect(state.setAccessMode).toHaveBeenCalledWith('restricted'));
   });
 
+  it('показывает ошибку revoke внутри confirmation и позволяет повторить', async () => {
+    state.revoke.mockRejectedValueOnce(new Error('network')).mockResolvedValue(undefined);
+    render(<PageAccessPanel page={{ accessMode: 'inherit', id: 'page-1' }} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Настроить доступ' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Отозвать' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Отозвать доступ?' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Отозвать' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Не удалось отозвать доступ',
+    );
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Отозвать' }));
+    await waitFor(() => expect(state.revoke).toHaveBeenCalledTimes(2));
+    state.revoke.mockResolvedValue(undefined);
+  });
+
+  it('показывает ошибку access-mode внутри confirmation и сохраняет подтверждённый режим', async () => {
+    state.setAccessMode
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValue({ accessMode: 'restricted' });
+    render(<PageAccessPanel page={{ accessMode: 'inherit', id: 'page-1' }} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Настроить доступ' }));
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Режим наследования' }));
+    const restricted = await screen.findByRole('option', { name: 'Ограничить наследование' });
+    fireEvent.pointerDown(restricted);
+    fireEvent.click(restricted);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Изменить режим доступа?' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Продолжить' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Не удалось изменить режим доступа',
+    );
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Продолжить' }));
+    await waitFor(() => expect(state.setAccessMode).toHaveBeenCalledTimes(2));
+    state.setAccessMode.mockResolvedValue({ accessMode: 'restricted' });
+  });
+
   it('показывает empty state и retry для ошибки permissions query', async () => {
     state.permissionsQuery.data = [];
     state.permissionsQuery.isError = true;

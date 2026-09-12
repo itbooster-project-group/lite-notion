@@ -143,23 +143,29 @@ export function WorkspaceTreeItem({
           </span>
         )}
 
-        {isPage && capabilities.canMovePage ? (
+        {isPage ? (
           <>
-            <Tooltip label={`Перетащить ${data.title}`}>
-              <button
-                {...item.getDragHandleProps()}
-                aria-label={`Перетащить ${data.title}`}
-                className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground opacity-0 focus:opacity-100 disabled:cursor-default aria-disabled:cursor-default group-hover:opacity-100"
-                type="button"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <GripVertical aria-hidden="true" className="pointer-events-none size-4 shrink-0" />
-              </button>
-            </Tooltip>
+            {capabilities.canMovePage ? (
+              <Tooltip label={`Перетащить ${data.title}`}>
+                <button
+                  {...item.getDragHandleProps()}
+                  aria-label={`Перетащить ${data.title}`}
+                  className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground opacity-0 focus:opacity-100 disabled:cursor-default aria-disabled:cursor-default group-hover:opacity-100"
+                  type="button"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <GripVertical
+                    aria-hidden="true"
+                    className="pointer-events-none size-4 shrink-0"
+                  />
+                </button>
+              </Tooltip>
+            ) : null}
             {(capabilities.canCreateChild ||
               capabilities.canRenamePage ||
               capabilities.canMovePage ||
-              capabilities.canDeletePage) && (
+              capabilities.canDeletePage ||
+              capabilities.canManageAccess) && (
               <Menu
                 modal={false}
                 open={menuOpen}
