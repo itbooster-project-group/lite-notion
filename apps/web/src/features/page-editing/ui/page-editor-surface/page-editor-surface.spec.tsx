@@ -1,9 +1,10 @@
+import { HocuspocusProvider, HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Editor } from '@tiptap/core';
 import { afterEach, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { createPageDocumentEditorExtensions, pageDocumentToJSON } from '@/entities/page-document';
-
+import type { CollaborationProvider } from '@/shared/collaboration';
 import { PageEditorSurface } from './page-editor-surface';
 
 const documents: Y.Doc[] = [];
@@ -116,5 +117,44 @@ describe('page editor surface document lifecycle', () => {
     const currentContent = await screen.findByRole('textbox', { name: 'Содержимое страницы' });
     expect(currentContent).toHaveTextContent('Visible C');
     await waitFor(() => expect(screen.queryByText('Secret B')).not.toBeInTheDocument());
+  });
+
+  it('подключает CollaborationCaret к существующему provider и сохраняет viewer read-only', async () => {
+    const doc = new Y.Doc();
+    const websocket = new HocuspocusProviderWebsocket({
+      url: 'ws://collaboration.test',
+      autoConnect: false,
+    });
+    const provider = new HocuspocusProvider({
+      name: 'page:test',
+      document: doc,
+      websocketProvider: websocket,
+      token: async () => 'token',
+    });
+    const view = render(
+      <PageEditorSurface
+        collaboration={{
+          provider: provider as CollaborationProvider,
+          user: { id: 'viewer-id', name: 'Viewer', color: '#2563eb' },
+        }}
+        doc={doc}
+        editable={false}
+      />,
+    );
+
+    const editor = await screen.findByRole('textbox', { name: 'Содержимое страницы' });
+    const awareness = provider.awareness;
+    if (!awareness) throw new Error('Hocuspocus provider must expose Awareness');
+    expect(editor).toHaveAttribute('contenteditable', 'false');
+    expect(awareness.getLocalState()?.user).toEqual({
+      id: 'viewer-id',
+      name: 'Viewer',
+      color: '#2563eb',
+    });
+
+    view.unmount();
+    provider.destroy();
+    websocket.destroy();
+    doc.destroy();
   });
 });

@@ -15,7 +15,17 @@ import {
 } from '@/features/workspace-management';
 import type { ProjectDto } from '@/shared/api';
 import { type WorkspaceRouteContext, workspaceProjectPath } from '@/shared/routing';
-import { Button, Heading, Input, Menu, MenuItem, MenuPopup, MenuTrigger, Text } from '@/shared/ui';
+import {
+  Button,
+  ContentContainer,
+  Heading,
+  Input,
+  Menu,
+  MenuItem,
+  MenuPopup,
+  MenuTrigger,
+  Text,
+} from '@/shared/ui';
 import { useWorkspaceData } from '../model/workspace-data-context';
 import { WorkspaceMain } from './workspace-main';
 
@@ -72,9 +82,9 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
     (route.type === 'page' && pageContext?.source !== 'owned' && sharedPagesPending);
   if (metadataPending || routePending) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center" aria-busy="true">
+      <ContentContainer className="flex min-h-[60vh] items-center justify-center" aria-busy="true">
         <Text variant="caption">Загружаем рабочую область…</Text>
-      </div>
+      </ContentContainer>
     );
   }
 
@@ -216,10 +226,7 @@ function WorkspaceRoot({
   }
 
   return (
-    <section
-      className="mx-auto w-full max-w-shell space-y-8 px-page-inline py-page-block"
-      aria-labelledby="projects-title"
-    >
+    <ContentContainer as="section" className="space-y-8" aria-labelledby="projects-title">
       <div className="space-y-3">
         <Heading as="h1" id="projects-title" variant="page">
           Проекты
@@ -253,7 +260,7 @@ function WorkspaceRoot({
       ) : (
         <Text variant="caption">Создайте первый проект, чтобы начать работу.</Text>
       )}
-    </section>
+    </ContentContainer>
   );
 }
 
@@ -315,7 +322,7 @@ function toDeleteConfirmationIntent(
 
 function WorkspaceUnavailable() {
   return (
-    <section className="flex min-h-[60vh] items-center justify-center px-page-inline">
+    <ContentContainer as="section" className="flex min-h-[60vh] items-center justify-center">
       <section className="max-w-lg space-y-4 text-center">
         <Heading as="h1" variant="page">
           Ничего не найдено
@@ -323,7 +330,7 @@ function WorkspaceUnavailable() {
         <Text variant="caption">Перейдите к списку проектов и выберите рабочую область.</Text>
         <Button render={<Link href="/" />}>К проектам</Button>
       </section>
-    </section>
+    </ContentContainer>
   );
 }
 
@@ -332,7 +339,7 @@ function WorkspaceError({
   pageLevel = false,
 }: Readonly<{ onRetry: () => void; pageLevel?: boolean }>) {
   return (
-    <section className="flex min-h-[60vh] items-center justify-center px-page-inline">
+    <ContentContainer as="section" className="flex min-h-[60vh] items-center justify-center">
       <section className="max-w-lg space-y-4 text-center">
         <Heading as="h1" variant="page">
           {pageLevel ? 'Ошибка загрузки страницы' : 'Ошибка загрузки рабочей области'}
@@ -346,6 +353,6 @@ function WorkspaceError({
           Повторить
         </Button>
       </section>
-    </section>
+    </ContentContainer>
   );
 }

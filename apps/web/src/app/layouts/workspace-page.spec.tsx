@@ -146,6 +146,7 @@ describe('workspace page', () => {
 
     expect(await screen.findByRole('heading', { name: 'Проекты', level: 1 })).toBeInTheDocument();
     expect(screen.getAllByRole('main')).toHaveLength(1);
+    expect(screen.queryByRole('link', { name: 'На главную' })).not.toBeInTheDocument();
     const projectList = screen.getByRole('list', { name: 'Список проектов' });
     expect(projectList).toBeInTheDocument();
     expect(within(projectList).getByRole('link', { name: 'Project Alpha' })).toBeInTheDocument();
@@ -170,6 +171,11 @@ describe('workspace page', () => {
     expect(screen.getAllByRole('main')).toHaveLength(1);
     expect(await screen.findAllByRole('treeitem', { name: 'Alpha page' })).not.toHaveLength(0);
     expect(await screen.findByText('Other project page')).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('navigation', { name: 'Хлебные крошки' })).getByRole('link', {
+        name: 'На главную',
+      }),
+    ).toHaveAttribute('href', '/');
 
     fireEvent.click(screen.getByRole('treeitem', { name: 'Project Beta' }));
     expect(navigation.push).toHaveBeenCalledWith('/projects/project-b');
@@ -781,6 +787,13 @@ describe('workspace page', () => {
 
     await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('project-b'));
     expect(screen.getByRole('heading', { name: 'Профиль' })).toBeInTheDocument();
+    const breadcrumbs = screen.getByRole('navigation', { name: 'Хлебные крошки' });
+    expect(within(breadcrumbs).getByRole('link', { name: 'На главную' })).toHaveAttribute(
+      'href',
+      '/',
+    );
+    expect(breadcrumbs).toHaveTextContent('Профиль');
+    expect(breadcrumbs).not.toHaveTextContent('Проекты');
     expect(navigation.replace).not.toHaveBeenCalled();
   });
 

@@ -24,7 +24,11 @@ export function PageEditor({ session }: PageEditorProps) {
   return (
     <div className="w-full" data-page-editor="">
       {!session.editable && <EditorStatus status="read-only" />}
-      <PageEditorSurface doc={session.doc} editable={session.editable} />
+      <PageEditorSurface
+        doc={session.doc}
+        editable={session.editable}
+        {...(session.editorCollaboration ? { collaboration: session.editorCollaboration } : {})}
+      />
     </div>
   );
 }

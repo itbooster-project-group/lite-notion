@@ -106,16 +106,28 @@ export function WorkspaceTree({
 
   useEffect(() => {
     setExpansionState((current) => {
+      const availableItemIds = new Set(Object.keys(model.items));
       const newProjectItems = projectItemIds.filter(
         (itemId) => !current.knownProjectItems.includes(itemId),
       );
-      if (newProjectItems.length === 0) return current;
-      return {
-        expandedItems: [...new Set([...current.expandedItems, ...newProjectItems])],
-        knownProjectItems: [...new Set([...current.knownProjectItems, ...newProjectItems])],
-      };
+      const expandedItems = [
+        ...new Set([
+          ...current.expandedItems.filter((itemId) => availableItemIds.has(itemId)),
+          ...newProjectItems,
+        ]),
+      ];
+      const knownProjectItems = [...new Set(projectItemIds)];
+
+      if (
+        sameItemIds(current.expandedItems, expandedItems) &&
+        sameItemIds(current.knownProjectItems, knownProjectItems)
+      ) {
+        return current;
+      }
+
+      return { expandedItems, knownProjectItems };
     });
-  }, [projectItemIds, setExpansionState]);
+  }, [model.items, projectItemIds, setExpansionState]);
 
   useEffect(() => {
     if (!activeItemId) return;
@@ -125,12 +137,15 @@ export function WorkspaceTree({
     const ancestorIds = activePageId
       ? getAncestorChain(normalizedTree, activePageId).map((page) => getPageItemId(page.id))
       : [];
-    const requiredItems = projectId ? [getProjectItemId(projectId), ...ancestorIds] : ancestorIds;
+    const availableItemIds = new Set(Object.keys(model.items));
+    const requiredItems = (
+      projectId ? [getProjectItemId(projectId), ...ancestorIds] : ancestorIds
+    ).filter((itemId) => availableItemIds.has(itemId));
     setExpansionState((current) => ({
       ...current,
       expandedItems: [...new Set([...current.expandedItems, ...requiredItems])],
     }));
-  }, [activeItemId, activePageId, activeProjectId, normalizedTree, setExpansionState]);
+  }, [activeItemId, activePageId, activeProjectId, model.items, normalizedTree, setExpansionState]);
 
   const rootData = model.items[model.rootItemId] ?? {
     canHaveChildren: true,
@@ -384,4 +399,8 @@ function toWorkspaceDropTarget(target: DragTarget<WorkspaceTreeItemData>): PageD
     projectId: data.projectId,
     type: 'item',
   };
+}
+
+function sameItemIds(current: readonly string[], next: readonly string[]): boolean {
+  return current.length === next.length && current.every((itemId, index) => itemId === next[index]);
 }

@@ -7,12 +7,12 @@ import type * as Y from 'yjs';
 import { createPageDocumentEditorExtensions } from '@/entities/page-document';
 import { cn } from '@/shared/lib/cn';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/shared/ui';
-
 import { shouldShowPageEditorBubbleMenu } from '../../model/bubble-menu';
 import {
   createPageDocumentRelativeSelection,
   type PageDocumentRelativeSelection,
 } from '../../model/page-document-relative-selection';
+import type { PageDocumentEditorCollaboration } from '../../model/page-document-session';
 import { BlockReorderControls } from '../block-reorder-controls';
 import { BubbleFormattingMenu } from '../bubble-menu';
 import { useEditorPopupPosition } from '../editor-popup-position/use-editor-popup-position';
@@ -25,6 +25,7 @@ import styles from './page-editor-surface.module.css';
 export type PageEditorSurfaceProps = Readonly<{
   doc: Y.Doc;
   editable: boolean;
+  collaboration?: PageDocumentEditorCollaboration;
 }>;
 
 type EditorFormDialogProps = Readonly<{
@@ -59,7 +60,7 @@ function EditorFormDialog({
   );
 }
 
-export function PageEditorSurface({ doc, editable }: PageEditorSurfaceProps) {
+export function PageEditorSurface({ collaboration, doc, editable }: PageEditorSurfaceProps) {
   const [transientIdentity, setTransientIdentity] = useState<{
     doc: Y.Doc;
     editor: Editor | null;
@@ -98,7 +99,7 @@ export function PageEditorSurface({ doc, editable }: PageEditorSurfaceProps) {
           return slashKeyDownHandlerRef.current?.(event) ?? false;
         },
       },
-      extensions: createPageDocumentEditorExtensions(doc),
+      extensions: createPageDocumentEditorExtensions(doc, collaboration),
       immediatelyRender: false,
       onCreate: ({ editor: createdEditor }) => {
         setTransientIdentity({ doc, editor: createdEditor });
@@ -166,7 +167,7 @@ export function PageEditorSurface({ doc, editable }: PageEditorSurfaceProps) {
   }, [editable, editor]);
 
   return (
-    <div className="w-full" data-page-editor-surface="">
+    <div className={`${styles.editorRoot} w-full`} data-page-editor-surface="">
       {documentUiIsCurrent && editor ? (
         <>
           {editable && <EditorToolbar editor={editor} />}
