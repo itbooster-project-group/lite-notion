@@ -2,6 +2,14 @@ import { expect, test } from '@playwright/test';
 
 const pageId = process.env.PLAYWRIGHT_PAGE_ID;
 
+type TestIdentity = Readonly<{ id: string; name: string }>;
+
+function getTestIdentity(slot: 'A' | 'B'): TestIdentity | undefined {
+  const id = process.env[`PLAYWRIGHT_USER_${slot}_ID`];
+  const name = process.env[`PLAYWRIGHT_USER_${slot}_NAME`];
+  return id && name ? { id, name } : undefined;
+}
+
 test.describe('page editor collaboration', () => {
   test('synchronizes two independent browser contexts and restores persisted content', async ({
     browser,
@@ -64,10 +72,12 @@ test.describe('page editor collaboration', () => {
   test('shows presence and remote caret for two different users', async ({ browser }) => {
     const storageStateA = process.env.PLAYWRIGHT_STORAGE_STATE_A;
     const storageStateB = process.env.PLAYWRIGHT_STORAGE_STATE_B;
-    if (!pageId || !storageStateA || !storageStateB) {
+    const userA = getTestIdentity('A');
+    const userB = getTestIdentity('B');
+    if (!pageId || !storageStateA || !storageStateB || !userA || !userB) {
       test.skip(
         true,
-        'PLAYWRIGHT_PAGE_ID and both user storage states are required for the multi-user presence E2E',
+        'PLAYWRIGHT_PAGE_ID, both storage states and explicit user identities are required',
       );
       return;
     }
@@ -96,24 +106,22 @@ test.describe('page editor collaboration', () => {
       await expect(pageB.locator('.collaboration-carets__caret').first()).toBeVisible();
       const remoteLabel = pageB
         .locator('.collaboration-carets__label')
-        .filter({ hasText: 'User' })
+        .filter({ hasText: userA.name })
         .first();
       await expect(remoteLabel).toBeVisible();
       await expect(pageB.locator('.collaboration-carets__selection').first()).toBeVisible();
       await expect(remoteLabel).not.toHaveText('');
 
-      const colors = await pageB.evaluate(() => {
-        const participant = document.querySelector(
-          '[data-participant-id="6f79fd24-142a-481f-8fc8-45cb0c7087f3"]',
-        );
+      const colors = await pageB.evaluate(({ id, name }) => {
+        const participant = document.querySelector(`[data-participant-id="${id}"]`);
         const label = [...document.querySelectorAll('.collaboration-carets__label')].find(
-          (element) => element.textContent?.trim() === 'User',
+          (element) => element.textContent?.trim() === name,
         );
         return {
           participant: participant ? getComputedStyle(participant).backgroundColor : null,
           label: label ? getComputedStyle(label).backgroundColor : null,
         };
-      });
+      }, userA);
       expect(colors.participant).toBe(colors.label);
     } finally {
       await contextA.close();
@@ -125,10 +133,11 @@ test.describe('page editor collaboration', () => {
     const storageStateA =
       process.env.PLAYWRIGHT_STORAGE_STATE_A ?? process.env.PLAYWRIGHT_STORAGE_STATE;
     const storageStateB = process.env.PLAYWRIGHT_STORAGE_STATE_A2;
-    if (!pageId || !storageStateA || !storageStateB) {
+    const userA = getTestIdentity('A');
+    if (!pageId || !storageStateA || !storageStateB || !userA) {
       test.skip(
         true,
-        'PLAYWRIGHT_PAGE_ID and two same-user storage states are required for this E2E',
+        'PLAYWRIGHT_PAGE_ID, two same-user storage states and user A identity are required',
       );
       return;
     }
@@ -161,8 +170,10 @@ test.describe('page editor collaboration', () => {
   test('keeps a viewer read-only while showing document presence', async ({ browser }) => {
     const storageStateA = process.env.PLAYWRIGHT_STORAGE_STATE_A;
     const storageStateB = process.env.PLAYWRIGHT_STORAGE_STATE_B;
-    if (!pageId || !storageStateA || !storageStateB) {
-      test.skip(true, 'Two authenticated storage states are required for the viewer E2E');
+    const userA = getTestIdentity('A');
+    const userB = getTestIdentity('B');
+    if (!pageId || !storageStateA || !storageStateB || !userA || !userB) {
+      test.skip(true, 'Two storage states and explicit user identities are required');
       return;
     }
 
@@ -178,6 +189,8 @@ test.describe('page editor collaboration', () => {
         'false',
       );
       await expect(pageB.locator('[data-participants] [data-participant-id]')).toHaveCount(2);
+      await expect(pageB.locator(`[data-participant-id="${userA.id}"]`)).toBeVisible();
+      await expect(pageB.locator(`[data-participant-id="${userB.id}"]`)).toBeVisible();
     } finally {
       await contextA.close();
       await contextB.close();
@@ -188,8 +201,10 @@ test.describe('page editor collaboration', () => {
     const storageStateA = process.env.PLAYWRIGHT_STORAGE_STATE_A;
     const storageStateB = process.env.PLAYWRIGHT_STORAGE_STATE_B;
     const secondPageId = process.env.PLAYWRIGHT_SECOND_PAGE_ID;
-    if (!pageId || !storageStateA || !storageStateB || !secondPageId) {
-      test.skip(true, 'Two storage states and PLAYWRIGHT_SECOND_PAGE_ID are required');
+    const userA = getTestIdentity('A');
+    const userB = getTestIdentity('B');
+    if (!pageId || !storageStateA || !storageStateB || !secondPageId || !userA || !userB) {
+      test.skip(true, 'Two storage states, identities and PLAYWRIGHT_SECOND_PAGE_ID are required');
       return;
     }
 
@@ -206,6 +221,45 @@ test.describe('page editor collaboration', () => {
       await expect(pageA.locator('[data-page-editor-content]')).toBeVisible();
       await expect(pageA.locator('[data-participants] [data-participant-id]')).toHaveCount(1);
       await expect(pageB.locator('[data-participants] [data-participant-id]')).toHaveCount(1);
+    } finally {
+      await contextA.close();
+      await contextB.close();
+    }
+  });
+
+  test('reconnects the same session after a temporary network outage', async ({ browser }) => {
+    const storageStateA = process.env.PLAYWRIGHT_STORAGE_STATE_A;
+    const storageStateB = process.env.PLAYWRIGHT_STORAGE_STATE_B;
+    const userA = getTestIdentity('A');
+    const userB = getTestIdentity('B');
+    if (!pageId || !storageStateA || !storageStateB || !userA || !userB) {
+      test.skip(true, 'Two storage states and explicit user identities are required');
+      return;
+    }
+
+    const contextA = await browser.newContext({ storageState: storageStateA });
+    const contextB = await browser.newContext({ storageState: storageStateB });
+    const pageA = await contextA.newPage();
+    const pageB = await contextB.newPage();
+
+    try {
+      await Promise.all([pageA.goto(`/pages/${pageId}`), pageB.goto(`/pages/${pageId}`)]);
+      await expect(pageA.locator('[data-collaboration-status="connected"]')).toBeVisible();
+      await expect(pageB.locator('[data-participants] [data-participant-id]')).toHaveCount(2);
+
+      await contextA.setOffline(true);
+      await expect(pageA.locator('[data-collaboration-status="offline"]')).toBeVisible();
+
+      await contextA.setOffline(false);
+      await expect(pageA.locator('[data-collaboration-status="connected"]')).toBeVisible();
+      await expect(pageA.locator('[data-participants] [data-participant-id]')).toHaveCount(2);
+      await expect(pageB.locator('[data-participants] [data-participant-id]')).toHaveCount(2);
+      await expect(pageA.locator(`[data-participant-id="${userA.id}"]`)).toHaveCount(1);
+      await expect(pageB.locator(`[data-participant-id="${userA.id}"]`)).toHaveCount(1);
+
+      await pageA.locator('[data-page-editor-content]').click();
+      await pageA.keyboard.type('after-reconnect');
+      await expect(pageB.locator('[data-page-editor-content]')).toContainText('after-reconnect');
     } finally {
       await contextA.close();
       await contextB.close();

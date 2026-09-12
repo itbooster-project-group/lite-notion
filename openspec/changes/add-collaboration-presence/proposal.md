@@ -7,7 +7,7 @@
 - Добавить presence current user через `provider.awareness` существующего Hocuspocus provider.
 - Показать remote carets, selection, имя и стабильный цвет пользователя через официальный TipTap CollaborationCaret.
 - Добавить компактный список активных участников рядом со статусом collaboration/editor.
-- Дедуплицировать participants по `presence.user.id`, сохраняя отдельные client awareness states для курсоров.
+- Дедуплицировать participants по `Awareness state.user.id`, сохраняя отдельные client awareness states для курсоров.
 - Расширить узкий transport/session contract только необходимыми provider/Awareness возможностями и включить presence в lifecycle session.
 - Поддержать viewer и editor одинаково для presence; `editable` влияет только на возможность изменения документа.
 - Добавить unit, component/integration и Playwright regression tests для presence, reconnect, cleanup и page switch.

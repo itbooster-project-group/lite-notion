@@ -8,6 +8,7 @@ import type { DOMOutputSpec } from '@tiptap/pm/model';
 import StarterKit from '@tiptap/starter-kit';
 import type { Doc as YDoc } from 'yjs';
 import type { CollaborationProvider } from '@/shared/collaboration';
+import { resolvePresenceColor } from '@/shared/lib/presence-color';
 
 import {
   clampPageDocumentWidthPercent,
@@ -303,9 +304,23 @@ export function createPageDocumentEditorExtensions(
     ? [
         CollaborationCaret.configure({
           provider: collaboration.provider,
+          render: (user) => {
+            const cursor = globalThis.document.createElement('span');
+            const color = resolvePresenceColor(user.id, user.color);
+            cursor.classList.add('collaboration-carets__caret');
+            cursor.setAttribute('style', `border-color: ${color}`);
+
+            const label = globalThis.document.createElement('div');
+            label.classList.add('collaboration-carets__label');
+            label.setAttribute('style', `background-color: ${color}`);
+            label.append(globalThis.document.createTextNode(String(user.name ?? '')));
+            cursor.append(label);
+
+            return cursor;
+          },
           selectionRender: (user) => ({
             class: 'collaboration-carets__selection',
-            style: `background-color: ${String(user.color)}70`,
+            style: `background-color: ${resolvePresenceColor(user.id, user.color)}70`,
           }),
           user: collaboration.user,
         }),

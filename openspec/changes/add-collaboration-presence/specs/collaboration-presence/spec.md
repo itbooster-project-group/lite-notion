@@ -55,7 +55,7 @@ Editor MUST использовать официальный TipTap Collaboration
 
 ### Requirement: Participants UI represents active document users
 
-Editor/workspace UI MUST показывать компактный список активных пользователей документа рядом с существующим collaboration status/header. Для пользователя MUST отображаться avatar или initials, deterministic color и доступное имя через tooltip/popover или эквивалентный доступный UI. Список MUST строиться из Awareness states и дедуплицироваться по `state.user.id`, а не по Yjs `clientID`. При длинном списке UI MUST показывать первые N участников и `+N` для остальных.
+Editor/workspace UI MUST показывать компактный список активных пользователей документа рядом с существующим collaboration status/header. Для пользователя MUST отображаться avatar или initials, deterministic color и доступное имя через tooltip/popover или эквивалентный доступный UI. Список MUST строиться из Awareness states и дедуплицироваться по `Awareness state.user.id`, а не по Yjs `clientID`. Remote `color` MUST приниматься только в формате `^#[0-9a-fA-F]{6}$`; malformed color MUST быть отброшен при parsing или заменён безопасным deterministic fallback перед любым CSS/style rendering. При длинном списке UI MUST показывать первые N участников и `+N` для остальных.
 
 #### Scenario: Active users update without reload
 - **WHEN** Awareness state другого пользователя добавляется или изменяется
@@ -68,7 +68,7 @@ Editor/workspace UI MUST показывать компактный список 
 - **AND** editor может отображать отдельные remote cursor states для разных clientID
 
 #### Scenario: Malformed awareness is ignored
-- **WHEN** Awareness содержит empty или malformed state без валидного `state.user.id`, `name` или `color`
+- **WHEN** Awareness содержит empty или malformed state без валидного `Awareness state.user.id`, `name` или поддерживаемого `color` формата `^#[0-9a-fA-F]{6}$`
 - **THEN** state не ломает UI и не попадает в participants list
 
 #### Scenario: Participants order and overflow are stable
@@ -96,7 +96,7 @@ Editor/workspace UI MUST показывать компактный список 
 
 #### Scenario: Explicit destroy cleans the previous session
 - **WHEN** editor переходит с page A на page B или unmounts
-- **THEN** owner явно уничтожает session A, которая снимает Awareness listeners/subscriptions, очищает snapshots и освобождает provider/Y.Doc resources
+- **THEN** editor composition owner уничтожает TipTap editor и явно уничтожает session A, которая снимает Awareness listeners/subscriptions, очищает snapshots и освобождает provider/Y.Doc resources
 - **AND** participants page B не содержит пользователей только из page A
 
 #### Scenario: Logout cleans local presence

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { resolvePresenceColor } from '@/shared/lib/presence-color';
 import { Tooltip } from '@/shared/ui';
 import type { PageDocumentPresence, PresenceUser } from '../model/page-document-session';
 
@@ -38,7 +39,7 @@ export function Participants({ presence }: Readonly<{ presence?: PageDocumentPre
             className="flex size-7 items-center justify-center rounded-full text-xs font-semibold text-white"
             data-participant-id={user.id}
             role="img"
-            style={{ backgroundColor: user.color }}
+            style={{ backgroundColor: resolvePresenceColor(user.id, user.color) }}
           >
             {getInitials(user.name)}
           </li>

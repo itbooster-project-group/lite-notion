@@ -2,6 +2,7 @@ import { Editor, type JSONContent } from '@tiptap/core';
 import { afterEach, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import type { CollaborationProvider } from '@/shared/collaboration';
+import { getPresenceColor } from '@/shared/lib/presence-color';
 import { renderPageDocumentToHTML } from '../lib/static-rendering';
 import {
   createPageDocumentEditorExtensions,
@@ -49,10 +50,22 @@ describe('page document schema version 1', () => {
       provider,
       user: { id: 'user-a', name: 'Ada', color: '#2563eb' },
     });
-    expect(caret?.options.selectionRender({ color: '#123456' })).toEqual({
+    expect(caret?.options.selectionRender({ id: 'remote', color: '#123456' })).toEqual({
       class: 'collaboration-carets__selection',
       style: 'background-color: #12345670',
     });
+    expect(caret?.options.selectionRender({ id: 'remote', color: 'red' })).toEqual({
+      class: 'collaboration-carets__selection',
+      style: `background-color: ${getPresenceColor('remote')}70`,
+    });
+    const renderedCaret = caret?.options.render({ id: 'remote', name: 'Remote', color: 'red' });
+    expect(renderedCaret?.getAttribute('style')).toBe(
+      `border-color: ${getPresenceColor('remote')}`,
+    );
+    expect(renderedCaret?.firstElementChild?.getAttribute('style')).toBe(
+      `background-color: ${getPresenceColor('remote')}`,
+    );
+    expect(renderedCaret?.outerHTML).not.toContain('red');
     document.destroy();
   });
 

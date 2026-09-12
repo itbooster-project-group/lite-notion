@@ -1,6 +1,6 @@
 ## Context
 
-См. `proposal.md` и `specs/collaboration-presence/spec.md`. На `main` `createCollaborativePageDocumentSession` создаёт `Y.Doc`, передаёт его в `createCollaborationTransport`, владеет reconnect/status и уничтожает transport/doc. `Collaboration` сейчас создаётся в `entities/page-document/model/editor-schema.ts`, а `PageEditorSurface` получает только `doc` и `editable`. `createCollaborationTransport` возвращает provider с искусственно узким контрактом `Pick<HocuspocusProvider, 'connect'>`, поэтому текущий boundary не позволяет безопасно подключить caret и Awareness.
+См. `proposal.md` и `specs/collaboration-presence/spec.md`. На `main` `createCollaborativePageDocumentSession` создаёт `Y.Doc`, передаёт его в `createCollaborationTransport`, владеет reconnect/status и уничтожает transport/doc. Editor composition владеет TipTap editor и уничтожает его отдельно. `Collaboration` сейчас создаётся в `entities/page-document/model/editor-schema.ts`, а `PageEditorSurface` получает только `doc` и `editable`. `createCollaborationTransport` возвращает provider с искусственно узким контрактом `Pick<HocuspocusProvider, 'connect'>`, поэтому текущий boundary не позволяет безопасно подключить caret и Awareness.
 
 Authenticated user уже доступен из `useSession().user` с полями `id` и `name`; JWT для presence не декодируется. Existing `apps/web/e2e/page-editor-collaboration.spec.ts` создаёт два browser contexts с одной page route и будет расширен тем же setup.
 
@@ -83,13 +83,13 @@ PageEditorSurface
 
 ### Awareness states → participants
 
-Session/model читает `awareness.getStates()`, безопасно проверяет форму `state.user`, отбрасывает empty/malformed entries и не доверяет Awareness для authorization. Remote caret states остаются привязаны к numeric `clientID`, поэтому две вкладки одного user могут иметь два caret. Для participants model группирует валидные states по `state.user.id`, выбирает state с минимальным numeric `clientID` как deterministic representative, сортирует итог по стабильному ключу (`user.id`) и возвращает immutable snapshot.
+Session/model читает `awareness.getStates()`, безопасно проверяет форму `Awareness state.user`, включая строгий цвет `^#[0-9a-fA-F]{6}$`, отбрасывает empty/malformed entries и не доверяет Awareness для authorization. Remote caret states остаются привязаны к numeric `clientID`, поэтому две вкладки одного user могут иметь два caret. Для participants model группирует валидные states по `Awareness state.user.id`, выбирает state с минимальным numeric `clientID` как deterministic representative, сортирует итог по стабильному ключу (`user.id`) и возвращает immutable snapshot.
 
 Participants widget подписывается на session presence snapshot, показывает первые пять участников и `+N` сверх лимита. Имя доступно через существующий shadcn/ui tooltip/popover convention; UI не содержит parsing/deduplication logic.
 
 ### Цветовая utility
 
-В `features/page-editing` или ближайшем domain model создаётся pure utility `getPresenceColor(userId)`: стабильный non-cryptographic hash строки выбирает hex color из фиксированной контрастной palette. Utility не использует `Math.random`, не зависит от render order и покрывается таблицей повторных/разных id. Тот же resolved color передаётся в Awareness, CollaborationCaret и participant avatar.
+В shared utility создаются pure helpers `getPresenceColor(userId)`, `isSupportedPresenceColor(value)` и `resolvePresenceColor(userId, color)`: стабильный non-cryptographic hash строки выбирает hex color из фиксированной контрастной palette, а remote color принимается только в формате `^#[0-9a-fA-F]{6}$`. Utility не использует `Math.random`, не зависит от render order и покрывается таблицей валидных/invalid цветов. Некорректный remote color заменяется deterministic fallback до попадания в caret, selection или participant inline style.
 
 ### UI и стили
 
@@ -105,7 +105,7 @@ Participants composition размещается в существующей об
 
 ### Cleanup и transitions
 
-Session lifecycle guard защищает Awareness callbacks от публикации после destroy. Temporary disconnect не вызывает cleanup: provider/session остаются живы и используют существующий reconnect lifecycle; стандартные Awareness semantics удаляют remote state по timeout/disconnect и восстанавливают local state после reconnect. Page change создаёт новую session, старый owner сначала отписывает editor/UI, затем вызывает `destroy`. Полный destroy выполняет unsubscribe Awareness listeners, очистку subscriptions/snapshots, destroy editor/provider и destroy `Y.Doc`; cleanup должен быть идемпотентным и безопасным при React Strict Mode replay. Logout/session loss инициирует тот же owner cleanup через существующую composition lifecycle. Provider destroy не вызывается participants UI.
+Session lifecycle guard защищает Awareness callbacks от публикации после destroy. Temporary disconnect не вызывает cleanup: provider/session остаются живы и используют существующий reconnect lifecycle; стандартные Awareness semantics удаляют remote state по timeout/disconnect и восстанавливают local state после reconnect. Page change создаёт новую session, старый editor composition owner сначала уничтожает TipTap editor и отписывает editor/UI, затем вызывает `session.destroy`. Session cleanup выполняет unsubscribe Awareness listeners, очистку subscriptions/snapshots, `transport.destroy()` и destroy `Y.Doc`; editor cleanup остаётся ответственностью editor composition owner. Cleanup должен быть идемпотентным и безопасным при React Strict Mode replay. Logout/session loss инициирует тот же owner cleanup через существующую composition lifecycle. Provider destroy не вызывается participants UI.
 
 ### FSD placement
 

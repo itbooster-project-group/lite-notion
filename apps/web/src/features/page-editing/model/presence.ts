@@ -1,29 +1,16 @@
+import {
+  getPresenceColor,
+  isSupportedPresenceColor,
+  PRESENCE_COLORS,
+  resolvePresenceColor,
+} from '@/shared/lib/presence-color';
 import type { PresenceUser } from './page-document-session';
 
-export const PRESENCE_COLORS = [
-  '#2563eb',
-  '#7c3aed',
-  '#db2777',
-  '#dc2626',
-  '#ea580c',
-  '#ca8a04',
-  '#16a34a',
-  '#0891b2',
-] as const;
+export { getPresenceColor, isSupportedPresenceColor, PRESENCE_COLORS, resolvePresenceColor };
 
 type AwarenessLike = {
   getStates(): ReadonlyMap<number, unknown>;
 };
-
-export function getPresenceColor(userId: string): string {
-  let hash = 2166136261;
-  for (let index = 0; index < userId.length; index += 1) {
-    hash ^= userId.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-
-  return PRESENCE_COLORS[(hash >>> 0) % PRESENCE_COLORS.length] ?? PRESENCE_COLORS[0];
-}
 
 export function getPresenceUsers(awareness: AwarenessLike): readonly PresenceUser[] {
   const representatives = new Map<string, { clientId: number; user: PresenceUser }>();
@@ -51,8 +38,7 @@ function parsePresenceUser(state: unknown): PresenceUser | undefined {
     id.length === 0 ||
     typeof name !== 'string' ||
     name.length === 0 ||
-    typeof color !== 'string' ||
-    color.length === 0
+    !isSupportedPresenceColor(color)
   ) {
     return undefined;
   }
