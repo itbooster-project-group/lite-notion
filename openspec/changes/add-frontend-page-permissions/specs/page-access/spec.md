@@ -39,7 +39,10 @@ Frontend MUST предоставлять только owner страницы с�
 - **AND** повторная выдача роли не создаёт дубликат в UI
 
 #### Scenario: Owner revokes a grant
-- **WHEN** owner подтверждает revoke конкретного direct grant
+- **WHEN** owner нажимает revoke конкретного direct grant
+- **THEN** frontend сначала показывает confirmation dialog
+- **AND** mutation не вызывается до подтверждения
+- **WHEN** owner подтверждает revoke
 - **THEN** frontend вызывает generated revoke mutation и убирает grant после успеха
 
 #### Scenario: Non-owner cannot manage grants
@@ -66,7 +69,7 @@ Frontend MUST позволять owner переключать `accessMode` ме�
 
 ### Requirement: Permission mutations expose safe async states
 
-Page-access UI MUST предотвращать duplicate submit во время pending, показывать доступный pending state, сохранять форму/список при ошибке и не выводить сырые backend details. После grant/update/revoke MUST инвалидироваться permissions query active page. После access-mode mutation MUST инвалидироваться active page и только релевантные page/tree queries. Глобальная invalidation всех workspace queries MUST NOT выполняться без требования текущего query graph.
+Page-access UI MUST предотвращать duplicate submit во время pending, показывать доступный pending state, сохранять форму/список при ошибке и не выводить сырые backend details. После grant/update/revoke MUST инвалидироваться permissions query active page. После access-mode mutation frontend MUST обновить active page cache через `setQueryData` response и MUST инвалидировать только релевантный page/tree query. Глобальная invalidation всех workspace queries MUST NOT выполняться без требования текущего query graph.
 
 #### Scenario: Grant request is pending
 - **WHEN** grant request ещё не завершён

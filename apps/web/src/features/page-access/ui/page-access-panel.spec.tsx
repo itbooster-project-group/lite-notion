@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PageAccessPanel } from './page-access-panel';
 
@@ -59,6 +59,22 @@ describe('PageAccessPanel', () => {
     fireEvent.click(viewer);
 
     await waitFor(() => expect(state.grant).toHaveBeenCalledWith('editor@example.com', 'viewer'));
+  });
+
+  it('запрашивает confirmation перед revoke и выполняет mutation только после подтверждения', async () => {
+    render(<PageAccessPanel page={{ accessMode: 'inherit', id: 'page-1' }} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Настроить доступ' }));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Отозвать' }));
+    expect(await screen.findByRole('dialog', { name: 'Отозвать доступ?' })).toBeInTheDocument();
+    expect(state.revoke).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      within(screen.getByRole('dialog', { name: 'Отозвать доступ?' })).getByRole('button', {
+        name: 'Отозвать',
+      }),
+    );
+    await waitFor(() => expect(state.revoke).toHaveBeenCalledWith('user-2'));
   });
 
   it('показывает предупреждение перед access-mode mutation', async () => {

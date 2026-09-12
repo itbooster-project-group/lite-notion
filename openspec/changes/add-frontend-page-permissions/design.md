@@ -54,7 +54,7 @@
    `features/page-access` и permission-gated controls MUST использовать существующие компоненты и wrappers из `apps/web/src/shared/ui` (`Button`, `Input`, `Select`, `Dialog`, `Text`, `Heading` и доступные form primitives). Прямые импорты generated shadcn primitives в feature/page/workspace code не добавляются; новый shared primitive создаётся только если существующего контракта действительно недостаточно.
 
 8. **Invalidation follows the current query graph.**
-   Grant/update/revoke инвалидируют только permissions query active page. Access-mode mutation инвалидирует active page query/cache и только релевантные page/tree queries, которые показывают `accessMode`/effective accessible tree; shared query инвалидируется только если текущая shared tree действительно содержит изменённую страницу. Никакой глобальной invalidation всех workspace queries после каждой mutation не планируется.
+   Grant/update/revoke инвалидируют только permissions query active page. Access-mode mutation обновляет active page cache через `setQueryData` и инвалидирует только релевантные page/tree queries, которые показывают `accessMode`/effective accessible tree; shared query инвалидируется только если текущая shared tree действительно содержит изменённую страницу. Никакой глобальной invalidation всех workspace queries после каждой mutation не планируется.
 
 9. **Access-mode changes require an explicit warning.**
    Перед отправкой `inherit`/`restricted` UI показывает понятное предупреждение, что смена режима может изменить доступ к текущей странице и её поддереву. Предупреждение не перечисляет конкретные результирующие роли: frontend не вычисляет permission inheritance.

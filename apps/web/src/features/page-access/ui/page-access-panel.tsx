@@ -19,15 +19,18 @@ import { usePageAccess } from '../model/use-page-access';
 
 type PageAccessPanelProps = Readonly<{
   page: Pick<PageDto, 'accessMode' | 'id'>;
+  onOpenChange?: (open: boolean) => void;
+  open?: boolean;
 }>;
 
-export function PageAccessPanel({ page }: PageAccessPanelProps) {
+export function PageAccessPanel({ onOpenChange, open, page }: PageAccessPanelProps) {
   const access = usePageAccess(page.id);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'viewer' | 'editor'>('viewer');
   const [error, setError] = useState<string>();
   const [mode, setMode] = useState(page.accessMode);
   const [modeToConfirm, setModeToConfirm] = useState<typeof mode>();
+  const [revokeUserId, setRevokeUserId] = useState<string>();
 
   const isMutationPending =
     access.grantMutation.isPending ||
@@ -66,21 +69,34 @@ export function PageAccessPanel({ page }: PageAccessPanelProps) {
     }
   }
 
+  async function confirmRevoke() {
+    if (!revokeUserId) return;
+    setError(undefined);
+    try {
+      await access.revoke(revokeUserId);
+      setRevokeUserId(undefined);
+    } catch {
+      setError('Не удалось отозвать доступ. Попробуйте ещё раз.');
+    }
+  }
+
   return (
-    <Dialog>
-      <DialogTrigger
-        render={
-          <Button
-            aria-label="Настроить доступ"
-            className="shrink-0"
-            size="icon-sm"
-            type="button"
-            variant="ghost"
-          />
-        }
-      >
-        <Settings aria-hidden="true" />
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      {open === undefined ? (
+        <DialogTrigger
+          render={
+            <Button
+              aria-label="Настроить доступ"
+              className="shrink-0"
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            />
+          }
+        >
+          <Settings aria-hidden="true" />
+        </DialogTrigger>
+      ) : null}
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
         <section aria-labelledby="page-access-title" className="space-y-4">
           <div className="space-y-1">
@@ -186,9 +202,7 @@ export function PageAccessPanel({ page }: PageAccessPanelProps) {
                     disabled={isMutationPending}
                     onClick={() => {
                       setError(undefined);
-                      void access
-                        .revoke(grant.userId)
-                        .catch(() => setError('Не удалось отозвать доступ.'));
+                      setRevokeUserId(grant.userId);
                     }}
                     type="button"
                     variant="outline"
@@ -207,6 +221,39 @@ export function PageAccessPanel({ page }: PageAccessPanelProps) {
           ) : null}
         </section>
       </DialogContent>
+
+      <Dialog
+        open={Boolean(revokeUserId)}
+        onOpenChange={(nextOpen) => !nextOpen && setRevokeUserId(undefined)}
+      >
+        <DialogContent showCloseButton={false}>
+          <DialogTitle>Отозвать доступ?</DialogTitle>
+          <DialogDescription>
+            Пользователь больше не сможет пользоваться прямым разрешением этой страницы.
+          </DialogDescription>
+          <div className="flex justify-end gap-2">
+            <DialogClose
+              render={
+                <Button
+                  disabled={access.revokeMutation.isPending}
+                  type="button"
+                  variant="outline"
+                />
+              }
+            >
+              Отмена
+            </DialogClose>
+            <Button
+              disabled={access.revokeMutation.isPending}
+              onClick={() => void confirmRevoke()}
+              type="button"
+              variant="destructive"
+            >
+              {access.revokeMutation.isPending ? 'Отзываем…' : 'Отозвать'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={Boolean(modeToConfirm)}

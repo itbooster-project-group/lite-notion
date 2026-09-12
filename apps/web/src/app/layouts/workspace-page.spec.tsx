@@ -180,6 +180,18 @@ describe('workspace page', () => {
     expect(navigation.push).toHaveBeenCalledWith('/pages/beta');
   });
 
+  it('открывает access panel из sidebar без navigation', async () => {
+    renderWorkspace({ projectId: 'project-a', type: 'project' });
+
+    const actions = (await screen.findAllByRole('button', { name: 'Действия для Alpha page' }))[0];
+    if (!actions) throw new Error('Page actions are unavailable');
+    fireEvent.click(actions);
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Настроить доступ' }));
+
+    expect(await screen.findByRole('heading', { name: 'Доступ к странице' })).toBeInTheDocument();
+    expect(navigation.push).not.toHaveBeenCalled();
+  });
+
   it('разрешает прямую ссылку страницы и показывает единые breadcrumbs и heading', async () => {
     renderWorkspace({ pageId: 'child', type: 'page' });
 

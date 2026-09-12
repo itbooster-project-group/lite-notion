@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { getBreadcrumbs, normalizePageTree, resolvePageRouteContext } from '@/entities/page';
+import { PageAccessPanel } from '@/features/page-access';
 import {
   DeleteConfirmationDialog,
   type DeleteConfirmationIntent,
@@ -59,6 +60,7 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
   const [deleteIntent, setDeleteIntent] = useState<WorkspaceDeleteIntent>();
   const [deleteError, setDeleteError] = useState<string>();
   const [deletePending, setDeletePending] = useState(false);
+  const [accessPageId, setAccessPageId] = useState<string>();
   const deletePendingRef = useRef(false);
   const tree = useMemo(() => normalizePageTree(treeQuery.data ?? []), [treeQuery.data]);
   const sharedTree = useMemo(
@@ -75,6 +77,7 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
     [pageId, sharedTree, tree],
   );
   const page = pageContext?.page;
+  const accessPage = accessPageId ? tree.nodesById[accessPageId] : undefined;
   const effectiveProjectId =
     routeContext?.type === 'project'
       ? routeContext.projectId
@@ -209,7 +212,7 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
         onRequestDeletePage={requestPageDelete}
         onRequestDeleteProject={requestProjectDelete}
         onRenamePage={pageManagement.renamePage}
-        onOpenPageAccess={(selectedPageId) => router.push(workspacePagePath(selectedPageId))}
+        onOpenPageAccess={setAccessPageId}
       />
       <SharedPagesTree
         isError={sharedPagesQuery.isError}
@@ -253,6 +256,15 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
                 onCancel={closeDeleteDialog}
                 onConfirm={() => void submitDelete()}
               />
+              {accessPage ? (
+                <PageAccessPanel
+                  open
+                  page={accessPage}
+                  onOpenChange={(open) => {
+                    if (!open) setAccessPageId(undefined);
+                  }}
+                />
+              ) : null}
             </>
           )}
         </AppShell>
