@@ -3,7 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { normalizePageTree } from '@/entities/page';
 import type { PageTreeNodeDto, ProjectDto } from '@/shared/api';
-import { WorkspaceTreeExpansionProvider } from '../model/workspace-tree-expansion';
+import {
+  useWorkspaceTreeExpansion,
+  WorkspaceTreeExpansionProvider,
+} from '../model/workspace-tree-expansion';
 import { WorkspaceTree } from './workspace-tree';
 
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
@@ -58,6 +61,7 @@ function tree(
   pages = source,
   activePageId: string | undefined = undefined,
   activeProjectId: string | undefined = undefined,
+  projectList: readonly ProjectDto[] = projects,
 ) {
   const callbacks = {
     onCreatePage: vi.fn().mockResolvedValue(undefined),
@@ -75,11 +79,24 @@ function tree(
           activePageId={activePageId}
           activeProjectId={activeProjectId}
           normalizedTree={normalizePageTree(pages)}
-          projects={projects}
+          projects={projectList}
           {...callbacks}
         />
+        <ExpansionStateProbe />
       </WorkspaceTreeExpansionProvider>
     ),
+  };
+}
+
+function ExpansionStateProbe() {
+  const { state } = useWorkspaceTreeExpansion();
+  return <output data-testid="workspace-tree-expansion">{JSON.stringify(state)}</output>;
+}
+
+function expansionState() {
+  return JSON.parse(screen.getByTestId('workspace-tree-expansion').textContent ?? '{}') as {
+    expandedItems: string[];
+    knownProjectItems: string[];
   };
 }
 
@@ -133,6 +150,65 @@ describe('workspace tree', () => {
     expect(screen.getByRole('button', { name: 'Раскрыть Project Alpha' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Раскрыть Project Alpha' }));
     expect(await screen.findByRole('treeitem', { name: 'Alpha updated' })).toBeInTheDocument();
+  });
+
+  it('удаляет stale expansion state проекта и его страниц, сохраняя остальные IDs', async () => {
+    const projectBPages = [
+      page('other', 'project-b', null, 'Other page', [
+        page('other-child', 'project-b', 'other', 'Other child'),
+      ]),
+    ];
+    const projectBPage = projectBPages[0];
+    const projectB = projects[1];
+    if (!projectBPage || !projectB) throw new Error('Test fixtures are incomplete');
+    const initialPages = source.map((item) => (item.id === 'other' ? projectBPage : item));
+    const view = render(tree(initialPages).ui);
+
+    await screen.findByRole('treeitem', { name: 'Other page' });
+    fireEvent.click(screen.getByRole('button', { name: 'Раскрыть Other page' }));
+    await waitFor(() =>
+      expect(expansionState().expandedItems).toEqual(
+        expect.arrayContaining(['project:project-a', 'project:project-b', 'page:other']),
+      ),
+    );
+
+    const remainingPages = projectBPages;
+    view.rerender(tree(remainingPages, undefined, undefined, [projectB]).ui);
+
+    await waitFor(() => {
+      expect(expansionState()).toEqual({
+        expandedItems: ['project:project-b', 'page:other'],
+        knownProjectItems: ['project:project-b'],
+      });
+    });
+    expect(screen.queryByRole('treeitem', { name: 'Project Alpha' })).toBeNull();
+    expect(screen.queryByRole('treeitem', { name: 'Alpha page' })).toBeNull();
+    expect(screen.getByRole('treeitem', { name: 'Other page' })).toBeInTheDocument();
+  });
+
+  it('автоматически раскрывает новый проект без дубликатов IDs', async () => {
+    const projectA = projects[0];
+    const projectB = projects[1];
+    if (!projectA || !projectB) throw new Error('Test fixtures are incomplete');
+    const initialProjects = [projectA];
+    const initialPages = source.filter((item) => item.projectId === 'project-a');
+    const view = render(tree(initialPages, undefined, undefined, initialProjects).ui);
+
+    await waitFor(() =>
+      expect(expansionState()).toEqual({
+        expandedItems: ['project:project-a'],
+        knownProjectItems: ['project:project-a'],
+      }),
+    );
+
+    view.rerender(tree(source, undefined, undefined, [...initialProjects, projectB]).ui);
+
+    await waitFor(() =>
+      expect(expansionState()).toEqual({
+        expandedItems: ['project:project-a', 'project:project-b'],
+        knownProjectItems: ['project:project-a', 'project:project-b'],
+      }),
+    );
   });
 
   it('переходит по project/page и сохраняет active page после cache update', async () => {
