@@ -1,4 +1,21 @@
 import type * as Y from 'yjs';
+import type { CollaborationProvider } from '@/shared/collaboration';
+
+export type PresenceUser = Readonly<{
+  id: string;
+  name: string;
+  color: string;
+}>;
+
+export type PageDocumentPresence = Readonly<{
+  users: readonly PresenceUser[];
+  subscribe(listener: () => void): () => void;
+}>;
+
+export type PageDocumentEditorCollaboration = Readonly<{
+  provider: CollaborationProvider;
+  user: PresenceUser;
+}>;
 
 export type PageDocumentSessionStatus = 'loading' | 'ready' | 'error';
 export type PageDocumentConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'offline';
@@ -16,6 +33,8 @@ export type PageDocumentError = Readonly<{
 export type PageDocumentSession = Readonly<{
   doc: Y.Doc | null;
   editable: boolean;
+  presence?: PageDocumentPresence;
+  editorCollaboration?: PageDocumentEditorCollaboration;
   status: PageDocumentSessionStatus;
   error?: PageDocumentError;
   connectionStatus?: PageDocumentConnectionStatus;

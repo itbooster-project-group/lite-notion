@@ -13,8 +13,10 @@ export type CollaborationTransportCallbacks = Readonly<{
   onSynced?: () => void;
 }>;
 
+export type CollaborationProvider = Pick<HocuspocusProvider, 'awareness' | 'connect'>;
+
 export type CollaborationTransport = Readonly<{
-  provider: Pick<HocuspocusProvider, 'connect'>;
+  provider: CollaborationProvider;
   destroy(): void;
 }>;
 

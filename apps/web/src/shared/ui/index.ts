@@ -1,5 +1,6 @@
 export { Button, type ButtonProps } from './button';
 export { Checkbox, type CheckboxProps } from './checkbox';
+export { ContentContainer } from './content-container';
 export { Heading, type HeadingProps } from './heading';
 export { Input, type InputProps } from './input';
 export { Label, type LabelProps } from './label';

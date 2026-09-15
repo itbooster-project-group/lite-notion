@@ -1,3 +1,35 @@
+/* biome-ignore lint/correctness/noUnknownPseudoClass: CSS Modules uses :global for third-party caret classes. */
+.editorRoot :global(.collaboration-carets__caret) {
+  position: relative;
+  margin-inline: -1px;
+  border-inline: 1px solid currentColor;
+  pointer-events: none;
+  word-break: normal;
+}
+
+/* biome-ignore lint/correctness/noUnknownPseudoClass: CSS Modules uses :global for third-party caret classes. */
+.editorRoot :global(.collaboration-carets__label) {
+  position: absolute;
+  top: -1.35em;
+  left: -1px;
+  padding: 2px 6px;
+  border-radius: 3px 3px 3px 0;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  user-select: none;
+  white-space: nowrap;
+  background: currentColor;
+}
+
+/* biome-ignore lint/correctness/noUnknownPseudoClass: CSS Modules uses :global for third-party caret classes. */
+.editorRoot :global(.collaboration-carets__selection) {
+  background-color: currentColor;
+  opacity: 0.2;
+  pointer-events: none;
+}
+
 .editorContent p {
   margin-block: 0.5rem;
 }

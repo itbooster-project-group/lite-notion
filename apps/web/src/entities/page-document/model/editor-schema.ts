@@ -1,11 +1,14 @@
 import { type Extensions, getSchema, Node } from '@tiptap/core';
 import Collaboration from '@tiptap/extension-collaboration';
+import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import Link from '@tiptap/extension-link';
 import TaskItem from '@tiptap/extension-task-item';
 import TaskList from '@tiptap/extension-task-list';
 import type { DOMOutputSpec } from '@tiptap/pm/model';
 import StarterKit from '@tiptap/starter-kit';
 import type { Doc as YDoc } from 'yjs';
+import type { CollaborationProvider } from '@/shared/collaboration';
+import { resolvePresenceColor } from '@/shared/lib/presence-color';
 
 import {
   clampPageDocumentWidthPercent,
@@ -290,7 +293,40 @@ export function createPageDocumentSchemaExtensions(): Extensions {
   ];
 }
 
-export function createPageDocumentEditorExtensions(document: YDoc): Extensions {
+export function createPageDocumentEditorExtensions(
+  document: YDoc,
+  collaboration?: Readonly<{
+    provider: CollaborationProvider;
+    user: Readonly<{ id: string; name: string; color: string }>;
+  }>,
+): Extensions {
+  const collaborationCaret = collaboration
+    ? [
+        CollaborationCaret.configure({
+          provider: collaboration.provider,
+          render: (user) => {
+            const cursor = globalThis.document.createElement('span');
+            const color = resolvePresenceColor(user.id, user.color);
+            cursor.classList.add('collaboration-carets__caret');
+            cursor.setAttribute('style', `border-color: ${color}`);
+
+            const label = globalThis.document.createElement('div');
+            label.classList.add('collaboration-carets__label');
+            label.setAttribute('style', `background-color: ${color}`);
+            label.append(globalThis.document.createTextNode(String(user.name ?? '')));
+            cursor.append(label);
+
+            return cursor;
+          },
+          selectionRender: (user) => ({
+            class: 'collaboration-carets__selection',
+            style: `background-color: ${resolvePresenceColor(user.id, user.color)}70`,
+          }),
+          user: collaboration.user,
+        }),
+      ]
+    : [];
+
   return [
     ...createPageDocumentSchemaExtensions(),
     PageDocumentNodeIdDeconflict,
@@ -298,6 +334,7 @@ export function createPageDocumentEditorExtensions(document: YDoc): Extensions {
       document,
       field: PAGE_CONTENT_YJS_FIELD,
     }),
+    ...collaborationCaret,
   ];
 }
 

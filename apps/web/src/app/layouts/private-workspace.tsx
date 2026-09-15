@@ -1,5 +1,6 @@
 'use client';
 
+import { House } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
@@ -39,6 +40,12 @@ import {
 type WorkspaceDeleteIntent =
   | (PageDeleteRequest & Readonly<{ kind: 'page' }>)
   | (ProjectDeleteRequest & Readonly<{ kind: 'project' }>);
+
+type Breadcrumb = Readonly<{
+  title: string;
+  href: string;
+  isHome?: boolean;
+}>;
 
 function toDeleteConfirmationIntent(
   intent: WorkspaceDeleteIntent | undefined,
@@ -92,7 +99,7 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
     deleteCleanupCoordinator.setRouteContext(routeContext);
   }, [deleteCleanupCoordinator, routeContext]);
 
-  const crumbs = [{ title: 'Проекты', href: '/' }];
+  const crumbs: Breadcrumb[] = [{ href: '/', isHome: true, title: 'На главную' }];
   if (pathname === '/profile') crumbs.push({ title: 'Профиль', href: '/profile' });
   else if (
     !treeQuery.isPending &&
@@ -129,15 +136,23 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
           <li className="flex min-w-0 items-center gap-2" key={`${crumb.href}-${crumb.title}`}>
             {index > 0 ? <span aria-hidden="true">/</span> : null}
             {index === crumbs.length - 1 ? (
-              <span className="break-all" aria-current="page">
-                {crumb.title}
+              <span aria-current="page" className="break-all">
+                {crumb.isHome ? (
+                  <>
+                    <House aria-hidden="true" size={16} />
+                    <span className="sr-only">{crumb.title}</span>
+                  </>
+                ) : (
+                  crumb.title
+                )}
               </span>
             ) : (
               <Link
+                aria-label={crumb.isHome ? crumb.title : undefined}
                 className="break-all rounded-sm hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-ring"
                 href={crumb.href}
               >
-                {crumb.title}
+                {crumb.isHome ? <House aria-hidden="true" size={16} /> : crumb.title}
               </Link>
             )}
           </li>
