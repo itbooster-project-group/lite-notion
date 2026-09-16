@@ -1,7 +1,6 @@
 import { type INestApplication, ValidationPipe } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
-import { PassportModule } from '@nestjs/passport';
 import { Test } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
@@ -19,8 +18,7 @@ import { AuthService } from './auth.service';
 import { REFRESH_COOKIE_NAME } from './constants';
 import { PasswordService } from './crypto/password.service';
 import { TokenService } from './crypto/token.service';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { JwtStrategy } from './jwt.strategy';
+import { GatewayIdentityGuard } from './guards/gateway-identity.guard';
 import { SessionService } from './session/session.service';
 
 const jwtSecret = 'test-jwt-secret-value-at-least-32-chars';
@@ -32,6 +30,14 @@ function readRefreshCookie(headers: Record<string, unknown>): string | undefined
   return Array.isArray(setCookie)
     ? setCookie.find((cookie: string) => cookie.startsWith(`${REFRESH_COOKIE_NAME}=`))
     : undefined;
+}
+
+/** Личность, как её вывел бы шлюз, проверив выданный токен. */
+function identityOf(accessToken: string): Record<string, string> {
+  const [, payload = ''] = accessToken.split('.');
+  const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+
+  return { 'x-session-id': claims.sid, 'x-user-id': claims.sub };
 }
 
 describe('AuthController', () => {
@@ -56,16 +62,15 @@ describe('AuthController', () => {
 
     const moduleRef = await Test.createTestingModule({
       controllers: [AuthController],
-      imports: [JwtModule.register({ secret: jwtSecret }), PassportModule],
+      imports: [JwtModule.register({ secret: jwtSecret })],
       providers: [
         AuthService,
-        JwtStrategy,
         PasswordService,
         SessionService,
         TokenService,
         UsersService,
         { provide: APP_FILTER, useClass: HttpExceptionFilter },
-        { provide: APP_GUARD, useClass: JwtAuthGuard },
+        { provide: APP_GUARD, useClass: GatewayIdentityGuard },
         { provide: PrismaService, useValue: { user } },
         { provide: AuthRepository, useValue: repository },
         {
@@ -242,7 +247,7 @@ describe('AuthController', () => {
 
       const response = await request(app.getHttpServer())
         .get('/auth/me')
-        .set('Authorization', `Bearer ${registered.body.accessToken}`)
+        .set(identityOf(registered.body.accessToken))
         .expect(200);
 
       expect(response.body).toMatchObject({ email: 'ada@example.com', name: 'Ada' });
@@ -272,7 +277,7 @@ describe('AuthController', () => {
 
       const response = await request(app.getHttpServer())
         .post('/auth/logout')
-        .set('Authorization', `Bearer ${registered.body.accessToken}`)
+        .set(identityOf(registered.body.accessToken))
         .expect(204);
 
       expect(readRefreshCookie(response.headers)).toMatch(/Expires=Thu, 01 Jan 1970/i);
@@ -294,7 +299,7 @@ describe('AuthController', () => {
 
       await request(app.getHttpServer())
         .post('/auth/logout-all')
-        .set('Authorization', `Bearer ${first.body.accessToken}`)
+        .set(identityOf(first.body.accessToken))
         .expect(204);
 
       await request(app.getHttpServer())
@@ -323,7 +328,7 @@ describe('AuthController', () => {
         .expect(200);
       const profile = await request(app.getHttpServer())
         .get('/auth/me')
-        .set('Authorization', `Bearer ${registered.body.accessToken}`)
+        .set(identityOf(registered.body.accessToken))
         .expect(200);
 
       for (const response of [registered, loggedIn, refreshed, profile]) {

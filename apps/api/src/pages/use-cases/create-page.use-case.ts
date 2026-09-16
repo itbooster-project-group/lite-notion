@@ -1,8 +1,7 @@
-import { PageRole } from '@lite-notion/page-permissions';
 import { Inject, Injectable } from '@nestjs/common';
-
 import { ownerLock } from '../../common/helpers';
 import { TransactionRunner, type TransactionScope } from '../../database/transaction';
+import { PageRole } from '../../page-permissions/constants';
 import { assertRole } from '../../page-permissions/helpers';
 import { PagePermissionsRepository } from '../../page-permissions/page-permissions.repository';
 import { ProjectNotFoundError } from '../../projects/errors';

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { PrismaClient } from '@lite-notion/database';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { PrismaClient } from '../database/client';
 import type { PrismaService } from '../database/prisma.service';
 import { PrismaTransactionRunner } from '../database/transaction';
 import { PrismaPagePermissionsRepository } from '../page-permissions/page-permissions.repository';

@@ -1,5 +1,4 @@
-import type { PrismaClient } from '@lite-notion/database';
-import { PageRole, resolveEffectiveRole, roleAtLeast } from '@lite-notion/page-permissions';
+import { ApiDeniedError, type InternalApiClient } from '../api/internal-api-client.js';
 
 export interface PageAccess {
   canRead: boolean;
@@ -15,40 +14,32 @@ export class PageAccessDeniedError extends Error {
 }
 
 /**
- * Решение о допуске к комнате. Собственных правил здесь нет: роль вычисляет общий
- * пакет — тот же, которым пользуется REST API, — иначе одна и та же пара
- * «пользователь — страница» получала бы у двух процессов разные ответы.
+ * Допуск к комнате. Роль вычисляет API — та же модель, что отвечает REST, — поэтому
+ * расхождение решений для одной пары невозможно конструктивно.
  */
 export class PageAccessService {
-  constructor(private readonly prisma: PrismaClient) {}
-
-  async authorize(userId: string, pageId: string): Promise<PageAccess> {
-    const role = await resolveEffectiveRole(this.prisma, userId, pageId);
-
-    // Отказ один на все причины: отсутствие страницы, отсутствие доступа, удаление
-    // и граница restricted снаружи неразличимы.
-    if (role === null || !(await this.hasDocument(pageId))) {
-      throw new PageAccessDeniedError();
-    }
-
-    return {
-      canRead: true,
-      canWrite: roleAtLeast(role, PageRole.EDITOR),
-      pageId,
-      userId,
-    };
-  }
+  constructor(private readonly api: InternalApiClient) {}
 
   /**
-   * Проверка про комнату, а не про права: страница без документа существовать не
-   * должна, но открывать для неё комнату всё равно нельзя.
+   * Токен пользователя пробрасывается без изменений: личность выводится только из
+   * него. Недоступность API наверх уходит как есть — это не отказ в доступе.
    */
-  private async hasDocument(pageId: string): Promise<boolean> {
-    const document = await this.prisma.pageDocument.findUnique({
-      select: { pageId: true },
-      where: { pageId },
-    });
+  async authorize(token: string, pageId: string): Promise<PageAccess> {
+    try {
+      const verdict = await this.api.authorizePage(token, pageId);
 
-    return document !== null;
+      return {
+        canRead: true,
+        canWrite: verdict.canWrite,
+        pageId: verdict.pageId,
+        userId: verdict.userId,
+      };
+    } catch (error) {
+      if (error instanceof ApiDeniedError) {
+        throw new PageAccessDeniedError();
+      }
+
+      throw error;
+    }
   }
 }

@@ -1,5 +1,4 @@
-import type { PageRole } from '@lite-notion/page-permissions';
-
+import type { PageRole } from '../../page-permissions/constants';
 import type { PageAccessVerdict } from '../../page-permissions/page-permissions.service';
 
 /** Право записи отдаётся полем, а не выводится из роли вызывающим. */

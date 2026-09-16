@@ -20,7 +20,6 @@ const SECURED_OPERATION_IDS = [
   'deleteProject',
   'getCurrentUser',
   'getPage',
-  'getPageDocument',
   'getPagePermissions',
   'getPageTrash',
   'getPageTree',
@@ -40,7 +39,6 @@ const SECURED_OPERATION_IDS = [
   'restoreProject',
   'revokePagePermission',
   'setPageAccessMode',
-  'updatePageDocument',
 ];
 
 interface DocumentedOperation {

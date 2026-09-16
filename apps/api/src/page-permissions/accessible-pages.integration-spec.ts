@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { createPrismaClient, type PrismaClient } from '@lite-notion/database';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { createPrismaClient, type PrismaClient } from '../database/client';
+import { PageRole } from './constants';
+import { PrismaPagePermissionsRepository } from './page-permissions.repository';
 
-import { findAccessiblePages } from './accessible-pages';
-import { resolveEffectiveRole } from './effective-role';
-import { PageRole } from './roles';
+/** Запросы модели живут в репозитории; клиент теста подставляется напрямую. */
+function repository(client: PrismaClient): PrismaPagePermissionsRepository {
+  return new PrismaPagePermissionsRepository(client);
+}
 
 describe('findAccessiblePages on PostgreSQL', () => {
   let prisma: PrismaClient;
@@ -106,7 +109,7 @@ describe('findAccessiblePages on PostgreSQL', () => {
   it('возвращает пустой список, когда ничего не выдано', async () => {
     await createPage({});
 
-    await expect(findAccessiblePages(prisma, actorId)).resolves.toEqual([]);
+    await expect(repository(prisma).findAccessiblePages(actorId)).resolves.toEqual([]);
   });
 
   it('возвращает выданную страницу и её наследующих потомков', async () => {
@@ -116,7 +119,7 @@ describe('findAccessiblePages on PostgreSQL', () => {
 
     await grant(root, 'EDITOR');
 
-    const accessible = await findAccessiblePages(prisma, actorId);
+    const accessible = await repository(prisma).findAccessiblePages(actorId);
 
     expect(new Set(accessible.map((page) => page.id))).toEqual(new Set([root, child, grandchild]));
     expect(accessible.every((page) => page.role === PageRole.EDITOR)).toBe(true);
@@ -129,7 +132,7 @@ describe('findAccessiblePages on PostgreSQL', () => {
 
     await grant(root, 'VIEWER');
 
-    const accessible = await findAccessiblePages(prisma, actorId);
+    const accessible = await repository(prisma).findAccessiblePages(actorId);
 
     expect(accessible.map((page) => page.id)).toEqual([root]);
   });
@@ -142,7 +145,7 @@ describe('findAccessiblePages on PostgreSQL', () => {
     await grant(root, 'EDITOR');
     await grant(nested, 'VIEWER');
 
-    const accessible = await findAccessiblePages(prisma, actorId);
+    const accessible = await repository(prisma).findAccessiblePages(actorId);
     const byId = new Map(accessible.map((page) => [page.id, page]));
 
     expect(accessible).toHaveLength(3);
@@ -155,7 +158,7 @@ describe('findAccessiblePages on PostgreSQL', () => {
   it('не показывает собственные страницы спрашивающего', async () => {
     const own = await createPage({ owner: actorId, project: await createActorProject() });
 
-    const accessible = await findAccessiblePages(prisma, actorId);
+    const accessible = await repository(prisma).findAccessiblePages(actorId);
 
     expect(accessible.map((page) => page.id)).not.toContain(own);
   });
@@ -171,11 +174,13 @@ describe('findAccessiblePages on PostgreSQL', () => {
     });
 
     await expect(
-      findAccessiblePages(prisma, actorId).then((pages) => pages.map((page) => page.id)),
+      repository(prisma)
+        .findAccessiblePages(actorId)
+        .then((pages) => pages.map((page) => page.id)),
     ).resolves.toEqual([root]);
 
     await prisma.project.update({ data: { deletedAt: new Date() }, where: { id: projectId } });
-    await expect(findAccessiblePages(prisma, actorId)).resolves.toEqual([]);
+    await expect(repository(prisma).findAccessiblePages(actorId)).resolves.toEqual([]);
     await prisma.project.update({ data: { deletedAt: null }, where: { id: projectId } });
   });
 
@@ -195,10 +200,10 @@ describe('findAccessiblePages on PostgreSQL', () => {
     await grant(root, 'EDITOR');
     await grant(nested, 'VIEWER');
 
-    const accessible = await findAccessiblePages(prisma, actorId);
+    const accessible = await repository(prisma).findAccessiblePages(actorId);
 
     for (const page of accessible) {
-      await expect(resolveEffectiveRole(prisma, actorId, page.id)).resolves.toBe(page.role);
+      await expect(repository(prisma).resolveRole(actorId, page.id)).resolves.toBe(page.role);
     }
 
     const shown = new Set(accessible.map((page) => page.id));
@@ -207,7 +212,7 @@ describe('findAccessiblePages on PostgreSQL', () => {
 
     // Обратная сторона свойства: что выдача скрыла, то и роль не даёт.
     for (const hidden of [boundary, behindBoundary]) {
-      await expect(resolveEffectiveRole(prisma, actorId, hidden)).resolves.toBeNull();
+      await expect(repository(prisma).resolveRole(actorId, hidden)).resolves.toBeNull();
     }
   });
 });

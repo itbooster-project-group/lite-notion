@@ -1,7 +1,6 @@
-import type { PageAccessMode } from '@lite-notion/database/enums';
-import { PageRole } from '@lite-notion/page-permissions';
 import { Inject, Injectable } from '@nestjs/common';
-
+import type { PageAccessMode } from '../generated/prisma/enums';
+import { PageRole } from '../page-permissions/constants';
 import type { AccessiblePageRow } from '../page-permissions/page-permissions.repository';
 import { PagePermissionsService } from '../page-permissions/page-permissions.service';
 import { PageNotFoundError } from './errors';

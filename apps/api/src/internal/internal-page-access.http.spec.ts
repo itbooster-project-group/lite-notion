@@ -1,6 +1,6 @@
-import { PageRole } from '@lite-notion/page-permissions';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { PageRole } from '../page-permissions/constants';
 
 import { TIPTAP_SCHEMA_VERSION } from '../pages/constants';
 import { positionBetween } from '../pages/helpers';
@@ -154,12 +154,12 @@ describe('internal page access HTTP contract', () => {
       role: 'VIEWER',
       userId: grantee,
     });
-    const authorization = `Bearer ${await context.signAccessToken(grantee)}`;
-
     const internal = await access(grantee, pageId);
+    // Прикладной маршрут берёт личность из заголовков шлюза, внутренний — из токена;
+    // сравнение имеет смысл именно потому, что источники разные.
     const rest = await request(context.app.getHttpServer())
       .get(`/api/v1/pages/${pageId}`)
-      .set('Authorization', authorization)
+      .set(context.identityOf(grantee))
       .expect(200);
 
     expect(internal.body.role).toBe(rest.body.accessRole);

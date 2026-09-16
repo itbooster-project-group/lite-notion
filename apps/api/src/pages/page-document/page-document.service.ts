@@ -1,6 +1,5 @@
-import { PageRole } from '@lite-notion/page-permissions';
 import { Inject, Injectable } from '@nestjs/common';
-
+import { PageRole } from '../../page-permissions/constants';
 import { PagePermissionsService } from '../../page-permissions/page-permissions.service';
 import { PageNotFoundError } from '../errors';
 import type { Bytes } from '../pages.repository';

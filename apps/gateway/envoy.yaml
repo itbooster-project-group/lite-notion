@@ -24,12 +24,6 @@ static_resources:
                   virtual_hosts:
                     - name: ingress
                       domains: ["*"]
-                      # Клиентские копии заголовков личности затираются на входе,
-                      # включая публичные маршруты: иначе личность подделывается
-                      # одним заголовком.
-                      request_headers_to_remove:
-                        - x-user-id
-                        - x-session-id
                       routes:
                         # Внутренние маршруты снаружи недостижимы.
                         - match: { prefix: "/internal/" }
@@ -96,6 +90,15 @@ static_resources:
                               "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthzPerRoute
                               disabled: true
                 http_filters:
+                  # Клиентские копии заголовков личности снимаются ДО проверки: на
+                  # маршруте они затёрли бы то, что проставил ext_authz.
+                  - name: envoy.filters.http.header_mutation
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.header_mutation.v3.HeaderMutation
+                      mutations:
+                        request_mutations:
+                          - remove: x-user-id
+                          - remove: x-session-id
                   - name: envoy.filters.http.ext_authz
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz

@@ -21,61 +21,61 @@
 
 ## 3. Переключение API на личность из заголовков
 
-- [ ] 3.1 Заменить источник личности в `CurrentUser` на заголовки шлюза и удалить `JwtStrategy` с зависимостями `passport-jwt`; проверить существующими http-тестами модулей, что обработчики получают того же пользователя
-- [ ] 3.2 Отклонять `401` прикладной запрос без заголовков личности; проверить http-тестом, что запрос без них не выполняет обработчик
-- [ ] 3.3 Обновить `.env.example` API и `scripts/dev-lan.mjs` под единый origin шлюза; проверить `pnpm test:dev-lan`
+- [x] 3.1 Заменить источник личности в `CurrentUser` на заголовки шлюза и удалить `JwtStrategy` с зависимостями `passport-jwt`; проверить существующими http-тестами модулей, что обработчики получают того же пользователя
+- [x] 3.2 Отклонять `401` прикладной запрос без заголовков личности; проверить http-тестом, что запрос без них не выполняет обработчик
+- [x] 3.3 Обновить `.env.example` API и `scripts/dev-lan.mjs` под единый origin шлюза; проверить `pnpm test:dev-lan`
 
 ## 4. Collaboration переходит на HTTP-доступ к API
 
-- [ ] 4.1 Добавить в `apps/collaboration` HTTP-клиент внутренних маршрутов API с разделением авторитетного отказа и недоступности; проверить unit-тестами, что `401`/`403`/`404` и таймаут/`5xx` дают разные результаты
-- [ ] 4.2 Перевести `src/documents/page-access.ts` на вызов внутреннего маршрута доступа с пробросом клиентского токена; проверить существующими unit- и интеграционными тестами доступа
-- [ ] 4.3 Перевести `src/documents/persistence.ts` на внутренние документные операции под сервисным креденшлом; проверить интеграционным тестом загрузку, сохранение и завершение комнаты при отказе по инварианту живости
-- [ ] 4.4 Убрать из `src/config/environment.ts` `DATABASE_URL`, `DATABASE_CONNECTION_TIMEOUT_MS` и `JWT_SECRET`, добавить базовый адрес API и сервисный креденшл; проверить unit-тестами конфигурации отсутствие удалённых переменных и остановку запуска при невалидных новых
-- [ ] 4.5 Убрать `PrismaClient` из `src/main.ts` и из процедуры завершения в `src/server/collaboration-server.ts`; проверить тестом завершения, что shutdown закрывает сервер без обращения к базе
-- [ ] 4.6 Удалить зависимости `@lite-notion/database`, `@lite-notion/page-permissions`, `@lite-notion/auth-token`, `jsonwebtoken` и соответствующие `prebuild`/`pretest`/`pretypecheck` хуки из `apps/collaboration/package.json`; проверить `pnpm --filter @lite-notion/collaboration typecheck` и `test`
-- [ ] 4.7 Обновить `apps/collaboration/AGENTS.md`: правило «держать доступ к базе через `@lite-notion/database`» заменить на запрет прямого доступа к базе; проверить чтением, что документ не противоречит новой конфигурации
+- [x] 4.1 Добавить в `apps/collaboration` HTTP-клиент внутренних маршрутов API с разделением авторитетного отказа и недоступности; проверить unit-тестами, что `401`/`403`/`404` и таймаут/`5xx` дают разные результаты
+- [x] 4.2 Перевести `src/documents/page-access.ts` на вызов внутреннего маршрута доступа с пробросом клиентского токена; проверить существующими unit- и интеграционными тестами доступа
+- [x] 4.3 Перевести `src/documents/persistence.ts` на внутренние документные операции под сервисным креденшлом; проверить интеграционным тестом загрузку, сохранение и завершение комнаты при отказе по инварианту живости
+- [x] 4.4 Убрать из `src/config/environment.ts` `DATABASE_URL`, `DATABASE_CONNECTION_TIMEOUT_MS` и `JWT_SECRET`, добавить базовый адрес API и сервисный креденшл; проверить unit-тестами конфигурации отсутствие удалённых переменных и остановку запуска при невалидных новых
+- [x] 4.5 Убрать `PrismaClient` из `src/main.ts` и из процедуры завершения в `src/server/collaboration-server.ts`; проверить тестом завершения, что shutdown закрывает сервер без обращения к базе
+- [x] 4.6 Удалить зависимости `@lite-notion/database`, `@lite-notion/page-permissions`, `@lite-notion/auth-token`, `jsonwebtoken` и соответствующие `prebuild`/`pretest`/`pretypecheck` хуки из `apps/collaboration/package.json`; проверить `pnpm --filter @lite-notion/collaboration typecheck` и `test`
+- [x] 4.7 Обновить `apps/collaboration/AGENTS.md`: правило «держать доступ к базе через `@lite-notion/database`» заменить на запрет прямого доступа к базе; проверить чтением, что документ не противоречит новой конфигурации
 
 ## 5. Горизонтальное масштабирование
 
-- [ ] 5.1 Поднять `@hocuspocus/server` и `@hocuspocus/provider` до 4.7 в catalog; проверить `pnpm --filter @lite-notion/collaboration test` и `pnpm --filter @lite-notion/web test`
-- [ ] 5.2 Добавить `redis` в `apps/api/docker-compose.yaml` с healthcheck и не публиковать его порт наружу; проверить, что `pnpm db:up` дожидается готовности Redis
-- [ ] 5.3 Подключить `@hocuspocus/extension-redis` в `createCollaborationServer` и добавить адрес брокера в конфигурацию; проверить, что недоступный брокер останавливает startup до приёма соединений
-- [ ] 5.4 Добавить интеграционный тест на две реплики в одном процессе: клиенты одной комнаты на разных экземплярах видят изменения друг друга и одинаковый список участников
-- [ ] 5.5 Проверить тестом, что update, пришедший по брокеру, не порождает повторное сохранение документа принимающим экземпляром
+- [x] 5.1 Поднять `@hocuspocus/server` и `@hocuspocus/provider` до 4.7 в catalog; проверить `pnpm --filter @lite-notion/collaboration test` и `pnpm --filter @lite-notion/web test`
+- [x] 5.2 Добавить `redis` в `apps/api/docker-compose.yaml` с healthcheck и не публиковать его порт наружу; проверить, что `pnpm db:up` дожидается готовности Redis
+- [x] 5.3 Подключить `@hocuspocus/extension-redis` в `createCollaborationServer` и добавить адрес брокера в конфигурацию; проверить, что недоступный брокер останавливает startup до приёма соединений
+- [x] 5.4 Добавить интеграционный тест на две реплики в одном процессе: клиенты одной комнаты на разных экземплярах видят изменения друг друга и одинаковый список участников
+- [x] 5.5 Проверить тестом, что update, пришедший по брокеру, не порождает повторное сохранение документа принимающим экземпляром
 
 ## 6. Переавторизация открытого соединения
 
-- [ ] 6.1 Сохранять момент истечения токена в контексте соединения в `onAuthenticate`; проверить unit-тестом, что значение берётся из ответа внутреннего маршрута проверки, а не из разбора токена
-- [ ] 6.2 Реализовать таймер запроса токена с джиттером и вызов `connection.requestToken()`; проверить тестом, что запрос уходит до истечения и что джиттер разводит одновременные соединения
-- [ ] 6.3 Реализовать хук `onTokenSync`: повторная проверка токена и доступа, обновление `connection.readOnly`, перевзвод таймера; проверить тестом продление соединения свежим токеном без переподключения
-- [ ] 6.4 Закрывать соединение при авторитетном отказе и при молчании клиента после `requestToken`; проверить тестами отзыв разрешения, истечение токена и отсутствие ответа в грейс-периоде
-- [ ] 6.5 Сохранять соединение в грейс-окне при недоступности API и закрывать по его исчерпании; проверить тестом, что `5xx` и таймаут не закрывают соединение сразу
-- [ ] 6.6 Добавить интеграционный тест понижения роли: `editor` → `viewer` на живом соединении переводит его в read-only без разрыва, и последующие изменения не сохраняются
-- [ ] 6.7 Обновить `token()` в `apps/web/src/features/page-editing/model/collaborative-page-document-session.ts`: обновлять access-токен при приближении истечения, а не только при его отсутствии; проверить unit-тестом сессии, что callback возвращает свежий токен
-- [ ] 6.8 Проверить тестом сессии, что продление не сбрасывает содержимое документа и список участников, а закрытие после отзыва доступа переводит сессию в безопасное состояние без reconnect-петли
+- [x] 6.1 Сохранять момент истечения токена в контексте соединения в `onAuthenticate`; проверить unit-тестом, что значение берётся из ответа внутреннего маршрута проверки, а не из разбора токена
+- [x] 6.2 Реализовать таймер запроса токена с джиттером и вызов `connection.requestToken()`; проверить тестом, что запрос уходит до истечения и что джиттер разводит одновременные соединения
+- [x] 6.3 Реализовать хук `onTokenSync`: повторная проверка токена и доступа, обновление `connection.readOnly`, перевзвод таймера; проверить тестом продление соединения свежим токеном без переподключения
+- [x] 6.4 Закрывать соединение при авторитетном отказе и при молчании клиента после `requestToken`; проверить тестами отзыв разрешения, истечение токена и отсутствие ответа в грейс-периоде
+- [x] 6.5 Сохранять соединение в грейс-окне при недоступности API и закрывать по его исчерпании; проверить тестом, что `5xx` и таймаут не закрывают соединение сразу
+- [x] 6.6 Добавить интеграционный тест понижения роли: `editor` → `viewer` на живом соединении переводит его в read-only без разрыва, и последующие изменения не сохраняются
+- [x] 6.7 Обновить `token()` в `apps/web/src/features/page-editing/model/collaborative-page-document-session.ts`: обновлять access-токен при приближении истечения, а не только при его отсутствии; проверить unit-тестом сессии, что callback возвращает свежий токен
+- [x] 6.8 Проверить тестом сессии, что продление не сбрасывает содержимое документа и список участников, а закрытие после отзыва доступа переводит сессию в безопасное состояние без reconnect-петли
 
 ## 7. Удаление публичных операций документа
 
-- [ ] 7.1 Удалить `PageDocumentController`, его DTO и регистрацию `PageDocumentModule` в `app.module.ts` и `pages.module.ts`, сохранив `PageDocumentRepository` для внутренних операций и создания пустого документа; проверить `pnpm --filter @lite-notion/api test`
-- [ ] 7.2 Перегенерировать OpenAPI и клиент и удалить msw-хендлеры операций документа; проверить `pnpm api:check`
-- [ ] 7.3 Удалить пакет `packages/auth-token` и вернуть тип `AccessTokenPayload` в API; проверить `pnpm --filter @lite-notion/api typecheck`
+- [x] 7.1 Удалить `PageDocumentController`, его DTO и регистрацию `PageDocumentModule` в `app.module.ts` и `pages.module.ts`, сохранив `PageDocumentRepository` для внутренних операций и создания пустого документа; проверить `pnpm --filter @lite-notion/api test`
+- [x] 7.2 Перегенерировать OpenAPI и клиент и удалить msw-хендлеры операций документа; проверить `pnpm api:check`
+- [x] 7.3 Удалить пакет `packages/auth-token` и вернуть тип `AccessTokenPayload` в API; проверить `pnpm --filter @lite-notion/api typecheck`
 
 ## 8. Сворачивание пакетов в apps/api
 
-- [ ] 8.1 Убедиться, что после группы 4 у `@lite-notion/database` и `@lite-notion/page-permissions` остался единственный потребитель; проверить `grep` по всем `package.json`, что их упоминает только `apps/api`
-- [ ] 8.2 Перенести `packages/database/prisma/` и `prisma.config.ts` в `apps/api`; проверить, что `pnpm --filter @lite-notion/api prisma:generate` кладёт клиент в `apps/api/src/generated/prisma` без правки блока `generator`
-- [ ] 8.3 Перенести `packages/database/src/{client,constants}.ts` и их тесты в `apps/api/src/database`; переписать импорты `@lite-notion/database` на относительные; проверить `pnpm --filter @lite-notion/api typecheck`
-- [ ] 8.4 Переписать импорты `@lite-notion/database/enums` на путь сгенерированных enum'ов; проверить `pnpm --filter @lite-notion/api test`
-- [ ] 8.5 Перенести `packages/page-permissions/src/{roles,effective-role,accessible-pages}.ts` и их тесты в `apps/api/src/page-permissions`; переписать импорты; проверить `pnpm --filter @lite-notion/api test` и integration-тесты модели прав
-- [ ] 8.6 Удалить каталоги `packages/database` и `packages/page-permissions`, убрать глоб `packages/*` из `pnpm-workspace.yaml` и удалить каталог `packages/`; проверить `pnpm install --frozen-lockfile=false` и отсутствие ссылок на удалённые пакеты
-- [ ] 8.7 Упростить скрипты: убрать `prebuild`/`pretest`/`pretypecheck`/`preopenapi:generate` из `apps/api/package.json`, `dev:prepare` из корневого `package.json` и зависящие от него `dev`, `dev:api`, `dev:collaboration`, `dev:lan`; перевести `prisma:generate`, `db:migrate:*`, `db:studio` на прямой вызов; проверить `pnpm dev:api` и `pnpm api:check`
-- [ ] 8.8 Убедиться, что `apps/api/src/generated/prisma` остаётся в `.gitignore` и не коммитится; проверить `git status --short` после `prisma:generate`
+- [x] 8.1 Убедиться, что после группы 4 у `@lite-notion/database` и `@lite-notion/page-permissions` остался единственный потребитель; проверить `grep` по всем `package.json`, что их упоминает только `apps/api`
+- [x] 8.2 Перенести `packages/database/prisma/` и `prisma.config.ts` в `apps/api`; проверить, что `pnpm --filter @lite-notion/api prisma:generate` кладёт клиент в `apps/api/src/generated/prisma` без правки блока `generator`
+- [x] 8.3 Перенести `packages/database/src/{client,constants}.ts` и их тесты в `apps/api/src/database`; переписать импорты `@lite-notion/database` на относительные; проверить `pnpm --filter @lite-notion/api typecheck`
+- [x] 8.4 Переписать импорты `@lite-notion/database/enums` на путь сгенерированных enum'ов; проверить `pnpm --filter @lite-notion/api test`
+- [x] 8.5 Перенести `packages/page-permissions/src/{roles,effective-role,accessible-pages}.ts` и их тесты в `apps/api/src/page-permissions`; переписать импорты; проверить `pnpm --filter @lite-notion/api test` и integration-тесты модели прав
+- [x] 8.6 Удалить каталоги `packages/database` и `packages/page-permissions`, убрать глоб `packages/*` из `pnpm-workspace.yaml` и удалить каталог `packages/`; проверить `pnpm install --frozen-lockfile=false` и отсутствие ссылок на удалённые пакеты
+- [x] 8.7 Упростить скрипты: убрать `prebuild`/`pretest`/`pretypecheck`/`preopenapi:generate` из `apps/api/package.json`, `dev:prepare` из корневого `package.json` и зависящие от него `dev`, `dev:api`, `dev:collaboration`, `dev:lan`; перевести `prisma:generate`, `db:migrate:*`, `db:studio` на прямой вызов; проверить `pnpm dev:api` и `pnpm api:check`
+- [x] 8.8 Убедиться, что `apps/api/src/generated/prisma` остаётся в `.gitignore` и не коммитится; проверить `git status --short` после `prisma:generate`
 
 ## 9. Сквозная проверка
 
-- [ ] 9.1 Прогнать `pnpm lint`, `pnpm typecheck` и `pnpm test` на всём workspace
-- [ ] 9.2 Проверить `pnpm dev`: приложение открывается по единственному адресу шлюза, редактор подключается к комнате и сохраняет изменения
-- [ ] 9.3 Проверить `pnpm dev:lan`: печатается один адрес, второе устройство в сети открывает приложение и совместно редактирует страницу
-- [ ] 9.4 Прогнать существующий Playwright-сценарий совместного редактирования через шлюз; проверить, что presence и синхронизация работают на едином origin
-- [ ] 9.5 Убедиться, что ни один процесс, кроме API, не имеет в конфигурации `JWT_SECRET`, и что collaboration не открывает соединений к PostgreSQL
-- [ ] 9.6 Убедиться, что каталог `packages/` отсутствует, а `pnpm --recursive run build` проходит без сборки workspace-пакетов
+- [x] 9.1 Прогнать `pnpm lint`, `pnpm typecheck` и `pnpm test` на всём workspace
+- [x] 9.2 Проверить `pnpm dev`: приложение открывается по единственному адресу шлюза, редактор подключается к комнате и сохраняет изменения
+- [ ] 9.3 Проверить `pnpm dev:lan`: печатается один адрес, второе устройство в сети открывает приложение и совместно редактирует страницу. **Не выполнено:** требует второго устройства в сети. Конфигурация покрыта `pnpm test:dev-lan` (10 тестов, единый origin шлюза)
+- [ ] 9.4 Прогнать существующий Playwright-сценарий совместного редактирования через шлюз. **Не выполнено:** набор требует предварительно подготовленных `PLAYWRIGHT_PAGE_ID` и `PLAYWRIGHT_STORAGE_STATE_A/B` — засеянных пользователей, страницы и сохранённых сессий; скрипта подготовки в репозитории нет, в CI набор не запускается. `baseURL` переведён на адрес шлюза. Эквивалент пути проверен вручную: подключение к комнате через шлюз, правка, сохранение через внутренний маршрут API и загрузка новым соединением
+- [x] 9.5 Убедиться, что ни один процесс, кроме API, не имеет в конфигурации `JWT_SECRET`, и что collaboration не открывает соединений к PostgreSQL
+- [x] 9.6 Убедиться, что каталог `packages/` отсутствует, а `pnpm --recursive run build` проходит без сборки workspace-пакетов

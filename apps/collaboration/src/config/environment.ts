@@ -2,16 +2,18 @@ export type NodeEnvironment = 'development' | 'production' | 'test';
 
 export interface CollaborationConfig {
   allowedOrigin: string;
-  databaseConnectionTimeoutMs: number;
-  databaseUrl: string;
-  jwtSecret: string;
+  apiBaseUrl: string;
+  apiTimeoutMs: number;
+  internalServiceToken: string;
   nodeEnvironment: NodeEnvironment;
   port: number;
+  redisHost: string;
+  redisPort: number;
   websocketMaxPayloadBytes: number;
 }
 
 const nodeEnvironments = new Set<NodeEnvironment>(['development', 'production', 'test']);
-const jwtSecretMinLength = 32;
+const serviceTokenMinLength = 32;
 
 function parseInteger(name: string, value: unknown, min: number, max: number): number {
   const parsed = Number(value);
@@ -47,26 +49,16 @@ function validateHttpOrigin(name: string, value: unknown): string {
   throw new Error(`Environment validation failed: ${name}`);
 }
 
-function validatePostgreSqlUrl(name: string, value: unknown): string {
-  if (typeof value !== 'string') {
+function validateHostname(name: string, value: unknown): string {
+  if (typeof value !== 'string' || value.trim() === '') {
     throw new Error(`Environment validation failed: ${name}`);
   }
 
-  try {
-    const url = new URL(value);
-
-    if ((url.protocol === 'postgresql:' || url.protocol === 'postgres:') && url.hostname !== '') {
-      return value;
-    }
-  } catch {
-    // Ошибка ниже намеренно не включает исходное значение.
-  }
-
-  throw new Error(`Environment validation failed: ${name}`);
+  return value;
 }
 
-function validateJwtSecret(name: string, value: unknown): string {
-  if (typeof value !== 'string' || value.length < jwtSecretMinLength) {
+function validateServiceToken(name: string, value: unknown): string {
+  if (typeof value !== 'string' || value.length < serviceTokenMinLength) {
     throw new Error(`Environment validation failed: ${name}`);
   }
 
@@ -89,16 +81,16 @@ export function createCollaborationConfig(
       'COLLABORATION_ALLOWED_ORIGIN',
       environment.COLLABORATION_ALLOWED_ORIGIN,
     ),
-    databaseConnectionTimeoutMs: parseInteger(
-      'DATABASE_CONNECTION_TIMEOUT_MS',
-      environment.DATABASE_CONNECTION_TIMEOUT_MS,
-      1,
-      60_000,
+    apiBaseUrl: validateHttpOrigin('API_BASE_URL', environment.API_BASE_URL),
+    apiTimeoutMs: parseInteger('API_TIMEOUT_MS', environment.API_TIMEOUT_MS, 1, 60_000),
+    internalServiceToken: validateServiceToken(
+      'INTERNAL_SERVICE_TOKEN',
+      environment.INTERNAL_SERVICE_TOKEN,
     ),
-    databaseUrl: validatePostgreSqlUrl('DATABASE_URL', environment.DATABASE_URL),
-    jwtSecret: validateJwtSecret('JWT_SECRET', environment.JWT_SECRET),
     nodeEnvironment: validateNodeEnvironment(environment.NODE_ENV),
     port: parseInteger('PORT', environment.PORT, 1, 65_535),
+    redisHost: validateHostname('REDIS_HOST', environment.REDIS_HOST),
+    redisPort: parseInteger('REDIS_PORT', environment.REDIS_PORT, 1, 65_535),
     websocketMaxPayloadBytes: parseInteger(
       'WEBSOCKET_MAX_PAYLOAD_BYTES',
       environment.WEBSOCKET_MAX_PAYLOAD_BYTES,

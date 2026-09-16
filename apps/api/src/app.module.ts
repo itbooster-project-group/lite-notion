@@ -28,9 +28,6 @@ import { TrashCleanupModule } from './trash/trash-cleanup.module';
     PageDocumentModule,
     ProjectsModule,
     TrashCleanupModule,
-    // Последним: модуль тянет PageDocumentModule и PagePermissionsModule, и более
-    // ранняя позиция переставила бы порядок регистрации контроллеров, а с ним и
-    // порядок путей в снимке OpenAPI.
     InternalModule,
   ],
   providers: [

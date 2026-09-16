@@ -1,15 +1,19 @@
 import { randomUUID } from 'node:crypto';
-import { createPrismaClient, type PrismaClient } from '@lite-notion/database';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-
-import { resolveEffectiveRole } from './effective-role';
-import { PageRole } from './roles';
+import { createPrismaClient, type PrismaClient } from '../database/client';
+import { PageRole } from './constants';
+import { PrismaPagePermissionsRepository } from './page-permissions.repository';
 
 /**
  * Подъём по цепочке — рекурсивный CTE, и подменить его фейком достоверно нельзя:
  * граница `restricted` живёт в условии рекурсии, а не в коде. Поэтому здесь
  * настоящая база и настоящее дерево.
  */
+/** Запросы модели живут в репозитории; клиент теста подставляется напрямую. */
+function repository(client: PrismaClient): PrismaPagePermissionsRepository {
+  return new PrismaPagePermissionsRepository(client);
+}
+
 describe('resolveEffectiveRole on PostgreSQL', () => {
   let prisma: PrismaClient;
   let ownerId: string;
@@ -96,13 +100,13 @@ describe('resolveEffectiveRole on PostgreSQL', () => {
   it('даёт владельцу полный доступ без строки разрешения', async () => {
     const pageId = await createPage({});
 
-    await expect(resolveEffectiveRole(prisma, ownerId, pageId)).resolves.toBe(PageRole.OWNER);
+    await expect(repository(prisma).resolveRole(ownerId, pageId)).resolves.toBe(PageRole.OWNER);
   });
 
   it('отказывает постороннему без разрешений', async () => {
     const pageId = await createPage({});
 
-    await expect(resolveEffectiveRole(prisma, actorId, pageId)).resolves.toBeNull();
+    await expect(repository(prisma).resolveRole(actorId, pageId)).resolves.toBeNull();
   });
 
   it('наследует разрешение сквозь несколько уровней inherit', async () => {
@@ -112,7 +116,7 @@ describe('resolveEffectiveRole on PostgreSQL', () => {
 
     await grant(root, 'EDITOR');
 
-    await expect(resolveEffectiveRole(prisma, actorId, leaf)).resolves.toBe(PageRole.EDITOR);
+    await expect(repository(prisma).resolveRole(actorId, leaf)).resolves.toBe(PageRole.EDITOR);
   });
 
   it('останавливает наследование на границе restricted', async () => {
@@ -122,8 +126,8 @@ describe('resolveEffectiveRole on PostgreSQL', () => {
 
     await grant(root, 'EDITOR');
 
-    await expect(resolveEffectiveRole(prisma, actorId, boundary)).resolves.toBeNull();
-    await expect(resolveEffectiveRole(prisma, actorId, leaf)).resolves.toBeNull();
+    await expect(repository(prisma).resolveRole(actorId, boundary)).resolves.toBeNull();
+    await expect(repository(prisma).resolveRole(actorId, leaf)).resolves.toBeNull();
   });
 
   it('уважает прямое разрешение на самой restricted-странице', async () => {
@@ -133,8 +137,8 @@ describe('resolveEffectiveRole on PostgreSQL', () => {
 
     await grant(boundary, 'VIEWER');
 
-    await expect(resolveEffectiveRole(prisma, actorId, boundary)).resolves.toBe(PageRole.VIEWER);
-    await expect(resolveEffectiveRole(prisma, actorId, leaf)).resolves.toBe(PageRole.VIEWER);
+    await expect(repository(prisma).resolveRole(actorId, boundary)).resolves.toBe(PageRole.VIEWER);
+    await expect(repository(prisma).resolveRole(actorId, leaf)).resolves.toBe(PageRole.VIEWER);
   });
 
   it('предпочитает ближайшее разрешение дальнему, даже когда оно уже', async () => {
@@ -145,9 +149,9 @@ describe('resolveEffectiveRole on PostgreSQL', () => {
     await grant(root, 'EDITOR');
     await grant(middle, 'VIEWER');
 
-    await expect(resolveEffectiveRole(prisma, actorId, root)).resolves.toBe(PageRole.EDITOR);
-    await expect(resolveEffectiveRole(prisma, actorId, middle)).resolves.toBe(PageRole.VIEWER);
-    await expect(resolveEffectiveRole(prisma, actorId, leaf)).resolves.toBe(PageRole.VIEWER);
+    await expect(repository(prisma).resolveRole(actorId, root)).resolves.toBe(PageRole.EDITOR);
+    await expect(repository(prisma).resolveRole(actorId, middle)).resolves.toBe(PageRole.VIEWER);
+    await expect(repository(prisma).resolveRole(actorId, leaf)).resolves.toBe(PageRole.VIEWER);
   });
 
   it('закрывает удалённую страницу даже владельцу', async () => {
@@ -158,7 +162,7 @@ describe('resolveEffectiveRole on PostgreSQL', () => {
       where: { id: pageId },
     });
 
-    await expect(resolveEffectiveRole(prisma, ownerId, pageId)).resolves.toBeNull();
+    await expect(repository(prisma).resolveRole(ownerId, pageId)).resolves.toBeNull();
   });
 
   it('закрывает страницу удалённого проекта даже владельцу', async () => {
@@ -166,7 +170,7 @@ describe('resolveEffectiveRole on PostgreSQL', () => {
 
     await prisma.project.update({ data: { deletedAt: new Date() }, where: { id: projectId } });
 
-    await expect(resolveEffectiveRole(prisma, ownerId, pageId)).resolves.toBeNull();
+    await expect(repository(prisma).resolveRole(ownerId, pageId)).resolves.toBeNull();
   });
 
   it('не поднимается сквозь удалённого предка', async () => {
@@ -179,6 +183,6 @@ describe('resolveEffectiveRole on PostgreSQL', () => {
       where: { id: root },
     });
 
-    await expect(resolveEffectiveRole(prisma, actorId, leaf)).resolves.toBeNull();
+    await expect(repository(prisma).resolveRole(actorId, leaf)).resolves.toBeNull();
   });
 });

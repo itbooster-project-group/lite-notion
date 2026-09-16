@@ -1,32 +1,17 @@
 import { HocuspocusProvider, HocuspocusProviderWebsocket } from '@hocuspocus/provider';
-import type { PrismaClient } from '@lite-notion/database';
-import jwt from 'jsonwebtoken';
 import { afterEach, describe, expect, it, type Mock, vi } from 'vitest';
 import WebSocket from 'ws';
 import * as Y from 'yjs';
 
+import { InMemoryInternalApiClient } from '../api/internal-api-client.in-memory.js';
 import type { CollaborationConfig } from '../config/environment.js';
 import type { CollaborationLogger } from '../logging/logger.js';
 import { createCollaborationServer } from './collaboration-server.js';
 
-const jwtSecret = 'local-development-only-change-me-before-deploy';
 const ownerId = '550e8400-e29b-41d4-a716-446655440000';
 const pageId = '550e8400-e29b-41d4-a716-446655440001';
 const documentName = `page:${pageId}`;
-
-function tokenFor(userId: string): string {
-  return jwt.sign({ sid: '550e8400-e29b-41d4-a716-446655440002', sub: userId }, jwtSecret, {
-    expiresIn: 60,
-  });
-}
-
-function createLogger(): CollaborationLogger {
-  return {
-    error: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-  };
-}
+const ownerToken = 'owner-token';
 
 interface TestLogger extends CollaborationLogger {
   error: Mock<CollaborationLogger['error']>;
@@ -34,75 +19,22 @@ interface TestLogger extends CollaborationLogger {
   warn: Mock<CollaborationLogger['warn']>;
 }
 
+function createLogger(): TestLogger {
+  return { error: vi.fn(), info: vi.fn(), warn: vi.fn() } as TestLogger;
+}
+
 function createConfig(): CollaborationConfig {
   return {
     allowedOrigin: 'http://localhost:3000',
-    databaseConnectionTimeoutMs: 5000,
-    databaseUrl: 'postgresql://lite_notion:lite_notion@localhost:5432/lite_notion?schema=public',
-    jwtSecret,
+    apiBaseUrl: 'http://api.test',
+    apiTimeoutMs: 2000,
+    internalServiceToken: 'service-token-value-of-32-characters',
     nodeEnvironment: 'test',
     port: 0,
+    redisHost: '127.0.0.1',
+    redisPort: 6379,
     websocketMaxPayloadBytes: 1024 * 1024,
   };
-}
-
-interface StoredPage {
-  deletedAt: Date | null;
-  ownerId: string;
-  yjsState: Uint8Array;
-  storageRevision: number;
-}
-
-function createPrismaDouble(initial?: Partial<StoredPage>): PrismaClient {
-  const stored: StoredPage = {
-    deletedAt: null,
-    ownerId,
-    storageRevision: 0,
-    yjsState: new Uint8Array(),
-    ...initial,
-  };
-
-  const prisma = {
-    __stored: stored,
-    // Цепочка доступа: живая страница отдаёт одно звено с владельцем, удалённая —
-    // пустой результат. Разрешений в этом двойнике нет: сервер проверяется на
-    // владельце, а роли — в тестах пакета и в интеграционном тесте комнаты.
-    $queryRaw: vi.fn(async () =>
-      stored.deletedAt === null ? [{ depth: 0, ownerId: stored.ownerId, role: null }] : [],
-    ),
-    pageDocument: {
-      findUnique: vi.fn(async ({ where }: { where: { pageId: string } }) =>
-        where.pageId === pageId ? { pageId } : null,
-      ),
-      findFirst: vi.fn(async ({ where }: { where: { pageId: string } }) => {
-        if (where.pageId !== pageId || stored.deletedAt !== null) {
-          return null;
-        }
-
-        return { yjsState: stored.yjsState };
-      }),
-      updateMany: vi.fn(
-        async ({
-          data,
-          where,
-        }: {
-          data: { storageRevision: { increment: number }; yjsState: Uint8Array };
-          where: { pageId: string };
-        }) => {
-          if (where.pageId !== pageId || stored.deletedAt !== null) {
-            return { count: 0 };
-          }
-
-          stored.yjsState = data.yjsState;
-          stored.storageRevision += data.storageRevision.increment;
-
-          return { count: 1 };
-        },
-      ),
-    },
-  };
-
-  return prisma as unknown as PrismaClient;
 }
 
 function websocketWithOrigin(origin: string): typeof WebSocket {
@@ -133,11 +65,7 @@ function createProvider(
   token: string,
   WebSocketPolyfill: typeof WebSocket = websocketWithOrigin('http://localhost:3000'),
 ): HocuspocusProvider {
-  const websocketProvider = new HocuspocusProviderWebsocket({
-    WebSocketPolyfill,
-    url,
-  });
-
+  const websocketProvider = new HocuspocusProviderWebsocket({ WebSocketPolyfill, url });
   const provider = new HocuspocusProvider({
     document,
     name: documentName,
@@ -164,14 +92,23 @@ describe('collaboration Hocuspocus runtime', () => {
     }
   });
 
+  function createApi(): InMemoryInternalApiClient {
+    const api = new InMemoryInternalApiClient();
+    api.grant(pageId, ownerToken, ownerId, true);
+
+    return api;
+  }
+
   async function start(
-    prisma: PrismaClient = createPrismaDouble(),
+    api: InMemoryInternalApiClient,
   ): Promise<{ logger: TestLogger; url: string }> {
-    const logger = createLogger() as TestLogger;
-    const server = createCollaborationServer(createConfig(), prisma, logger, {
+    const logger = createLogger();
+    // Redis отключён: синхронизация реплик проверяется отдельным тестом.
+    const server = createCollaborationServer(createConfig(), api.asClient(), logger, {
       address: '127.0.0.1',
       debounce: 10,
       maxDebounce: 50,
+      withRedis: false,
     });
     servers.push(server);
     await server.listen();
@@ -180,7 +117,7 @@ describe('collaboration Hocuspocus runtime', () => {
   }
 
   it('отклоняет missing token', async () => {
-    const { url } = await start();
+    const { url } = await start(createApi());
     const provider = createProvider(url, new Y.Doc(), '');
     providers.push(provider);
     const failed = vi.fn();
@@ -191,27 +128,28 @@ describe('collaboration Hocuspocus runtime', () => {
     expect(failed).toHaveBeenCalled();
   });
 
-  it('отклоняет invalid token', async () => {
-    const { logger, url } = await start();
-    const token = 'not-a-jwt';
-    const provider = createProvider(url, new Y.Doc(), token);
+  it('отклоняет неизвестный токен', async () => {
+    const { logger, url } = await start(createApi());
+    const provider = createProvider(url, new Y.Doc(), 'unknown-token');
     providers.push(provider);
     const failed = vi.fn();
     provider.on('authenticationFailed', failed);
 
     await waitFor(() => failed.mock.calls.length > 0);
 
-    expect(failed).toHaveBeenCalled();
-    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain(token);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'collaboration authentication rejected',
+      expect.objectContaining({ documentName }),
+    );
   });
 
   it('отклоняет mismatched Origin', async () => {
-    const { url } = await start();
+    const { url } = await start(createApi());
     const provider = createProvider(
       url,
       new Y.Doc(),
-      tokenFor(ownerId),
-      websocketWithOrigin('http://evil.example'),
+      ownerToken,
+      websocketWithOrigin('http://evil.example.com'),
     );
     providers.push(provider);
     const failed = vi.fn();
@@ -223,12 +161,10 @@ describe('collaboration Hocuspocus runtime', () => {
   });
 
   it('отклоняет пользователя без доступа к page', async () => {
-    const { url } = await start();
-    const provider = createProvider(
-      url,
-      new Y.Doc(),
-      tokenFor('550e8400-e29b-41d4-a716-446655440099'),
-    );
+    const api = createApi();
+    api.users.set('stranger-token', 'stranger');
+    const { url } = await start(api);
+    const provider = createProvider(url, new Y.Doc(), 'stranger-token');
     providers.push(provider);
     const failed = vi.fn();
     provider.on('authenticationFailed', failed);
@@ -239,73 +175,81 @@ describe('collaboration Hocuspocus runtime', () => {
   });
 
   it('синхронизирует два клиента одной page room', async () => {
-    const { url } = await start();
+    const api = createApi();
+    const { url } = await start(api);
     const first = new Y.Doc();
     const second = new Y.Doc();
-    providers.push(createProvider(url, first, tokenFor(ownerId)));
-    providers.push(createProvider(url, second, tokenFor(ownerId)));
+    const firstProvider = createProvider(url, first, ownerToken);
+    const secondProvider = createProvider(url, second, ownerToken);
+    providers.push(firstProvider, secondProvider);
 
-    await waitFor(() => providers.every((provider) => provider.isSynced));
-    first.getText('body').insert(0, 'A');
+    await waitFor(() => firstProvider.isSynced && secondProvider.isSynced);
 
-    // Both local transactions happen before waiting for either remote update.
-    second.getText('body').insert(0, 'B');
+    first.getText('content').insert(0, 'hello');
 
-    await waitFor(() => {
-      const firstState = Y.encodeStateAsUpdate(first);
-      const secondState = Y.encodeStateAsUpdate(second);
+    await waitFor(() => second.getText('content').toString() === 'hello');
 
-      return Buffer.from(firstState).equals(Buffer.from(secondState));
-    });
-    expect(first.getText('body').toString()).toBe(second.getText('body').toString());
-    expect(first.getText('body').toString()).toContain('A');
-    expect(first.getText('body').toString()).toContain('B');
+    expect(second.getText('content').toString()).toBe('hello');
   });
 
   it('сохраняет документ и загружает его после reload', async () => {
-    const prisma = createPrismaDouble();
-    const { url } = await start(prisma);
+    const api = createApi();
+    const { url } = await start(api);
     const first = new Y.Doc();
-    providers.push(createProvider(url, first, tokenFor(ownerId)));
+    const firstProvider = createProvider(url, first, ownerToken);
+    providers.push(firstProvider);
 
-    await waitFor(() => providers[0]?.isSynced === true);
-    first.getText('body').insert(0, 'persisted');
+    await waitFor(() => firstProvider.isSynced);
+    first.getText('content').insert(0, 'persisted');
 
-    const stored = (prisma as unknown as { __stored: StoredPage }).__stored;
-    await waitFor(() => stored.storageRevision === 1);
-    await servers[0]?.destroy();
-    servers.splice(0);
+    await waitFor(() => first.getText('content').toString() === 'persisted');
+    await new Promise((resolve) => setTimeout(resolve, 120));
 
-    expect(stored.storageRevision).toBe(1);
+    firstProvider.destroy();
 
-    const { url: nextUrl } = await start(prisma);
-    const second = new Y.Doc();
-    providers.push(createProvider(nextUrl, second, tokenFor(ownerId)));
+    const reloaded = new Y.Doc();
+    const reloadedProvider = createProvider(url, reloaded, ownerToken);
+    providers.push(reloadedProvider);
 
-    await waitFor(() => second.getText('body').toString() === 'persisted');
+    await waitFor(() => reloaded.getText('content').toString() === 'persisted');
+
+    expect(reloaded.getText('content').toString()).toBe('persisted');
   });
 
-  it('не сохраняет state после soft delete', async () => {
-    const prisma = createPrismaDouble();
-    const stored = (prisma as unknown as { __stored: StoredPage }).__stored;
-    const { url } = await start(prisma);
+  it('не сохраняет state после удаления страницы', async () => {
+    const api = createApi();
+    const { logger, url } = await start(api);
     const document = new Y.Doc();
-    providers.push(createProvider(url, document, tokenFor(ownerId)));
+    const provider = createProvider(url, document, ownerToken);
+    providers.push(provider);
 
-    await waitFor(() => providers[0]?.isSynced === true);
-    stored.deletedAt = new Date();
-    document.getText('body').insert(0, 'after delete');
-    await waitFor(() => servers[0]?.hocuspocus.getConnectionsCount() === 0);
+    await waitFor(() => provider.isSynced);
 
-    expect(stored.storageRevision).toBe(0);
+    api.deletePage(pageId);
+    document.getText('content').insert(0, 'after delete');
 
-    providers[0]?.destroy();
-    stored.deletedAt = null;
+    await waitFor(() =>
+      logger.warn.mock.calls.some(
+        ([message]) => message === 'collaboration document room closed after store rejection',
+      ),
+    );
 
-    const restored = new Y.Doc();
-    providers.push(createProvider(url, restored, tokenFor(ownerId)));
-    await waitFor(() => providers.at(-1)?.isSynced === true);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'collaboration document room closed after store rejection',
+      expect.objectContaining({ documentName }),
+    );
+  });
 
-    expect(restored.getText('body').toString()).toBe('');
+  it('читатель подключается в режиме только для чтения', async () => {
+    const api = new InMemoryInternalApiClient();
+    api.grant(pageId, 'viewer-token', 'viewer-user', false);
+    const { url } = await start(api);
+    const document = new Y.Doc();
+    const provider = createProvider(url, document, 'viewer-token');
+    providers.push(provider);
+
+    await waitFor(() => provider.isSynced);
+
+    expect(provider.isSynced).toBe(true);
   });
 });

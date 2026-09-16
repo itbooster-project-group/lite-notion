@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, type ConfigType } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
-import { PassportModule } from '@nestjs/passport';
 
 import { applicationConfig } from '../config/application-config';
 import { DatabaseModule } from '../database/database.module';
@@ -12,8 +11,7 @@ import { AuthRepository, PrismaAuthRepository } from './auth.repository';
 import { AuthService } from './auth.service';
 import { PasswordService } from './crypto/password.service';
 import { TokenService } from './crypto/token.service';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { JwtStrategy } from './jwt.strategy';
+import { GatewayIdentityGuard } from './guards/gateway-identity.guard';
 import { SessionService } from './session/session.service';
 import { SessionCleanupService } from './session/session-cleanup.service';
 
@@ -21,7 +19,6 @@ import { SessionCleanupService } from './session/session-cleanup.service';
   controllers: [AuthController],
   imports: [
     DatabaseModule,
-    PassportModule,
     UsersModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -31,14 +28,13 @@ import { SessionCleanupService } from './session/session-cleanup.service';
   ],
   providers: [
     AuthService,
-    JwtStrategy,
     PasswordService,
     SessionCleanupService,
     SessionService,
     TokenService,
     { provide: AuthRepository, useClass: PrismaAuthRepository },
     // Закрывает все маршруты приложения; публичные помечаются через @Public().
-    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: GatewayIdentityGuard },
   ],
   exports: [TokenService],
 })

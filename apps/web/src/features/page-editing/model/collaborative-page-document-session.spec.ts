@@ -200,6 +200,79 @@ describe('collaborative page document session', () => {
     expect(connect).toHaveBeenCalledOnce();
     session.destroy();
   });
+
+  describe('обновление токена для серверного запроса', () => {
+    const jwtWith = (expiresInMs: number) => {
+      const payload = { exp: Math.floor((Date.now() + expiresInMs) / 1000) };
+
+      return `header.${btoa(JSON.stringify(payload))}.signature`;
+    };
+
+    const tokenFrom = (options: {
+      getAccessToken: () => string | undefined;
+      refreshAccessToken: () => Promise<void>;
+    }) => {
+      let captured: (() => Promise<string>) | undefined;
+
+      const session = createCollaborativePageDocumentSession({
+        roomName: 'page:page-id',
+        url: 'ws://localhost:8080/collaboration',
+        getAccessToken: options.getAccessToken,
+        refreshAccessToken: options.refreshAccessToken,
+        transportFactory: (transportOptions) => {
+          captured = transportOptions.token;
+
+          return {
+            provider: { awareness: null, connect: vi.fn() } as unknown as CollaborationProvider,
+            destroy: vi.fn(),
+          };
+        },
+      });
+
+      return { captured, session };
+    };
+
+    it('возвращает действующий токен без обновления', async () => {
+      const refreshAccessToken = vi.fn(async () => undefined);
+      const valid = jwtWith(900_000);
+      const { captured, session } = tokenFrom({ getAccessToken: () => valid, refreshAccessToken });
+
+      await expect(captured?.()).resolves.toBe(valid);
+      expect(refreshAccessToken).not.toHaveBeenCalled();
+      session.destroy();
+    });
+
+    it('обновляет токен, который вот-вот истечёт', async () => {
+      const fresh = jwtWith(900_000);
+      let current = jwtWith(5_000);
+      const refreshAccessToken = vi.fn(async () => {
+        current = fresh;
+      });
+      const { captured, session } = tokenFrom({
+        getAccessToken: () => current,
+        refreshAccessToken,
+      });
+
+      await expect(captured?.()).resolves.toBe(fresh);
+      expect(refreshAccessToken).toHaveBeenCalledTimes(1);
+      session.destroy();
+    });
+
+    it('обновляет токен, когда его нет вовсе', async () => {
+      const fresh = jwtWith(900_000);
+      let current: string | undefined;
+      const refreshAccessToken = vi.fn(async () => {
+        current = fresh;
+      });
+      const { captured, session } = tokenFrom({
+        getAccessToken: () => current,
+        refreshAccessToken,
+      });
+
+      await expect(captured?.()).resolves.toBe(fresh);
+      session.destroy();
+    });
+  });
 });
 
 function createTestProvider(connect: () => Promise<unknown>): CollaborationProvider {

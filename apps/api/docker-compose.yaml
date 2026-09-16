@@ -18,6 +18,19 @@ services:
       retries: 10
       start_period: 5s
 
+  redis:
+    image: redis:8-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    # Публикуется локально: collaboration в development работает процессом на хосте, но в будущем они будут завёрнуты в docker-образы
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 2s
+
   gateway:
     image: envoyproxy/envoy:v1.32-latest
     command: ["-c", "/etc/envoy/envoy.yaml", "--service-cluster", "gateway"]

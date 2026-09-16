@@ -11,12 +11,12 @@ const missingId = '33333333-3333-4333-8333-333333333333';
 
 describe('page permissions HTTP contract', () => {
   let context: HttpTestContext;
-  let authorization: string;
+  let authorization: Record<string, string>;
   let pageId: string;
 
   beforeEach(async () => {
     context = await createHttpTestContext();
-    authorization = `Bearer ${await context.signAccessToken(owner)}`;
+    authorization = context.identityOf(owner);
 
     const project = await context.projects.create({ name: 'Workspace', ownerId: owner });
     const page = await context.pages.insert({
@@ -41,19 +41,19 @@ describe('page permissions HTTP contract', () => {
   const grant = (body: object, auth = authorization) =>
     request(context.app.getHttpServer())
       .put(`/api/v1/pages/${pageId}/permissions`)
-      .set('Authorization', auth)
+      .set(auth)
       .send(body);
 
   const list = (auth = authorization) =>
     request(context.app.getHttpServer())
       .get(`/api/v1/pages/${pageId}/permissions`)
-      .set('Authorization', auth)
+      .set(auth)
       .send();
 
   const revoke = (userId: string, auth = authorization) =>
     request(context.app.getHttpServer())
       .delete(`/api/v1/pages/${pageId}/permissions/${userId}`)
-      .set('Authorization', auth)
+      .set(auth)
       .send();
 
   it('выдаёт разрешение и возвращает его', async () => {
@@ -140,10 +140,10 @@ describe('page permissions HTTP contract', () => {
   });
 
   describe('управлять доступом может только владелец', () => {
-    let editorAuthorization: string;
+    let editorAuthorization: Record<string, string>;
 
     beforeEach(async () => {
-      editorAuthorization = `Bearer ${await context.signAccessToken(teammate)}`;
+      editorAuthorization = context.identityOf(teammate);
       context.permissions.grant(pageId, teammate, 'editor');
     });
 
@@ -165,7 +165,7 @@ describe('page permissions HTTP contract', () => {
     });
 
     it('посторонний получает 404, а не 403', async () => {
-      const outsiderAuthorization = `Bearer ${await context.signAccessToken(outsider)}`;
+      const outsiderAuthorization = context.identityOf(outsider);
 
       expect((await list(outsiderAuthorization)).status).toBe(404);
       expect((await revoke(teammate, outsiderAuthorization)).status).toBe(404);
@@ -173,12 +173,12 @@ describe('page permissions HTTP contract', () => {
   });
 
   it('недоступная и несуществующая страница неразличимы', async () => {
-    const outsiderAuthorization = `Bearer ${await context.signAccessToken(outsider)}`;
+    const outsiderAuthorization = context.identityOf(outsider);
 
     const inaccessible = await list(outsiderAuthorization);
     const missing = await request(context.app.getHttpServer())
       .get(`/api/v1/pages/${missingId}/permissions`)
-      .set('Authorization', outsiderAuthorization)
+      .set(outsiderAuthorization)
       .send();
 
     expect(inaccessible.status).toBe(404);

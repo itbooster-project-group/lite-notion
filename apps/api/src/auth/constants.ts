@@ -1,8 +1,5 @@
 import { API_GLOBAL_PREFIX } from '../common/constants';
 
-/** Имя passport-стратегии, на которую опирается `JwtAuthGuard`. */
-export const JWT_STRATEGY_NAME = 'jwt';
-
 /**
  * Единственное сообщение для обеих причин отказа при входе. Разные тексты
  * позволили бы перебором выяснить, какие адреса зарегистрированы.

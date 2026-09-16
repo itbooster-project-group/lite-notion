@@ -66,9 +66,11 @@ export function createCollaborativePageDocumentSession({
     notifyPresence();
     notify();
   });
+  // Сервер вправе запросить токен в любой момент жизни соединения, поэтому вернуть
+  // истекающий нельзя: он оборвал бы исправное соединение.
   const token = async () => {
     const current = getAccessToken();
-    if (current) return current;
+    if (current && !expiresSoon(current)) return current;
     await refreshAccessToken();
     const refreshed = getAccessToken();
     if (!refreshed) throw new Error('Authentication unavailable');
@@ -211,6 +213,23 @@ function samePresenceUsers(
         user.color === next[index]?.color,
     )
   );
+}
+
+/** Запас на дорогу до сервера и на разброс часов. */
+const TOKEN_REFRESH_LEAD_MS = 60_000;
+
+function expiresSoon(accessToken: string): boolean {
+  const [, payload] = accessToken.split('.');
+
+  if (!payload) return false;
+
+  try {
+    const { exp } = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+
+    return typeof exp === 'number' && exp * 1000 - Date.now() < TOKEN_REFRESH_LEAD_MS;
+  } catch {
+    return false;
+  }
 }
 
 function isValidCollaborationUrl(value: string): boolean {

@@ -1,5 +1,5 @@
-import { PageRole } from '@lite-notion/page-permissions';
 import { ApiProperty } from '@nestjs/swagger';
+import { PageRole } from '../../page-permissions/constants';
 import type { PageRecord } from '../pages.repository';
 import type { AccessiblePageTreeNode, PageTreeNode } from '../pages.service';
 

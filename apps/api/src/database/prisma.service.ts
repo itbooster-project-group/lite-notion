@@ -1,4 +1,3 @@
-import { createPrismaClientOptions, PrismaClient } from '@lite-notion/database';
 import {
   Inject,
   Injectable,
@@ -6,8 +5,8 @@ import {
   type OnModuleDestroy,
   type OnModuleInit,
 } from '@nestjs/common';
-
 import { type ApplicationConfig, applicationConfig } from '../config/application-config';
+import { createPrismaClientOptions, PrismaClient } from './client';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleDestroy, OnModuleInit {

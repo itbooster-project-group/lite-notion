@@ -1,7 +1,10 @@
-import { DOCUMENT_MAX_BYTES, type PrismaClient } from '@lite-notion/database';
 import * as Y from 'yjs';
 
+import { ApiDeniedError, type InternalApiClient } from '../api/internal-api-client.js';
 import { parsePageDocumentName } from './document-name.js';
+
+/** Предел итогового Yjs state. WebSocket payload ограничивается отдельно. */
+export const DOCUMENT_MAX_BYTES = 1024 * 1024;
 
 export class DocumentLoadError extends Error {
   constructor() {
@@ -21,66 +24,55 @@ export class DocumentSizeLimitExceededError extends Error {
   }
 }
 
+/**
+ * Содержимое ходит через внутренние маршруты API под сервисным креденшлом:
+ * у отложенного сохранения пользователя в скоупе нет.
+ */
 export class PageDocumentPersistence {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(private readonly api: InternalApiClient) {}
 
   async load(documentName: string): Promise<Y.Doc> {
     const { pageId } = parsePageDocumentName(documentName);
-    const stored = await this.prisma.pageDocument.findFirst({
-      select: { yjsState: true },
-      where: {
-        page: { deletedAt: null },
-        pageId,
-      },
-    });
 
-    if (!stored) {
-      throw new DocumentLoadError();
+    try {
+      return this.createDocumentFromState(await this.api.readDocument(pageId));
+    } catch (error) {
+      if (error instanceof ApiDeniedError) {
+        throw new DocumentLoadError();
+      }
+
+      throw error;
     }
-
-    return this.createDocumentFromState(stored.yjsState);
   }
 
   async store(documentName: string, document: Y.Doc): Promise<void> {
     const { pageId } = parsePageDocumentName(documentName);
-    const state = this.toArrayBufferBytes(Y.encodeStateAsUpdate(document));
+    const state = Y.encodeStateAsUpdate(document);
 
     if (state.byteLength > DOCUMENT_MAX_BYTES) {
       throw new DocumentSizeLimitExceededError();
     }
 
-    const result = await this.prisma.pageDocument.updateMany({
-      data: {
-        storageRevision: { increment: 1 },
-        updatedAt: new Date(),
-        yjsState: state,
-      },
-      where: {
-        page: { deletedAt: null },
-        pageId,
-      },
-    });
+    try {
+      await this.api.replaceDocument(pageId, state);
+    } catch (error) {
+      // Отказ по инварианту живости страницы: комнату надо завершить, а не повторять.
+      if (error instanceof ApiDeniedError) {
+        throw new DocumentStoreSkippedError();
+      }
 
-    if (result.count === 0) {
-      throw new DocumentStoreSkippedError();
+      throw error;
     }
   }
 
   private createDocumentFromState(state: Uint8Array): Y.Doc {
     const document = new Y.Doc();
 
-    // Пустой yjsState — валидное состояние нового документа: applyUpdate на нём бросает ошибку.
+    // Пустой state — валидное состояние нового документа: applyUpdate на нём бросает.
     if (state.byteLength > 0) {
       Y.applyUpdate(document, state);
     }
 
     return document;
-  }
-
-  private toArrayBufferBytes(state: Uint8Array): Uint8Array<ArrayBuffer> {
-    const copy = new Uint8Array(state.byteLength);
-    copy.set(state);
-
-    return copy;
   }
 }

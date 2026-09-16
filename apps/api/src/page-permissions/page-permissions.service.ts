@@ -1,15 +1,14 @@
-import { PageRole, roleAtLeast } from '@lite-notion/page-permissions';
 import { Inject, Injectable } from '@nestjs/common';
-
 import { PageNotFoundError } from '../pages/errors';
 import { UsersService } from '../users/users.service';
 import type { GrantableRole } from './constants';
+import { PageRole } from './constants';
 import {
   PermissionNotFoundError,
   PermissionOwnerGrantError,
   PermissionUserNotFoundError,
 } from './errors';
-import { assertRole } from './helpers';
+import { assertRole, roleAtLeast } from './helpers';
 import {
   type AccessiblePageRow,
   type PagePermissionRecord,

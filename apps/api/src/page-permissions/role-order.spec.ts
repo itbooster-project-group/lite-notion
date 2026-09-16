@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { PageRole, roleAtLeast } from './roles';
+import { PageRole } from './constants';
+import { roleAtLeast } from './helpers';
 
 describe('roleAtLeast', () => {
   it('считает роль достаточной для неё самой', () => {

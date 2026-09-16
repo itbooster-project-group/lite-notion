@@ -1,12 +1,19 @@
-import { type PageRole, roleAtLeast } from '@lite-notion/page-permissions';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
-
 import { PageNotFoundError, PageRoleInsufficientError } from '../pages/errors';
+import { type PageRole, ROLE_ORDER } from './constants';
 import {
   PermissionNotFoundError,
   PermissionOwnerGrantError,
   PermissionUserNotFoundError,
 } from './errors';
+
+/**
+ * Хватает ли роли. Отдельная функция, а не сравнение строк по месту: иначе правило
+ * расползётся по вызывающим условиями вида `role === 'editor' || role === 'owner'`.
+ */
+export function roleAtLeast(actual: PageRole, required: PageRole): boolean {
+  return ROLE_ORDER.indexOf(actual) >= ROLE_ORDER.indexOf(required);
+}
 
 /**
  * Переводит роль в решение. Отдельная функция, потому что вызывается и сервисом, и

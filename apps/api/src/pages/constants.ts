@@ -1,4 +1,4 @@
-export { DOCUMENT_MAX_BYTES, TIPTAP_SCHEMA_VERSION } from '@lite-notion/database';
+export { DOCUMENT_MAX_BYTES, TIPTAP_SCHEMA_VERSION } from '../database/constants';
 
 /**
  * Алфавит fractional rank в порядке ASCII-кодов; приложение сравнивает ранги по
