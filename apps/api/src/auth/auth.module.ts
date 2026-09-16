@@ -40,5 +40,6 @@ import { SessionCleanupService } from './session/session-cleanup.service';
     // Закрывает все маршруты приложения; публичные помечаются через @Public().
     { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],
+  exports: [TokenService],
 })
 export class AuthModule {}

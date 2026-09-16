@@ -8,6 +8,7 @@ export interface ApplicationConfig {
   corsOrigin: string;
   databaseConnectionTimeoutMs: number;
   databaseUrl: string;
+  internalServiceToken: string;
   jwtSecret: string;
   nodeEnvironment: NodeEnvironment;
   port: number;
@@ -23,6 +24,7 @@ export function createApplicationConfig(environment: Record<string, unknown>): A
     corsOrigin: validatedEnvironment.CORS_ORIGIN,
     databaseConnectionTimeoutMs: validatedEnvironment.DATABASE_CONNECTION_TIMEOUT_MS,
     databaseUrl: validatedEnvironment.DATABASE_URL,
+    internalServiceToken: validatedEnvironment.INTERNAL_SERVICE_TOKEN,
     jwtSecret: validatedEnvironment.JWT_SECRET,
     nodeEnvironment: validatedEnvironment.NODE_ENV,
     port: validatedEnvironment.PORT,

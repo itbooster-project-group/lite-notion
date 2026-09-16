@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { applicationConfig } from './config/application-config';
 import { HealthModule } from './health/health.module';
 import { HttpExceptionFilter } from './http-exception.filter';
+import { InternalModule } from './internal/internal.module';
 import { PageDocumentModule } from './pages/page-document/page-document.module';
 import { PagesModule } from './pages/pages.module';
 import { ProjectsModule } from './projects/projects.module';
@@ -27,6 +28,10 @@ import { TrashCleanupModule } from './trash/trash-cleanup.module';
     PageDocumentModule,
     ProjectsModule,
     TrashCleanupModule,
+    // Последним: модуль тянет PageDocumentModule и PagePermissionsModule, и более
+    // ранняя позиция переставила бы порядок регистрации контроллеров, а с ним и
+    // порядок путей в снимке OpenAPI.
+    InternalModule,
   ],
   providers: [
     {

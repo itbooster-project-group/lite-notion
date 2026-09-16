@@ -46,6 +46,20 @@ export class PageDocumentService {
   }
 
   /**
+   * Без проверки роли — для collaboration runtime. Наружу их выставляет только
+   * маршрут под сервисным креденшлом, а роль проверена при допуске в комнату:
+   * `onLoadDocument` срабатывает лишь для первого подключившегося, поэтому
+   * проверка здесь всё равно не покрыла бы остальных.
+   */
+  async readUnchecked(pageId: string): Promise<PageDocumentRecord> {
+    return this.require(await this.documents.find(pageId));
+  }
+
+  async replaceYjsStateUnchecked(pageId: string, yjsState: Bytes): Promise<PageDocumentRecord> {
+    return this.require(await this.documents.replaceYjsState(pageId, yjsState));
+  }
+
+  /**
    * Связь «страница — документ» обязательна, поэтому после успешной проверки
    * страницы строка обязана существовать. `null` здесь означает, что страница
    * исчезла между двумя запросами: это тот же `404`, а не внутренняя ошибка.

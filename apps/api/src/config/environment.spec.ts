@@ -8,6 +8,7 @@ const validEnvironment: Record<string, unknown> = {
   CORS_ORIGIN: 'https://notes.example.com',
   DATABASE_CONNECTION_TIMEOUT_MS: '5000',
   DATABASE_URL: 'postgresql://lite_notion:secret@database.example.com:5432/lite_notion',
+  INTERNAL_SERVICE_TOKEN: 'i'.repeat(32),
   JWT_SECRET: 'a'.repeat(32),
   NODE_ENV: 'production',
   PORT: '4100',
@@ -21,6 +22,7 @@ describe('validateEnvironment', () => {
     'CORS_ORIGIN',
     'DATABASE_URL',
     'DATABASE_CONNECTION_TIMEOUT_MS',
+    'INTERNAL_SERVICE_TOKEN',
     'JWT_SECRET',
     'ACCESS_TOKEN_TTL_S',
     'REFRESH_TOKEN_TTL_S',
@@ -46,6 +48,7 @@ describe('validateEnvironment', () => {
       CORS_ORIGIN: 'https://notes.example.com',
       DATABASE_CONNECTION_TIMEOUT_MS: 5000,
       DATABASE_URL: 'postgresql://lite_notion:secret@database.example.com:5432/lite_notion',
+      INTERNAL_SERVICE_TOKEN: 'i'.repeat(32),
       JWT_SECRET: 'a'.repeat(32),
       NODE_ENV: NodeEnvironment.Production,
       PORT: 4100,
@@ -67,6 +70,8 @@ describe('validateEnvironment', () => {
     ['DATABASE_CONNECTION_TIMEOUT_MS', '60001'],
     ['JWT_SECRET', 'a'.repeat(31)],
     ['JWT_SECRET', ''],
+    ['INTERNAL_SERVICE_TOKEN', 'i'.repeat(31)],
+    ['INTERNAL_SERVICE_TOKEN', ''],
     ['ACCESS_TOKEN_TTL_S', 'not-a-number'],
     ['ACCESS_TOKEN_TTL_S', '59'],
     ['ACCESS_TOKEN_TTL_S', '3601'],
@@ -106,6 +111,15 @@ describe('validateEnvironment', () => {
         JWT_SECRET: 'secret-value',
       }),
     ).toThrowError(/^(?!.*secret-value).*Environment validation failed: JWT_SECRET/);
+  });
+
+  it('не раскрывает значение INTERNAL_SERVICE_TOKEN в ошибке', () => {
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        INTERNAL_SERVICE_TOKEN: 'service-value',
+      }),
+    ).toThrowError(/^(?!.*service-value).*Environment validation failed: INTERNAL_SERVICE_TOKEN/);
   });
 
   it.each([

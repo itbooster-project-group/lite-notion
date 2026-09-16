@@ -4,6 +4,7 @@ import { createApplicationConfig } from './application-config';
 import { NodeEnvironment } from './environment';
 
 const jwtSecret = 'local-development-jwt-secret-value';
+const internalServiceToken = 'local-development-internal-service-token';
 
 describe('createApplicationConfig', () => {
   it('маппит конфигурацию из env-шаблона во внутренний контракт', () => {
@@ -14,6 +15,7 @@ describe('createApplicationConfig', () => {
         CORS_ORIGIN: 'http://localhost:3000',
         DATABASE_CONNECTION_TIMEOUT_MS: '5000',
         DATABASE_URL: 'postgresql://lite_notion:lite_notion@localhost:5432/lite_notion',
+        INTERNAL_SERVICE_TOKEN: internalServiceToken,
         JWT_SECRET: jwtSecret,
         NODE_ENV: 'development',
         PORT: '3001',
@@ -25,6 +27,7 @@ describe('createApplicationConfig', () => {
       corsOrigin: 'http://localhost:3000',
       databaseConnectionTimeoutMs: 5000,
       databaseUrl: 'postgresql://lite_notion:lite_notion@localhost:5432/lite_notion',
+      internalServiceToken,
       jwtSecret,
       nodeEnvironment: NodeEnvironment.Development,
       port: 3001,
@@ -40,6 +43,7 @@ describe('createApplicationConfig', () => {
         CORS_ORIGIN: 'https://notes.example.com',
         DATABASE_CONNECTION_TIMEOUT_MS: '2500',
         DATABASE_URL: 'postgres://app:secret@database.example.com:5432/notes',
+        INTERNAL_SERVICE_TOKEN: 'production-internal-service-token-32ch',
         JWT_SECRET: 'production-jwt-secret-value-32-chars',
         NODE_ENV: 'production',
         PORT: '4100',
@@ -52,6 +56,7 @@ describe('createApplicationConfig', () => {
       corsOrigin: 'https://notes.example.com',
       databaseConnectionTimeoutMs: 2500,
       databaseUrl: 'postgres://app:secret@database.example.com:5432/notes',
+      internalServiceToken: 'production-internal-service-token-32ch',
       jwtSecret: 'production-jwt-secret-value-32-chars',
       nodeEnvironment: NodeEnvironment.Production,
       port: 4100,
@@ -67,6 +72,7 @@ describe('createApplicationConfig', () => {
         CORS_ORIGIN: 'http://localhost:3000',
         DATABASE_CONNECTION_TIMEOUT_MS: '5000',
         DATABASE_URL: 'postgresql://lite_notion:lite_notion@localhost:5432/lite_notion',
+        INTERNAL_SERVICE_TOKEN: internalServiceToken,
         JWT_SECRET: jwtSecret,
         NODE_ENV: 'development',
         PORT: 'not-a-number',

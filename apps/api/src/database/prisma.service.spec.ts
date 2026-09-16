@@ -11,6 +11,7 @@ const config: ApplicationConfig = {
   corsOrigin: 'http://localhost:3000',
   databaseConnectionTimeoutMs: 100,
   databaseUrl: 'postgresql://lite_notion:lite_notion@localhost:5432/lite_notion',
+  internalServiceToken: 'internal-service-token-value-32-chars',
   jwtSecret: 'test-jwt-secret-value-at-least-32-chars',
   nodeEnvironment: NodeEnvironment.Test,
   port: 3001,

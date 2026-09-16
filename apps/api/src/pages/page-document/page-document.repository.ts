@@ -43,6 +43,9 @@ export abstract class PageDocumentRepository {
 
   /** `null`, когда страницы нет либо она лежит в корзине. */
   abstract replace(input: ReplaceDocumentInput): Promise<PageDocumentRecord | null>;
+
+  /** В отличие от `replace`, не трогает `tiptapSchemaVersion`. */
+  abstract replaceYjsState(pageId: string, yjsState: Bytes): Promise<PageDocumentRecord | null>;
 }
 
 @Injectable()
@@ -81,5 +84,14 @@ export class PrismaPageDocumentRepository extends PageDocumentRepository {
     });
 
     return count === 0 ? null : this.find(input.pageId);
+  }
+
+  async replaceYjsState(pageId: string, yjsState: Bytes): Promise<PageDocumentRecord | null> {
+    const { count } = await this.client.pageDocument.updateMany({
+      data: { storageRevision: { increment: 1 }, yjsState },
+      where: { page: { deletedAt: null }, pageId },
+    });
+
+    return count === 0 ? null : this.find(pageId);
   }
 }
