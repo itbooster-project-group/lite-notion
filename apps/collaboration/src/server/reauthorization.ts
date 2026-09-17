@@ -12,12 +12,10 @@ export interface ReauthorizationTimings {
 }
 
 export interface ReauthorizationSchedule {
-  /** Срок из аутентификации запоминается до того, как появится соединение. */
-  remember(documentName: string, expiresAt: Date): void;
-  arm(connection: Connection, documentName: string, onGiveUp: () => void): void;
-  renew(connection: Connection, expiresAt: Date, onGiveUp: () => void): void;
+  /** Срок берётся из личности этого соединения: у соседа по комнате он свой. */
+  arm(connection: Connection, expiresAt: Date, onGiveUp: () => void): void;
   /** `true`, пока грейс-окно недоступности не исчерпано. */
-  tolerate(connection: Connection): boolean;
+  tolerate(connection: Connection, onGiveUp: () => void): boolean;
   forget(socketId: string): void;
   stop(): void;
 }
@@ -46,7 +44,6 @@ export function createReauthorizationSchedule(
   now: () => number = Date.now,
 ): ReauthorizationSchedule {
   const tracked = new Map<string, Tracked>();
-  const pendingExpiry = new Map<string, Date>();
 
   const delayUntil = (expiresAt: Date): number => {
     const jitter = Math.floor(Math.random() * timings.jitterMs);
@@ -62,55 +59,55 @@ export function createReauthorizationSchedule(
     }
   };
 
-  const schedule = (connection: Connection, expiresAt: Date, onGiveUp: () => void): void => {
+  /**
+   * Запрос токена и ожидание ответа всегда идут вместе: молчащий клиент обязан
+   * терять соединение и на плановом продлении, и на повторе после недоступности.
+   */
+  const requestToken = (connection: Connection, onGiveUp: () => void): void => {
+    connection.requestToken();
+
+    const entry = tracked.get(connection.socketId);
+
+    if (entry === undefined) {
+      return;
+    }
+
+    const responseTimer = setTimeout(() => {
+      onGiveUp();
+      connection.close({ code: 4001, reason: 'token refresh timed out' });
+    }, timings.responseGraceMs);
+
+    responseTimer.unref?.();
+    tracked.set(connection.socketId, { ...entry, responseTimer });
+  };
+
+  const schedule = (
+    connection: Connection,
+    delayMs: number,
+    unavailableSince: number | undefined,
+    onGiveUp: () => void,
+  ): void => {
     const existing = tracked.get(connection.socketId);
 
     if (existing) {
       clear(existing);
     }
 
-    const refreshTimer = setTimeout(() => {
-      connection.requestToken();
-
-      const entry = tracked.get(connection.socketId);
-
-      if (entry === undefined) {
-        return;
-      }
-
-      // Клиент может не ответить вовсе: соединение не должно жить дальше молча.
-      const responseTimer = setTimeout(() => {
-        onGiveUp();
-        connection.close({ code: 4001, reason: 'token refresh timed out' });
-      }, timings.responseGraceMs);
-
-      responseTimer.unref?.();
-      tracked.set(connection.socketId, { ...entry, responseTimer });
-    }, delayUntil(expiresAt));
+    const refreshTimer = setTimeout(() => requestToken(connection, onGiveUp), delayMs);
 
     refreshTimer.unref?.();
     tracked.set(connection.socketId, {
       refreshTimer,
       responseTimer: undefined,
-      unavailableSince: undefined,
+      unavailableSince,
     });
   };
 
   return {
-    remember(documentName, expiresAt) {
-      pendingExpiry.set(documentName, expiresAt);
+    arm(connection, expiresAt, onGiveUp) {
+      schedule(connection, delayUntil(expiresAt), undefined, onGiveUp);
     },
-    arm(connection, documentName, onGiveUp) {
-      const expiresAt = pendingExpiry.get(documentName);
-
-      if (expiresAt !== undefined) {
-        schedule(connection, expiresAt, onGiveUp);
-      }
-    },
-    renew(connection, expiresAt, onGiveUp) {
-      schedule(connection, expiresAt, onGiveUp);
-    },
-    tolerate(connection) {
+    tolerate(connection, onGiveUp) {
       const entry = tracked.get(connection.socketId);
 
       if (entry === undefined) {
@@ -123,15 +120,8 @@ export function createReauthorizationSchedule(
         return false;
       }
 
-      clear(entry);
       // Следующая попытка внутри окна: короткая, а не по сроку токена.
-      const refreshTimer = setTimeout(() => connection.requestToken(), timings.responseGraceMs);
-      refreshTimer.unref?.();
-      tracked.set(connection.socketId, {
-        refreshTimer,
-        responseTimer: undefined,
-        unavailableSince: since,
-      });
+      schedule(connection, timings.responseGraceMs, since, onGiveUp);
 
       return true;
     },
@@ -149,7 +139,6 @@ export function createReauthorizationSchedule(
       }
 
       tracked.clear();
-      pendingExpiry.clear();
     },
   };
 }

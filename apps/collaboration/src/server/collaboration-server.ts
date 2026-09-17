@@ -1,4 +1,4 @@
-import { Redis } from '@hocuspocus/extension-redis';
+import type { Redis } from '@hocuspocus/extension-redis';
 import { type Connection, Server } from '@hocuspocus/server';
 
 import {
@@ -16,9 +16,12 @@ import {
   PageDocumentPersistence,
 } from '../documents/persistence.js';
 import type { CollaborationLogger } from '../logging/logger.js';
+import { createBroker } from './broker-readiness.js';
 import { createReauthorizationSchedule, type ReauthorizationSchedule } from './reauthorization.js';
 
 export interface CollaborationContext {
+  /** Срок жизни токена этого соединения, а не последнего вошедшего в комнату. */
+  expiresAt: Date;
   pageAccess: PageAccess;
   sessionId: string;
 }
@@ -30,6 +33,8 @@ export interface CollaborationRuntime {
 
 export interface CollaborationServerOptions {
   address?: string;
+  /** Уже проверенный на доступность брокер: сервер не создаёт второе подключение. */
+  broker?: Redis;
   debounce?: number;
   maxDebounce?: number;
   /** Позволяет тесту управлять временем, не дожидаясь реальных сроков. */
@@ -80,7 +85,7 @@ export function createCollaborationServer(
     ...(typeof options.maxDebounce === 'number' ? { maxDebounce: options.maxDebounce } : {}),
     ...(options.withRedis === false
       ? {}
-      : { extensions: [new Redis({ host: config.redisHost, port: config.redisPort })] }),
+      : { extensions: [options.broker ?? createBroker(config)] }),
     port: config.port,
     quiet: true,
     stopOnSignals: false,
@@ -95,9 +100,7 @@ export function createCollaborationServer(
         const { identity, pageAccess } = await authorize(presented, documentName);
         connectionConfig.readOnly = !pageAccess.canWrite;
 
-        schedule.remember(documentName, identity.expiresAt);
-
-        return { pageAccess, sessionId: identity.sessionId };
+        return { expiresAt: identity.expiresAt, pageAccess, sessionId: identity.sessionId };
       } catch (error) {
         logger.warn('collaboration authentication rejected', {
           documentName,
@@ -110,8 +113,8 @@ export function createCollaborationServer(
      * Соединение открыто — ставим срок, по которому у клиента будет запрошен
      * действующий токен. Без этого решение о доступе жило бы до переподключения.
      */
-    async connected({ connection, documentName }) {
-      schedule.arm(connection, documentName, () => {
+    async connected({ connection, context, documentName }) {
+      schedule.arm(connection, context.expiresAt, () => {
         logger.warn('collaboration connection closed without token refresh', { documentName });
       });
     },
@@ -125,15 +128,21 @@ export function createCollaborationServer(
 
         connection.readOnly = !pageAccess.canWrite;
         connectionConfig.readOnly = !pageAccess.canWrite;
-        schedule.renew(connection, identity.expiresAt, () => {
+        schedule.arm(connection, identity.expiresAt, () => {
           logger.warn('collaboration connection closed without token refresh', { documentName });
         });
 
-        return { pageAccess, sessionId: identity.sessionId };
+        return { expiresAt: identity.expiresAt, pageAccess, sessionId: identity.sessionId };
       } catch (error) {
         // Недоступность API — не отказ: соединение доживает грейс-окно и там
         // получает следующую попытку.
-        if (!(error instanceof ApiDeniedError) && schedule.tolerate(connection)) {
+        const deferred =
+          !(error instanceof ApiDeniedError) &&
+          schedule.tolerate(connection, () => {
+            logger.warn('collaboration connection closed without token refresh', { documentName });
+          });
+
+        if (deferred) {
           logger.warn('collaboration reauthorization deferred', {
             documentName,
             reason: error instanceof Error ? error.constructor.name : 'UnknownError',

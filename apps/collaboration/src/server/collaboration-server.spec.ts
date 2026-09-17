@@ -7,6 +7,7 @@ import { InMemoryInternalApiClient } from '../api/internal-api-client.in-memory.
 import type { CollaborationConfig } from '../config/environment.js';
 import type { CollaborationLogger } from '../logging/logger.js';
 import { createCollaborationServer } from './collaboration-server.js';
+import type { ReauthorizationSchedule } from './reauthorization.js';
 
 const ownerId = '550e8400-e29b-41d4-a716-446655440000';
 const pageId = '550e8400-e29b-41d4-a716-446655440001';
@@ -101,6 +102,7 @@ describe('collaboration Hocuspocus runtime', () => {
 
   async function start(
     api: InMemoryInternalApiClient,
+    schedule?: ReauthorizationSchedule,
   ): Promise<{ logger: TestLogger; url: string }> {
     const logger = createLogger();
     // Redis отключён: синхронизация реплик проверяется отдельным тестом.
@@ -109,6 +111,7 @@ describe('collaboration Hocuspocus runtime', () => {
       debounce: 10,
       maxDebounce: 50,
       withRedis: false,
+      ...(schedule ? { schedule } : {}),
     });
     servers.push(server);
     await server.listen();
@@ -238,6 +241,39 @@ describe('collaboration Hocuspocus runtime', () => {
       'collaboration document room closed after store rejection',
       expect.objectContaining({ documentName }),
     );
+  });
+
+  it('ставит каждому соединению комнаты его собственный срок токена', async () => {
+    const api = createApi();
+    const viewerToken = 'viewer-token';
+    api.grant(pageId, viewerToken, '550e8400-e29b-41d4-a716-446655440002', false);
+    // Разные сроки у двух участников одной комнаты: подмена одного другим была бы видна здесь.
+    api.expiresInMsByToken.set(ownerToken, 600_000);
+    api.expiresInMsByToken.set(viewerToken, 900_000);
+
+    const armed: number[] = [];
+    const schedule: ReauthorizationSchedule = {
+      arm: (_connection, expiresAt) => armed.push(expiresAt.getTime() - Date.now()),
+      forget: () => undefined,
+      stop: () => undefined,
+      tolerate: () => false,
+    };
+    const { url } = await start(api, schedule);
+
+    // Подключаются одновременно: срок, снятый на уровне комнаты, здесь вытеснился бы.
+    await Promise.all(
+      [ownerToken, viewerToken].map(async (token) => {
+        const provider = createProvider(url, new Y.Doc(), token);
+        providers.push(provider);
+        await waitFor(() => provider.isSynced);
+      }),
+    );
+
+    await waitFor(() => armed.length === 2);
+
+    const minutes = armed.map((value) => Math.round(value / 60_000)).sort((a, b) => a - b);
+
+    expect(minutes).toEqual([10, 15]);
   });
 
   it('читатель подключается в режиме только для чтения', async () => {

@@ -1,6 +1,7 @@
 import { InternalApiClient } from './api/internal-api-client.js';
 import { createCollaborationConfig } from './config/environment.js';
 import { consoleLogger } from './logging/logger.js';
+import { assertBrokerReachable, createBroker } from './server/broker-readiness.js';
 import { createCollaborationServer, registerShutdown } from './server/collaboration-server.js';
 
 async function main(): Promise<void> {
@@ -10,7 +11,12 @@ async function main(): Promise<void> {
     serviceToken: config.internalServiceToken,
     timeoutMs: config.apiTimeoutMs,
   });
-  const server = createCollaborationServer(config, api, consoleLogger);
+  const broker = createBroker(config);
+
+  // До listen(): иначе экземпляр примет клиентов и будет работать в изоляции от реплик.
+  await assertBrokerReachable(broker.pub);
+
+  const server = createCollaborationServer(config, api, consoleLogger, { broker });
 
   registerShutdown(server, consoleLogger);
 

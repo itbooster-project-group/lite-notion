@@ -20,6 +20,8 @@ export class InMemoryInternalApiClient {
   readonly users = new Map<string, string>();
   unavailable = false;
   expiresInMs = 900_000;
+  /** Срок конкретного токена: в одной комнате у пользователей он разный. */
+  readonly expiresInMsByToken = new Map<string, number>();
   authenticateCalls = 0;
   authorizeCalls = 0;
 
@@ -64,7 +66,9 @@ export class InMemoryInternalApiClient {
         }
 
         return {
-          expiresAt: new Date(Date.now() + this.expiresInMs),
+          expiresAt: new Date(
+            Date.now() + (this.expiresInMsByToken.get(token) ?? this.expiresInMs),
+          ),
           sessionId: 'session',
           userId,
         };
