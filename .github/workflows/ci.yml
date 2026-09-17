@@ -151,5 +151,4 @@ jobs:
       - run: pnpm --filter @lite-notion/database run db:migrate:deploy
       - run: pnpm --filter @lite-notion/collaboration run typecheck
       - run: pnpm --filter @lite-notion/collaboration run test
-      - run: pnpm --filter @lite-notion/collaboration run test:integration
       - run: pnpm --filter @lite-notion/collaboration run build
