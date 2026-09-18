@@ -6,6 +6,7 @@ node_modules/
 .next/
 dist/
 coverage/
+test-results/
 *.tsbuildinfo
 apps/api/src/generated/prisma/
 packages/database/src/generated/prisma/
@@ -14,6 +15,7 @@ apps/web/next-env.d.ts
 # Local environment
 .env
 .env.local
+.env.e2e
 .env.*.local
 !.env.example
 

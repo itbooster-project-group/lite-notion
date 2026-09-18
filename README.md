@@ -7,6 +7,7 @@
 - `apps/web` — Next.js-приложение;
 - `apps/api` — NestJS API;
 - `apps/collaboration` — самостоятельный Hocuspocus/WebSocket runtime для Yjs-синхронизации;
+- `apps/gateway` — Envoy gateway для единого HTTP/WebSocket entrypoint;
 - PostgreSQL 18 в Docker Compose и Prisma для доступа к данным;
 - OpenAPI-driven TanStack Query client и MSW mocks для frontend;
 - общие команды pnpm, TypeScript, Biome и Vitest;
@@ -56,14 +57,16 @@ cp apps/web/.env.example apps/web/.env.local
 pnpm dev
 ```
 
-Команда поднимает PostgreSQL, дожидается его healthcheck и затем одновременно запускает:
+Команда поднимает PostgreSQL, Redis и gateway, дожидается healthcheck и затем одновременно запускает:
 
-- frontend: [http://localhost:3000](http://localhost:3000);
-- API: [http://localhost:3001](http://localhost:3001);
-- collaboration runtime: ws://localhost:3002;
-- health endpoint: [http://localhost:3001/api/v1/health](http://localhost:3001/api/v1/health);
-- Swagger UI: [http://localhost:3001/api/docs](http://localhost:3001/api/docs);
-- OpenAPI JSON: [http://localhost:3001/api/openapi.json](http://localhost:3001/api/openapi.json).
+- frontend через gateway: [http://localhost:8080](http://localhost:8080);
+- gateway: [http://localhost:8080](http://localhost:8080) — основной адрес приложения;
+- API через gateway: [http://localhost:8080/api/v1/health](http://localhost:8080/api/v1/health);
+- collaboration через gateway: ws://localhost:8080/collaboration;
+- Swagger UI через gateway: [http://localhost:8080/api/docs](http://localhost:8080/api/docs);
+- OpenAPI JSON через gateway: [http://localhost:8080/api/openapi.json](http://localhost:8080/api/openapi.json).
+
+Внутренние процессы по-прежнему слушают `3000` (web), `3001` (API) и `3002` (collaboration), но клиентам следует использовать gateway на `8080`.
 
 Для проверки с телефона, планшета или другого компьютера в той же сети запустите LAN-режим:
 
@@ -71,7 +74,7 @@ pnpm dev
 pnpm dev:lan
 ```
 
-Команда определит private LAN IPv4, поднимет PostgreSQL, запустит web на `0.0.0.0:3000`, передаст frontend адрес API вида `http://<IP>:3001`, отключит browser API mocking для этого запуска через `NEXT_PUBLIC_API_MOCKING=disabled` и выведет адреса `Web` и `API`. Устройства должны быть в одной сети; операционная система может показать firewall prompt для входящих соединений.
+Команда определит private LAN IPv4, поднимет PostgreSQL и gateway, запустит web, API и collaboration за gateway и выведет единый адрес приложения вида `http://<IP>:8080`. API доступен по `/api/v1`, а WebSocket — по `/collaboration`; browser API mocking отключается через `NEXT_PUBLIC_API_MOCKING=disabled`. Устройства должны быть в одной сети; операционная система может показать firewall prompt для входящих соединений.
 
 Если адрес нужно выбрать вручную, передайте client-usable IPv4 явно:
 
@@ -82,7 +85,7 @@ LAN_HOST=<IP> pnpm dev:lan
 Проверить API можно из терминала:
 
 ```bash
-curl http://localhost:3001/api/v1/health
+curl http://localhost:8080/api/v1/health
 ```
 
 Ожидаемый ответ:
@@ -97,7 +100,7 @@ API использует следующие переменные окружен�
 | --- | --- | --- |
 | `NODE_ENV` | `development` | `development`, `test` или `production` |
 | `PORT` | `3001` | Целое число от 1 до 65535 |
-| `CORS_ORIGIN` | `http://localhost:3000` | Один точный HTTP(S) origin без path, query и fragment |
+| `CORS_ORIGIN` | `http://localhost:8080` | Один точный HTTP(S) origin без path, query и fragment |
 | `DATABASE_URL` | local Compose URL | PostgreSQL URL с protocol `postgresql` или `postgres` |
 | `DATABASE_CONNECTION_TIMEOUT_MS` | `5000` | Целое число от 1 до 60000 |
 | `JWT_SECRET` | `local-development-only-change-me-before-deploy` | Строка длиной не менее 32 символов; уникальное значение для каждого окружения |
@@ -111,8 +114,8 @@ Frontend использует следующие публичные переме
 
 | Переменная | Значение в `.env.example` | Назначение |
 | --- | --- | --- |
-| `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:3001` | Origin NestJS API для generated fetch client |
-| `NEXT_PUBLIC_COLLABORATION_URL` | `ws://localhost:3002` | Hocuspocus WebSocket URL для Yjs document transport |
+| `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8080` | Origin gateway для generated fetch client |
+| `NEXT_PUBLIC_COLLABORATION_URL` | `ws://localhost:8080/collaboration` | Gateway WebSocket URL для Yjs document transport |
 | `NEXT_PUBLIC_API_MOCKING` | `disabled` | Значение `enabled` включает MSW browser worker только в development |
 
 Collaboration runtime использует следующие переменные окружения:
@@ -121,7 +124,7 @@ Collaboration runtime использует следующие переменны
 | --- | --- | --- |
 | `NODE_ENV` | `development` | `development`, `test` или `production` |
 | `PORT` | `3002` | Целое число от 1 до 65535 |
-| `COLLABORATION_ALLOWED_ORIGIN` | `http://localhost:3000` | Один точный HTTP(S) origin frontend без path, query и fragment |
+| `COLLABORATION_ALLOWED_ORIGIN` | `http://localhost:8080` | Один точный HTTP(S) origin frontend без path, query и fragment |
 | `DATABASE_URL` | local Compose URL | PostgreSQL URL с protocol `postgresql` или `postgres` |
 | `DATABASE_CONNECTION_TIMEOUT_MS` | `5000` | Целое число от 1 до 60000 |
 | `JWT_SECRET` | `local-development-only-change-me-before-deploy` | Тот же secret, которым API подписывает access JWT; строка длиной не менее 32 символов |
@@ -140,7 +143,7 @@ cp apps/web/.env.example apps/web/.env.local
 Включите browser mocks в `apps/web/.env.local`:
 
 ```dotenv
-NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
 NEXT_PUBLIC_API_MOCKING=enabled
 ```
 
@@ -150,7 +153,7 @@ NEXT_PUBLIC_API_MOCKING=enabled
 pnpm dev:web
 ```
 
-Frontend будет доступен на [http://localhost:3000](http://localhost:3000). MSW перехватывает запросы, для которых существуют generated handlers; необработанные запросы пропускаются к `NEXT_PUBLIC_API_BASE_URL`.
+Frontend будет доступен на [http://localhost:3000](http://localhost:3000). MSW перехватывает запросы, для которых существуют generated handlers; необработанные запросы пропускаются к `NEXT_PUBLIC_API_BASE_URL` (для полного окружения используйте gateway на `http://localhost:8080`).
 
 Для отдельной разработки backend запустите API вместе с PostgreSQL:
 
@@ -172,28 +175,53 @@ pnpm dev:collaboration
 
 Команда поднимает PostgreSQL или подтверждает его готовность, затем запускает только `apps/collaboration` без web/API.
 
+### E2E collaboration
+
+Collaboration E2E-тесты находятся в `apps/web/e2e/page-editor-collaboration.spec.ts` и используют gateway на `http://localhost:8080`. Перед запуском:
+
+1. Запустите полное окружение:
+
+   ```bash
+   pnpm dev:lan
+   ```
+
+2. Создайте локальную конфигурацию E2E:
+
+   ```bash
+   cp apps/web/.env.e2e.example apps/web/.env.e2e
+   ```
+
+3. Укажите в `apps/web/.env.e2e` ID существующей страницы из URL вида `http://localhost:8080/pages/<PAGE_ID>`, а также email и пароль одного или двух заранее созданных тестовых пользователей.
+4. Запустите тесты — Playwright автоматически загрузит `apps/web/.env.e2e`:
+
+   ```bash
+   pnpm --filter @lite-notion/web test:e2e -- e2e/page-editor-collaboration.spec.ts
+   ```
+
+Каждый браузерный контекст авторизуется через форму входа по `PLAYWRIGHT_USER_A_EMAIL` и `PLAYWRIGHT_USER_A_PASSWORD` либо по соответствующим переменным пользователя B. Сценарии с двумя пользователями и presence дополнительно требуют `PLAYWRIGHT_USER_A_ID`, `PLAYWRIGHT_USER_A_NAME`, `PLAYWRIGHT_USER_B_ID` и `PLAYWRIGHT_USER_B_NAME`; сценарий переключения страницы также требует `PLAYWRIGHT_SECOND_PAGE_ID`. Тестовые пользователи и страницы нужно подготовить вручную: отдельного скрипта подготовки E2E-окружения в репозитории нет.
+
 Все прикладные маршруты API находятся под prefix `/api/v1`. `GET /api/v1/health` проверяет доступность API и PostgreSQL, возвращая безопасный `503`, если база недоступна. Swagger UI и OpenAPI JSON доступны только при `NODE_ENV`, отличном от `production`; YAML-схема не публикуется.
 
 ## Prisma и API-контракт
 
-Текущая Prisma schema находится в `packages/database/prisma/schema.prisma` и содержит модели `User`, `Session`, `Project`, `Page` и `PageDocument`. Основные команды:
+Каталога `packages/` в актуальной структуре проекта нет: workspace состоит только из приложений в `apps/*`. Текущая Prisma schema находится в `apps/api/prisma/schema.prisma` и содержит модели `User`, `Session`, `Project`, `Page` и `PageDocument`. Основные команды:
 
 ```bash
-pnpm --filter @lite-notion/database prisma:generate
-pnpm --filter @lite-notion/database db:migrate:dev
-pnpm --filter @lite-notion/database db:studio
+pnpm --filter @lite-notion/api prisma:generate
+pnpm --filter @lite-notion/api db:migrate:dev
+pnpm --filter @lite-notion/api db:studio
 ```
 
 `db:migrate:dev` создаёт новую миграцию после изменения Prisma schema и применяет все неприменённые миграции к локальной базе. Если именованный PostgreSQL volume был создан до появления текущей истории миграций либо Prisma сообщает о schema drift или непустой схеме без migration history, пересоздайте локальную базу:
 
 ```bash
-pnpm --filter @lite-notion/database exec prisma migrate reset
+pnpm --filter @lite-notion/api exec prisma migrate reset
 ```
 
 Команда `migrate reset` удаляет все данные из локальной базы, заново создаёт схему и применяет все миграции. Используйте её только для локальной разработки. В CI и production применяйте уже созданные миграции без сброса данных:
 
 ```bash
-pnpm --filter @lite-notion/database db:migrate:deploy
+pnpm --filter @lite-notion/api db:migrate:deploy
 ```
 
 После изменения Swagger decorators или DTO обновите коммитируемый OpenAPI snapshot, TanStack Query hooks и MSW handlers:
@@ -236,10 +264,8 @@ pnpm db:down
 ├── apps
 │   ├── api
 │   ├── collaboration
+│   ├── gateway
 │   └── web
-├── packages
-│   ├── auth-token
-│   └── database
 ├── openspec
 ├── biome.json
 ├── package.json

@@ -1,4 +1,14 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { loadEnvFile } from 'node:process';
+
 import { defineConfig, devices } from '@playwright/test';
+
+const e2eEnvPath = join(process.cwd(), '.env.e2e');
+
+if (existsSync(e2eEnvPath)) {
+  loadEnvFile(e2eEnvPath);
+}
 
 export default defineConfig({
   testDir: './e2e',
