@@ -72,8 +72,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm api:check
       - run: pnpm --filter @lite-notion/api run prisma:generate
+      - run: pnpm api:check
       - run: pnpm --filter @lite-notion/api run typecheck
       - run: pnpm --filter @lite-notion/api run test
       - run: pnpm --filter @lite-notion/api run build
