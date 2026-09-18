@@ -13,12 +13,12 @@ const missingId = '33333333-3333-4333-8333-333333333333';
  */
 describe('purge HTTP contract', () => {
   let context: HttpTestContext;
-  let authorization: string;
+  let authorization: Record<string, string>;
   let projectId: string;
 
   beforeEach(async () => {
     context = await createHttpTestContext();
-    authorization = `Bearer ${await context.signAccessToken(owner)}`;
+    authorization = context.identityOf(owner);
     projectId = (await context.projects.create({ name: 'Workspace', ownerId: owner })).id;
   });
 
@@ -28,8 +28,8 @@ describe('purge HTTP contract', () => {
 
   const server = () => context.app.getHttpServer();
 
-  const auth = <T extends { set: (name: string, value: string) => T }>(chain: T) =>
-    chain.set('Authorization', authorization);
+  const auth = <T extends { set: (headers: Record<string, string>) => T }>(chain: T) =>
+    chain.set(authorization);
 
   const createPage = async (parentPageId: string | null = null, title = 'page') => {
     const response = await auth(request(server()).post('/api/v1/pages'))
@@ -142,12 +142,9 @@ describe('purge HTTP contract', () => {
     it('не даёт удалить чужую страницу навсегда', async () => {
       const page = await createPage();
       await softDeletePage(page.id);
-      const foreign = `Bearer ${await context.signAccessToken(stranger)}`;
+      const foreign = context.identityOf(stranger);
 
-      await request(server())
-        .delete(`/api/v1/pages/trash/${page.id}`)
-        .set('Authorization', foreign)
-        .expect(404);
+      await request(server()).delete(`/api/v1/pages/trash/${page.id}`).set(foreign).expect(404);
 
       const trash = await auth(request(server()).get('/api/v1/pages/trash')).expect(200);
 
@@ -188,12 +185,9 @@ describe('purge HTTP contract', () => {
     it('не трогает чужую корзину', async () => {
       const page = await createPage();
       await softDeletePage(page.id);
-      const foreign = `Bearer ${await context.signAccessToken(stranger)}`;
+      const foreign = context.identityOf(stranger);
 
-      await request(server())
-        .delete('/api/v1/pages/trash')
-        .set('Authorization', foreign)
-        .expect(204);
+      await request(server()).delete('/api/v1/pages/trash').set(foreign).expect(204);
 
       const trash = await auth(request(server()).get('/api/v1/pages/trash')).expect(200);
 

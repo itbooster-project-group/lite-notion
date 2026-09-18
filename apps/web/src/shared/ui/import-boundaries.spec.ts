@@ -4,24 +4,28 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
-const uiRoot = dirname(fileURLToPath(import.meta.url));
-const srcRoot = resolve(uiRoot, '../..');
-const webRoot = resolve(srcRoot, '..');
+/** Сравнения ниже записаны через `/`, а `node:path` на Windows отдаёт `\`. */
+const toPosix = (value: string): string => value.replaceAll('\\', '/');
+
+const uiRoot = toPosix(dirname(fileURLToPath(import.meta.url)));
+const srcRoot = toPosix(resolve(uiRoot, '../..'));
+const webRoot = toPosix(resolve(srcRoot, '..'));
 const forms = new Set(['button', 'input', 'label', 'textarea', 'checkbox', 'select']);
 
 function inspect(file: string, source: string): string[] {
   const result: string[] = [];
   const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  const insideUi = file.startsWith(`${uiRoot}/`);
-  const insideShadcn = file.startsWith(`${uiRoot}/shadcn/`);
+  const current = toPosix(file);
+  const insideUi = current.startsWith(`${uiRoot}/`);
+  const insideShadcn = current.startsWith(`${uiRoot}/shadcn/`);
   function check(path: string) {
     const target = path.startsWith('@/')
       ? resolve(srcRoot, path.slice(2))
       : path.startsWith('.')
-        ? resolve(dirname(file), path)
+        ? resolve(dirname(current), path)
         : undefined;
     if (!target) return;
-    const normalized = target.replace(/\.(tsx?|jsx?)$/, '');
+    const normalized = toPosix(target).replace(/\.(tsx?|jsx?)$/, '');
     if (!insideUi && normalized.startsWith(`${uiRoot}/`) && normalized !== `${uiRoot}/index`) {
       result.push(`Deep UI import: ${path}`);
     }
@@ -34,9 +38,9 @@ function inspect(file: string, source: string): string[] {
     }
     if (insideShadcn && normalized === uiRoot) result.push(`shadcn depends on public UI: ${path}`);
     if (
-      file === join(uiRoot, 'index.ts') &&
+      current === `${uiRoot}/index.ts` &&
       normalized.startsWith(`${uiRoot}/shadcn/`) &&
-      forms.has(relative(join(uiRoot, 'shadcn'), normalized))
+      forms.has(normalized.slice(`${uiRoot}/shadcn/`.length))
     ) {
       result.push(`Public generated form export: ${path}`);
     }

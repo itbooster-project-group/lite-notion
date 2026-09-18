@@ -1,4 +1,5 @@
 import type { TransactionScope } from '../../database/transaction';
+import type { Bytes } from '../pages.repository';
 import type { StoredDocument, StoredPage } from '../pages.repository.in-memory';
 import {
   type PageDocumentRecord,
@@ -63,6 +64,19 @@ export class InMemoryPageDocumentRepository extends PageDocumentRepository {
     document.yjsState = input.yjsState;
 
     return this.find(input.pageId);
+  }
+
+  async replaceYjsState(pageId: string, yjsState: Bytes): Promise<PageDocumentRecord | null> {
+    const document = this.documents.get(pageId);
+
+    if (document === undefined || !this.isVisible(pageId)) {
+      return null;
+    }
+
+    document.storageRevision += 1;
+    document.yjsState = yjsState;
+
+    return this.find(pageId);
   }
 
   /** Живость, а не права: роль спрашивает сервис. Отсутствующую страницу в базе держит FK. */

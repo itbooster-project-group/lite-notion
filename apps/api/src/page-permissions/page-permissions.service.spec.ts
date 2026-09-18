@@ -1,8 +1,7 @@
-import { PageRole } from '@lite-notion/page-permissions';
 import { describe, expect, it, vi } from 'vitest';
-
 import { PageNotFoundError, PageRoleInsufficientError } from '../pages/errors';
 import type { UsersService } from '../users/users.service';
+import { PageRole } from './constants';
 import type { PagePermissionsRepository } from './page-permissions.repository';
 import { PagePermissionsService } from './page-permissions.service';
 

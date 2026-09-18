@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { PageAccessMode, PageDeletionOrigin } from '@lite-notion/database/enums';
 import type { TransactionScope } from '../database/transaction';
+import type { PageAccessMode, PageDeletionOrigin } from '../generated/prisma/enums';
 import { compareSiblings } from './helpers';
 import type {
   Bytes,

@@ -13,6 +13,7 @@ import {
 } from 'class-validator';
 
 const JWT_SECRET_MIN_LENGTH = 32;
+const INTERNAL_SERVICE_TOKEN_MIN_LENGTH = 32;
 
 export enum NodeEnvironment {
   Development = 'development',
@@ -101,6 +102,11 @@ export class EnvironmentConfig {
   @MinLength(JWT_SECRET_MIN_LENGTH)
   JWT_SECRET!: string;
 
+  // Предъявления достаточно, чтобы писать документы, поэтому длина как у ключа подписи.
+  @IsString()
+  @MinLength(INTERNAL_SERVICE_TOKEN_MIN_LENGTH)
+  INTERNAL_SERVICE_TOKEN!: string;
+
   @Transform(({ value }) => Number(value), { toClassOnly: true })
   @IsInt()
   @Min(60)
@@ -150,6 +156,7 @@ export function validateEnvironment(
     CORS_ORIGIN: environment.CORS_ORIGIN,
     DATABASE_CONNECTION_TIMEOUT_MS: environment.DATABASE_CONNECTION_TIMEOUT_MS,
     DATABASE_URL: environment.DATABASE_URL,
+    INTERNAL_SERVICE_TOKEN: environment.INTERNAL_SERVICE_TOKEN,
     JWT_SECRET: environment.JWT_SECRET,
     NODE_ENV: environment.NODE_ENV,
     PORT: environment.PORT,

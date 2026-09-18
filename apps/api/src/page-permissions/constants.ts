@@ -1,4 +1,20 @@
-import { PageRole } from '@lite-notion/page-permissions';
+/**
+ * Роли эффективного доступа. `viewer` и `editor` приходят из `PagePermission.role`,
+ * `owner` в таблице не хранится: владение живёт в `Page.ownerId`.
+ */
+export const PageRole = {
+  EDITOR: 'editor',
+  OWNER: 'owner',
+  VIEWER: 'viewer',
+} as const;
+
+export type PageRole = (typeof PageRole)[keyof typeof PageRole];
+
+/**
+ * Порядок ролей. Индекс — сила: `editor` включает в себя всё, что даёт `viewer`,
+ * а `owner` — всё остальное.
+ */
+export const ROLE_ORDER: readonly PageRole[] = [PageRole.VIEWER, PageRole.EDITOR, PageRole.OWNER];
 
 /**
  * Роли, которые можно выдать. `owner` сюда не входит: владение живёт в

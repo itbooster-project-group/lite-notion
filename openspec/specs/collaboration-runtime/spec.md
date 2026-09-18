@@ -9,7 +9,7 @@
 ### Requirement: Collaboration service is a standalone deployable runtime
 Workspace MUST предоставить самостоятельное Node.js/TypeScript-приложение `apps/collaboration`, которое запускает Hocuspocus-compatible WebSocket service на собственном порту. Сервис MUST деплоиться отдельно от `apps/api` и MUST NOT требовать встраивания Hocuspocus в процесс NestJS API.
 
-Сервис MUST валидировать runtime environment до приёма подключений. Обязательные настройки MUST включать node environment, port, database URL, database connection timeout, JWT secret и allowed frontend origin. Невалидная конфигурация MUST останавливать startup безопасной ошибкой без раскрытия secrets.
+Сервис MUST валидировать runtime environment до приёма подключений. Обязательные настройки MUST включать node environment, port, базовый адрес API, сервисный креденшл для внутренних вызовов API и allowed frontend origin. Настройки прямого доступа к базе данных и подписывающий секрет MUST NOT входить в конфигурацию: сервис не подключается к базе и не проверяет подписи. Невалидная конфигурация MUST останавливать startup безопасной ошибкой без раскрытия secrets.
 
 #### Scenario: Collaboration service starts with valid configuration
 - **WHEN** collaboration runtime запускается с валидным environment
@@ -18,7 +18,11 @@ Workspace MUST предоставить самостоятельное Node.js/T
 #### Scenario: Invalid configuration stops startup
 - **WHEN** обязательная настройка collaboration runtime отсутствует или невалидна
 - **THEN** сервис завершается до приёма WebSocket connections
-- **AND** ошибка не содержит значение JWT secret или database credentials
+- **AND** ошибка не содержит значение сервисного креденшла
+
+#### Scenario: Конфигурация не содержит доступа к базе и подписывающего секрета
+- **WHEN** проверяется набор обязательных настроек collaboration runtime
+- **THEN** он не содержит database URL, database connection timeout и JWT secret
 
 #### Scenario: Collaboration remains separate from API
 - **WHEN** API и collaboration запущены локально
@@ -41,9 +45,11 @@ Collaboration runtime MUST принимать browser WebSocket connections то
 - **THEN** collaboration runtime отклоняет connection до загрузки document state
 
 ### Requirement: Collaboration authenticates WebSocket clients with API access tokens
-Collaboration runtime MUST аутентифицировать clients тем же access JWT contract, который выдаёт API. Token verification MUST проверять signature и expiration через configured JWT secret, извлекать authenticated user id и session id, а также отклонять отсутствующие, malformed, expired или invalid tokens.
+Collaboration runtime MUST аутентифицировать clients тем же access JWT contract, который выдаёт API. Проверку токена runtime MUST делегировать API и MUST NOT выполнять её сам: он MUST NOT знать подписывающий секрет и MUST NOT содержать собственной реализации верификации.
 
-JWT verification MUST использовать узкий shared primitive `packages/auth-token`, который содержит только access-token payload contract и verification. Он MUST NOT содержать Nest guards, Passport strategies, refresh/session logic, cookies, `AuthModule` или database access.
+Runtime MUST передавать предъявленный клиентом токен во внутренний вызов API без изменений и MUST получать в ответе идентификатор пользователя и идентификатор сессии. Отсутствующие, malformed, expired и invalid tokens MUST отклоняться по вердикту API.
+
+Runtime MUST NOT иметь режима обращения к API от имени произвольного пользователя: личность MUST выводиться исключительно из предъявленного клиентом токена.
 
 Результат authentication MUST быть доступен для document access decisions без логирования или раскрытия access token.
 
@@ -57,7 +63,12 @@ JWT verification MUST использовать узкий shared primitive `pack
 
 #### Scenario: Valid access token identifies user
 - **WHEN** client подключается с valid API access token
-- **THEN** collaboration runtime извлекает user id и session id для document access checks
+- **THEN** collaboration runtime получает от API user id и session id для document access checks
+
+#### Scenario: Проверка подписи выполняется только API
+- **WHEN** collaboration runtime аутентифицирует подключение
+- **THEN** проверку подписи и срока действия выполняет API
+- **AND** collaboration runtime не располагает подписывающим секретом
 
 ### Requirement: Collaboration document names are page rooms
 Collaboration runtime MUST принимать только document names в canonical format `page:<pageId>`, где `<pageId>` является UUID. Сервис MUST parse document name, извлекать `pageId` и отклонять unknown formats до загрузки или создания document state для такого имени.
@@ -73,9 +84,11 @@ Clients MUST NOT иметь возможность использовать arbi
 - **THEN** collaboration runtime отклоняет connection до document load
 
 ### Requirement: Collaboration checks page access before document sync
-До разрешения document connection collaboration runtime MUST проверить, что parsed page существует, не удалена, лежит в неудалённом проекте, имеет `PageDocument` row и доступна authenticated user по effective permission. Page, которая отсутствует, недоступна user, удалена, лежит в удалённом проекте или не имеет document row, MUST отклоняться без раскрытия конкретной причины.
+До разрешения document connection collaboration runtime MUST проверить, что parsed page существует, не удалена, лежит в неудалённом проекте и доступна authenticated user по effective permission. Page, которая отсутствует, недоступна user, удалена или лежит в удалённом проекте, MUST отклоняться без раскрытия конкретной причины.
 
-Effective permission MUST вычисляться той же моделью, которой пользуется REST API, и MUST NOT реализовываться в `apps/collaboration` повторно. Расхождение между решением API и решением collaboration runtime для одной пары «пользователь — страница» MUST NOT быть возможным.
+Отдельной проверки наличия `PageDocument` row при допуске MUST NOT требоваться: строка создаётся в одной транзакции со страницей, а её фактическое отсутствие всё равно останавливает комнату на загрузке документа. Комната без загруженного документа MUST NOT становиться работоспособной.
+
+Effective permission MUST вычисляться той же моделью, которой пользуется REST API, и MUST NOT реализовываться в `apps/collaboration` повторно. Расхождение между решением API и решением collaboration runtime для одной пары «пользователь — страница» MUST NOT быть возможным. Runtime MUST получать роль вызовом внутреннего эндпоинта API и MUST NOT обращаться к базе данных напрямую.
 
 Access decision MUST возвращать read/write capability boundary, вычисленный из роли: `viewer` MUST давать чтение без записи, `editor` и владелец страницы MUST давать чтение и запись. Runtime MUST map `canWrite` from that capability to Hocuspocus `connectionConfig.readOnly`.
 
@@ -123,12 +136,24 @@ Access decision MUST возвращать read/write capability boundary, выч
 - **WHEN** для одной и той же пары «пользователь — страница» роль запрашивают REST API и collaboration runtime
 - **THEN** оба получают одну и ту же роль, и право записи у них совпадает
 
-### Requirement: Изменение доступа и уже открытое соединение
+#### Scenario: Решение о доступе принимается без обращения к базе
+- **WHEN** collaboration runtime авторизует подключение
+- **THEN** он получает роль ответом внутреннего вызова API
+- **AND** процесс collaboration не открывает соединение с базой данных
+
+### Requirement: Открытое соединение переавторизуется по сроку жизни токена
+
 Collaboration runtime MUST принимать решение о доступе в момент подключения. Отзыв разрешения, понижение роли и переключение страницы в `restricted` MUST применяться к новым соединениям немедленно и MUST NOT требовать перезапуска сервиса.
 
-Уже открытое соединение при этом MUST сохранять выданный ему режим до переподключения: enforcement прав в середине сессии в этой задаче не вводится. Ограничение MUST быть описанным, а не подразумеваемым, — читатель спецификации MUST узнавать о нём отсюда, а не из наблюдения за системой.
+Уже открытое соединение MUST переавторизовываться периодически, а не жить с однажды выданным решением до переподключения. Runtime MUST запрашивать у клиента действующий access-токен по сроку жизни ранее выданного и MUST повторять полную проверку доступа по полученному токену.
 
-Тот же предел MUST действовать и для истечения access-токена: соединение, открытое по действующему токену, переживает его истечение. Обе границы имеют одну природу и MUST сниматься вместе, а не порознь.
+Верхняя граница устаревания решения MUST равняться сроку жизни access-токена: отзыв разрешения, понижение роли и переключение в `restricted` MUST применяться к уже открытому соединению не позже, чем через один такой срок. Истечение access-токена MUST прекращать соединение в тот же срок. Обе границы MUST сниматься одним механизмом, а не порознь.
+
+Понижение роли до `viewer` MUST переводить уже открытое соединение в read-only без разрыва: пользователь, потерявший право записи, MUST сохранять возможность читать документ. Полная потеря доступа MUST закрывать соединение.
+
+Клиент, не предоставивший действующий токен по запросу, MUST терять соединение по истечении ограниченного грейс-периода.
+
+Отказ в доступе и невозможность его проверить MUST различаться. Недоступность API MUST NOT закрывать соединение немедленно: оно MUST сохраняться в пределах ограниченного грейс-окна, пока проверка невозможна по инфраструктурным причинам, и MUST закрываться по его исчерпании. Авторитетный отказ MUST закрывать соединение без применения грейс-окна.
 
 #### Scenario: Отзыв применяется к новому соединению
 - **GIVEN** владелец отозвал разрешение у пользователя с открытым соединением
@@ -140,10 +165,40 @@ Collaboration runtime MUST принимать решение о доступе �
 - **WHEN** этот пользователь подключается к комнате заново
 - **THEN** соединение открывается только на чтение
 
-#### Scenario: Открытое соединение сохраняет режим до переподключения
-- **WHEN** разрешение отзывается у пользователя, соединение которого уже открыто
-- **THEN** его текущее соединение продолжает работать в прежнем режиме до переподключения
-- **AND** это ограничение зафиксировано, а не обнаруживается опытным путём
+#### Scenario: Отзыв применяется к открытому соединению в пределах срока токена
+- **GIVEN** у пользователя открыто соединение, а владелец отозвал его разрешение
+- **WHEN** проходит срок жизни access-токена
+- **THEN** collaboration runtime закрывает это соединение
+
+#### Scenario: Понижение роли переводит открытое соединение в read-only
+- **GIVEN** у пользователя с ролью `editor` открыто соединение, а владелец понизил его до `viewer`
+- **WHEN** выполняется очередная переавторизация соединения
+- **THEN** соединение продолжает работать, но его изменения перестают сохраняться
+- **AND** соединение не разрывается
+
+#### Scenario: Истёкший токен прекращает соединение
+- **GIVEN** у пользователя открыто соединение
+- **WHEN** срок действия его access-токена истёк и клиент не предоставил новый
+- **THEN** collaboration runtime закрывает соединение
+
+#### Scenario: Клиент продлевает соединение свежим токеном
+- **GIVEN** у пользователя открыто соединение и доступ к странице сохранён
+- **WHEN** runtime запрашивает действующий токен и клиент предоставляет свежий
+- **THEN** соединение продолжает работать без переподключения и без повторной синхронизации документа
+
+#### Scenario: Молчание клиента прекращает соединение
+- **WHEN** runtime запросил у клиента действующий токен и не получил ответа в пределах грейс-периода
+- **THEN** collaboration runtime закрывает соединение
+
+#### Scenario: Недоступность API не разрывает соединение сразу
+- **GIVEN** у пользователя открыто соединение
+- **WHEN** очередная переавторизация не выполняется из-за недоступности API
+- **THEN** соединение сохраняется в пределах грейс-окна
+- **AND** по исчерпании грейс-окна соединение закрывается
+
+#### Scenario: Отказ и недоступность различаются
+- **WHEN** API отвечает авторитетным отказом в доступе
+- **THEN** collaboration runtime закрывает соединение немедленно, не применяя грейс-окно
 
 ### Requirement: Collaboration synchronizes Yjs updates between clients
 Для clients, authenticated и authorized в одной комнате `page:<pageId>`, collaboration runtime MUST синхронизировать Yjs updates так, чтобы каждый connected client видел changes других clients. Concurrent updates одного Yjs document MUST сходиться по Yjs semantics без потери acknowledged changes.
@@ -160,17 +215,21 @@ Collaboration runtime MUST принимать решение о доступе �
 - **THEN** оба clients сходятся к одному document state
 
 ### Requirement: Collaboration persists binary Yjs state to PostgreSQL
-Collaboration runtime MUST загружать current binary Yjs state из `PageDocument.yjsState` при открытии page document и MUST сохранять updated binary Yjs state обратно в `PageDocument.yjsState` после document changes. Stored state MUST оставаться opaque Yjs binary state; TipTap JSON MUST NOT становиться source of truth.
+Collaboration runtime MUST загружать current binary Yjs state при открытии page document и MUST сохранять updated binary Yjs state после document changes. Stored state MUST оставаться opaque Yjs binary state; TipTap JSON MUST NOT становиться source of truth.
+
+Загрузка и сохранение MUST выполняться вызовами внутреннего документного эндпоинта API; collaboration runtime MUST NOT обращаться к `PageDocument` напрямую. Ответственность за транзакционность записи и за инварианты живости страницы MUST принадлежать API.
+
+Загрузка и сохранение MUST предъявлять сервисный креденшл. Токен пользователя здесь не предъявляется: `onLoadDocument` срабатывает только для первого подключившегося к комнате, а у `onStoreDocument` пользователя в скоупе нет вовсе — проверка роли на этих операциях не покрыла бы остальных участников и создавала бы видимость защиты.
 
 Пустой `yjsState` с `byteLength === 0` MUST инициализировать valid empty `Y.Doc` и MUST NOT передаваться в `Y.applyUpdate`. Каждый successful store MUST обновлять `PageDocument.yjsState`, инкрементировать `PageDocument.storageRevision` атомарно с записью state и обновлять timestamp строки. Store MUST NOT менять `tiptapSchemaVersion` только из-за Yjs update.
 
-`onStoreDocument` MUST NOT авторизовывать пользователя через connection context, `lastContext` или последнего connected client. Store MUST повторно проверять только persistence invariants: page exists, document exists и `Page.deletedAt = null`.
+`onStoreDocument` MUST NOT авторизовывать пользователя через connection context, `lastContext` или последнего connected client: у сохранения нет пользователя в скоупе. Внутренний документный эндпоинт MUST аутентифицироваться сервисным креденшлом, а не токеном пользователя, и MUST повторно проверять только persistence invariants: page exists, document exists и `Page.deletedAt = null`.
 
-Store MUST NOT выполнять отдельный check `Page.deletedAt = null` с последующим unconditional update. Сохранение MUST выполняться как один transactional/conditional write, который атомарно проверяет live page/document invariant и записывает `yjsState`, `storageRevision` и timestamp. Если conditional write затронул `0` rows, collaboration runtime MUST NOT сохранять state.
+Сохранение MUST выполняться как один transactional/conditional write на стороне API, который атомарно проверяет live page/document invariant и записывает `yjsState`, `storageRevision` и timestamp. Если conditional write затронул `0` rows, состояние MUST NOT сохраняться, и API MUST сообщить об этом collaboration runtime отличимым от прочих ошибок способом.
 
-Если conditional write затронул `0` rows для уже активной комнаты, runtime MUST закрыть все connections этой комнаты, завершить её active document state и MUST NOT обрабатывать этот случай как обычную retryable persistence error. После восстановления страницы новый connection MUST загрузить последнее успешно сохранённое состояние без изменений, сделанных после soft delete.
+Если сохранение отклонено по инварианту живости для уже активной комнаты, runtime MUST закрыть все connections этой комнаты, завершить её active document state и MUST NOT обрабатывать этот случай как обычную retryable persistence error. После восстановления страницы новый connection MUST загрузить последнее успешно сохранённое состояние без изменений, сделанных после soft delete.
 
-Перед conditional write runtime MUST отдельно проверить размер итогового `Y.encodeStateAsUpdate(document)` против `DOCUMENT_MAX_BYTES`. Этот предел MUST NOT использоваться как значение `websocketOptions.maxPayload`: размер одного WebSocket payload настраивается независимо через `WEBSOCKET_MAX_PAYLOAD_BYTES`.
+Перед отправкой runtime MUST отдельно проверить размер итогового `Y.encodeStateAsUpdate(document)` против `DOCUMENT_MAX_BYTES`. Этот предел MUST NOT использоваться как значение `websocketOptions.maxPayload`: размер одного WebSocket payload настраивается независимо через `WEBSOCKET_MAX_PAYLOAD_BYTES`.
 
 #### Scenario: Existing document state is loaded
 - **WHEN** client открывает page, whose document имеет non-empty stored `yjsState`
@@ -183,13 +242,18 @@ Store MUST NOT выполнять отдельный check `Page.deletedAt = nul
 
 #### Scenario: Changed document is persisted
 - **WHEN** authorized client изменяет page document
-- **THEN** collaboration runtime сохраняет resulting binary Yjs state в PostgreSQL
+- **THEN** collaboration runtime отправляет resulting binary Yjs state во внутренний документный эндпоинт API под сервисным креденшлом
 - **AND** последующее connection к той же page загружает stored content
 
 #### Scenario: Store increments storage revision
 - **WHEN** collaboration runtime успешно stores changed Yjs document
 - **THEN** `storageRevision` инкрементируется атомарно с `yjsState` update
 - **AND** `tiptapSchemaVersion` остаётся unchanged
+
+#### Scenario: Сохранение выполняется без пользовательского токена
+- **WHEN** collaboration runtime сохраняет документ после ухода последнего клиента комнаты
+- **THEN** вызов документного эндпоинта аутентифицируется сервисным креденшлом
+- **AND** сохранение выполняется успешно
 
 #### Scenario: Store rejects deleted page invariant
 - **WHEN** page удалена до сохранения document state collaboration runtime
@@ -207,16 +271,16 @@ Store MUST NOT выполнять отдельный check `Page.deletedAt = nul
 #### Scenario: Document and WebSocket limits are independent
 - **WHEN** client отправляет отдельный WebSocket payload в пределах `WEBSOCKET_MAX_PAYLOAD_BYTES`
 - **AND** итоговый encoded Yjs state превышает `DOCUMENT_MAX_BYTES`
-- **THEN** document state не записывается в PostgreSQL
+- **THEN** document state не записывается
 - **AND** runtime не рассматривает WebSocket payload limit как размер всего Yjs document
 
 ### Requirement: Collaboration runtime shuts down cleanly
-Collaboration runtime MUST обрабатывать завершение процесса: закрывать WebSocket/Hocuspocus server, flush pending document stores, если это поддерживает public Hocuspocus API, и отключаться от PostgreSQL до выхода процесса.
+Collaboration runtime MUST обрабатывать завершение процесса: закрывать WebSocket/Hocuspocus server, flush pending document stores, если это поддерживает public Hocuspocus API, и освобождать подключение к общему брокеру до выхода процесса. Отключение от PostgreSQL MUST NOT входить в процедуру завершения: собственного подключения к базе у сервиса нет.
 
 #### Scenario: Shutdown closes runtime resources
 - **WHEN** collaboration runtime получает `SIGINT` или `SIGTERM`
 - **THEN** он прекращает принимать новые WebSocket connections
-- **AND** закрывает active server resources и database connections до exit
+- **AND** закрывает active server resources и подключение к брокеру до exit
 
 ### Requirement: Collaboration logging avoids sensitive data
 Collaboration runtime MUST логировать server start, server stop, failed Origin validation, failed authentication, failed document access, document load/store errors и unexpected WebSocket errors с достаточным context для debugging. Logs MUST NOT включать access tokens, refresh tokens, full Yjs binary states или sensitive document/user content.
@@ -234,3 +298,31 @@ Runtime MUST применять bounded connection или payload limits чер�
 #### Scenario: Oversized WebSocket payload is bounded
 - **WHEN** client отправляет payload больше configured runtime limit
 - **THEN** collaboration runtime отклоняет или закрывает connection без persistence partial document state
+
+### Requirement: Реплики collaboration синхронизируются между собой
+
+Collaboration runtime MUST допускать запуск в нескольких экземплярах за общим балансировщиком. Клиенты одной комнаты, попавшие на разные экземпляры, MUST видеть изменения друг друга и MUST сходиться к одному document state.
+
+Синхронизация между экземплярами MUST выполняться через общий брокер. Экземпляр, получивший update по брокеру, MUST применять его к своему document state и MUST NOT инициировать из-за этого собственное сохранение: иначе один и тот же update персистится столько раз, сколько экземпляров его получило.
+
+Awareness-состояние MUST синхронизироваться между экземплярами так же, как document updates: список участников комнаты MUST быть одинаковым у клиентов на разных экземплярах.
+
+Недоступность брокера MUST останавливать startup так же, как любая другая невалидная обязательная зависимость, и MUST NOT приводить к молчаливой работе экземпляров в изоляции друг от друга.
+
+#### Scenario: Клиенты на разных экземплярах видят изменения
+- **GIVEN** запущены два экземпляра collaboration runtime
+- **WHEN** два клиента одной комнаты подключены к разным экземплярам и один из них изменяет документ
+- **THEN** второй клиент получает это изменение
+
+#### Scenario: Участники комнаты одинаковы на разных экземплярах
+- **GIVEN** два клиента одной комнаты подключены к разным экземплярам
+- **WHEN** оба публикуют своё presence-состояние
+- **THEN** каждый из них видит другого в списке участников
+
+#### Scenario: Update по брокеру не порождает повторное сохранение
+- **WHEN** экземпляр применяет document update, полученный по брокеру
+- **THEN** он не инициирует собственное сохранение этого update
+
+#### Scenario: Недоступный брокер останавливает startup
+- **WHEN** collaboration runtime запускается при недоступном брокере
+- **THEN** сервис завершается до приёма WebSocket connections

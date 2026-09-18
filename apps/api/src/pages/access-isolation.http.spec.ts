@@ -1,12 +1,11 @@
-import { PageRole } from '@lite-notion/page-permissions';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { IS_PUBLIC_KEY } from '../common/decorators/public.decorator';
+import { PageRole } from '../page-permissions/constants';
 import { ProjectsController } from '../projects/projects.controller';
 import { createHttpTestContext, type HttpTestContext } from '../testing/http-application';
 import { TIPTAP_SCHEMA_VERSION } from './constants';
 import { positionBetween } from './helpers';
-import { PageDocumentController } from './page-document/page-document.controller';
 import { PagesController } from './pages.controller';
 
 const owner = '11111111-1111-1111-1111-111111111111';
@@ -15,13 +14,13 @@ const missingId = '33333333-3333-4333-8333-333333333333';
 
 describe('изоляция по владельцу и защита маршрутов', () => {
   let context: HttpTestContext;
-  let authorization: string;
+  let authorization: Record<string, string>;
   let foreignPageId: string;
   let foreignProjectId: string;
 
   beforeEach(async () => {
     context = await createHttpTestContext();
-    authorization = `Bearer ${await context.signAccessToken(owner)}`;
+    authorization = context.identityOf(owner);
 
     const foreignProject = await context.projects.create({ name: 'Theirs', ownerId: stranger });
     foreignProjectId = foreignProject.id;
@@ -55,16 +54,6 @@ describe('изоляция по владельцу и защита маршру�
       path: (id: string) => `/api/v1/pages/${id}/move`,
       send: { parentPageId: null },
     },
-    {
-      method: 'get' as const,
-      path: (id: string) => `/api/v1/pages/${id}/document`,
-      send: undefined,
-    },
-    {
-      method: 'put' as const,
-      path: (id: string) => `/api/v1/pages/${id}/document`,
-      send: { tiptapSchemaVersion: 1, yjsState: '' },
-    },
   ];
 
   const call = (
@@ -84,8 +73,8 @@ describe('изоляция по владельцу и защита маршру�
   describe('чужая и несуществующая страница неразличимы', () => {
     for (const operation of pageOperations) {
       it(`${operation.method.toUpperCase()} ${operation.path(':pageId')}`, async () => {
-        const foreign = await call(operation, foreignPageId, { Authorization: authorization });
-        const missing = await call(operation, missingId, { Authorization: authorization });
+        const foreign = await call(operation, foreignPageId, authorization);
+        const missing = await call(operation, missingId, authorization);
 
         expect(foreign.status).toBe(404);
         expect(missing.status).toBe(404);
@@ -107,11 +96,6 @@ describe('изоляция по владельцу и защита маршру�
       send?: Record<string, unknown>;
     }[] = [
       { method: 'patch', path: (id) => `/api/v1/pages/${id}`, send: { title: 'x' } },
-      {
-        method: 'put',
-        path: (id) => `/api/v1/pages/${id}/document`,
-        send: { tiptapSchemaVersion: 1, yjsState: '' },
-      },
       { method: 'delete', path: (id) => `/api/v1/pages/${id}` },
       { method: 'post', path: (id) => `/api/v1/pages/${id}/move`, send: { parentPageId: null } },
     ];
@@ -122,7 +106,7 @@ describe('изоляция по владельцу и защита маршру�
 
         const test = request(context.app.getHttpServer())
           [operation.method](operation.path(foreignPageId))
-          .set('Authorization', authorization);
+          .set(authorization);
         const response =
           operation.send === undefined ? await test.send() : await test.send(operation.send);
 
@@ -135,11 +119,11 @@ describe('изоляция по владельцу и защита маршру�
 
       const renamed = await request(context.app.getHttpServer())
         .patch(`/api/v1/pages/${foreignPageId}`)
-        .set('Authorization', authorization)
+        .set(authorization)
         .send({ title: 'renamed' });
       const deleted = await request(context.app.getHttpServer())
         .delete(`/api/v1/pages/${foreignPageId}`)
-        .set('Authorization', authorization)
+        .set(authorization)
         .send();
 
       expect(renamed.status).toBe(200);
@@ -151,7 +135,7 @@ describe('изоляция по владельцу и защита маршру�
 
       const read = await request(context.app.getHttpServer())
         .get(`/api/v1/pages/${foreignPageId}`)
-        .set('Authorization', authorization)
+        .set(authorization)
         .send();
 
       expect(read.status).toBe(200);
@@ -162,7 +146,7 @@ describe('изоляция по владельцу и защита маршру�
   it('без разрешения ни одна операция не отвечает запретом', async () => {
     // Обратная сторона правила: `403` допустим только там, где страница видна.
     for (const operation of pageOperations) {
-      const response = await call(operation, foreignPageId, { Authorization: authorization });
+      const response = await call(operation, foreignPageId, authorization);
 
       expect(response.status).not.toBe(403);
     }
@@ -171,11 +155,11 @@ describe('изоляция по владельцу и защита маршру�
   it('чужой и несуществующий проект неразличимы при создании страницы', async () => {
     const foreign = await request(context.app.getHttpServer())
       .post('/api/v1/pages')
-      .set('Authorization', authorization)
+      .set(authorization)
       .send({ projectId: foreignProjectId });
     const missing = await request(context.app.getHttpServer())
       .post('/api/v1/pages')
-      .set('Authorization', authorization)
+      .set(authorization)
       .send({ projectId: missingId });
 
     expect(foreign.status).toBe(404);
@@ -196,12 +180,6 @@ describe('изоляция по владельцу и защита маршру�
         method: 'post' as const,
         path: `/api/v1/pages/${missingId}/move`,
         send: { parentPageId: null },
-      },
-      { method: 'get' as const, path: `/api/v1/pages/${missingId}/document`, send: undefined },
-      {
-        method: 'put' as const,
-        path: `/api/v1/pages/${missingId}/document`,
-        send: { tiptapSchemaVersion: 1, yjsState: '' },
       },
       { method: 'post' as const, path: '/api/v1/projects', send: { name: 'x' } },
       { method: 'get' as const, path: '/api/v1/projects', send: undefined },
@@ -228,7 +206,7 @@ describe('изоляция по владельцу и защита маршру�
   });
 
   describe('ни один маршрут не помечен @Public()', () => {
-    for (const controller of [PagesController, PageDocumentController, ProjectsController]) {
+    for (const controller of [PagesController, ProjectsController]) {
       it(controller.name, () => {
         expect(Reflect.getMetadata(IS_PUBLIC_KEY, controller)).toBeUndefined();
 

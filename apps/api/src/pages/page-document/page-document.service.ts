@@ -1,6 +1,5 @@
-import { PageRole } from '@lite-notion/page-permissions';
 import { Inject, Injectable } from '@nestjs/common';
-
+import { PageRole } from '../../page-permissions/constants';
 import { PagePermissionsService } from '../../page-permissions/page-permissions.service';
 import { PageNotFoundError } from '../errors';
 import type { Bytes } from '../pages.repository';
@@ -43,6 +42,20 @@ export class PageDocumentService {
         yjsState: command.yjsState,
       }),
     );
+  }
+
+  /**
+   * Без проверки роли — для collaboration runtime. Наружу их выставляет только
+   * маршрут под сервисным креденшлом, а роль проверена при допуске в комнату:
+   * `onLoadDocument` срабатывает лишь для первого подключившегося, поэтому
+   * проверка здесь всё равно не покрыла бы остальных.
+   */
+  async readUnchecked(pageId: string): Promise<PageDocumentRecord> {
+    return this.require(await this.documents.find(pageId));
+  }
+
+  async replaceYjsStateUnchecked(pageId: string, yjsState: Bytes): Promise<PageDocumentRecord> {
+    return this.require(await this.documents.replaceYjsState(pageId, yjsState));
   }
 
   /**

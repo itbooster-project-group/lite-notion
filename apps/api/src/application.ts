@@ -1,4 +1,4 @@
-import { type INestApplication, ValidationPipe } from '@nestjs/common';
+import { type INestApplication, RequestMethod, ValidationPipe } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, type OpenAPIObject, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
@@ -6,6 +6,13 @@ import cookieParser from 'cookie-parser';
 import { API_GLOBAL_PREFIX, JSON_BODY_LIMIT } from './common/constants';
 import type { ApplicationConfig } from './config/application-config';
 import { NodeEnvironment } from './config/environment';
+import { INTERNAL_ROUTE_PREFIX } from './internal/constants';
+
+// Весь внутренний префикс разом: перечислять маршруты поимённо значило бы
+// повторять их список и ломать новый маршрут молча.
+const INTERNAL_ROUTES_OUTSIDE_PREFIX = [
+  { method: RequestMethod.ALL, path: `${INTERNAL_ROUTE_PREFIX}/*splat` },
+];
 
 type ApplicationEnvironment = Pick<ApplicationConfig, 'corsOrigin' | 'nodeEnvironment'>;
 type CorsCallback = (error: Error | null, allow?: boolean) => void;
@@ -39,7 +46,7 @@ export function configureApplication(
   app: INestApplication,
   environment: ApplicationEnvironment,
 ): void {
-  app.setGlobalPrefix(API_GLOBAL_PREFIX);
+  app.setGlobalPrefix(API_GLOBAL_PREFIX, { exclude: INTERNAL_ROUTES_OUTSIDE_PREFIX });
   // Предел Express по умолчанию (100 KB) меньше Yjs state страницы. Запас над
   // DOCUMENT_MAX_BYTES нужен, чтобы отказ по размеру давал ValidationPipe, а не
   // сырой 413 от парсера. useBodyParser — потому что express не прямая зависимость.

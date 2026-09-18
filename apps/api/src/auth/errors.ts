@@ -8,3 +8,11 @@ export class EmailAlreadyRegisteredError extends Error {
     this.name = 'EmailAlreadyRegisteredError';
   }
 }
+
+/** Причина наружу не уходит: просроченный, malformed и чужой токен неразличимы. */
+export class AccessTokenVerificationError extends Error {
+  constructor() {
+    super('Access token verification failed');
+    this.name = 'AccessTokenVerificationError';
+  }
+}

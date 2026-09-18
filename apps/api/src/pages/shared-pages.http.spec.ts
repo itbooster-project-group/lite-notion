@@ -1,6 +1,6 @@
-import { PageRole } from '@lite-notion/page-permissions';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { PageRole } from '../page-permissions/constants';
 
 import { createHttpTestContext, type HttpTestContext } from '../testing/http-application';
 import { positionBetween } from './helpers';
@@ -18,7 +18,7 @@ interface SharedNode {
 
 describe('shared pages HTTP contract', () => {
   let context: HttpTestContext;
-  let authorization: string;
+  let authorization: Record<string, string>;
   let ownerProjectId: string;
 
   const addPage = async (title: string, parentPageId: string | null = null) => {
@@ -35,17 +35,14 @@ describe('shared pages HTTP contract', () => {
   };
 
   const shared = () =>
-    request(context.app.getHttpServer())
-      .get('/api/v1/pages/shared')
-      .set('Authorization', authorization)
-      .send();
+    request(context.app.getHttpServer()).get('/api/v1/pages/shared').set(authorization).send();
 
   const flatten = (nodes: SharedNode[]): SharedNode[] =>
     nodes.flatMap((node) => [node, ...flatten(node.children)]);
 
   beforeEach(async () => {
     context = await createHttpTestContext();
-    authorization = `Bearer ${await context.signAccessToken(actor)}`;
+    authorization = context.identityOf(actor);
     ownerProjectId = (await context.projects.create({ name: 'Theirs', ownerId: owner })).id;
   });
 

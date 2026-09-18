@@ -1,4 +1,3 @@
-import { PageRole } from '@lite-notion/page-permissions';
 import {
   Body,
   Controller,
@@ -30,14 +29,12 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-
 import { type AuthenticatedUser, CurrentUser } from '../common/decorators/current-user.decorator';
 import { CascadeQueryDto } from '../common/dto/cascade-query.dto';
 import { PurgeConfirmationResponseDto } from '../common/dto/purge-confirmation-response.dto';
 import { HttpErrorResponseDto } from '../http-error-response.dto';
+import { PageRole } from '../page-permissions/constants';
 import { SetAccessModeDto } from '../page-permissions/dto/set-access-mode.dto';
-// Не `import type`: emitDecoratorMetadata кладёт в design:paramtypes рантайм-ссылку
-// на класс, и без неё ValidationPipe молча перестаёт валидировать тело запроса.
 import { CreatePageDto } from './dto/create-page.dto';
 import { DeletedPageTreeNodeDto } from './dto/deleted-page.dto';
 import { MovePageDto } from './dto/move-page.dto';

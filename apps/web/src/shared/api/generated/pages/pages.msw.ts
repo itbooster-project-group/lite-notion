@@ -9,7 +9,7 @@ import { faker } from '@faker-js/faker';
 import type { RequestHandlerOptions } from 'msw';
 import { HttpResponse, http } from 'msw';
 
-import type { DeletedPageTreeNodeDto, PageDocumentDto, PageDto, PageTreeNodeDto } from '../model';
+import type { DeletedPageTreeNodeDto, PageDto, PageTreeNodeDto } from '../model';
 
 export const getCreatePageResponseMock = (
   overrideResponse: Partial<Extract<PageDto, object>> = {},
@@ -157,24 +157,6 @@ export const getRestorePageResponseMock = (
   accessRole: faker.helpers.arrayElement(['viewer', 'editor', 'owner'] as const),
   createdAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
   updatedAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
-  ...overrideResponse,
-});
-
-export const getGetPageDocumentResponseMock = (
-  overrideResponse: Partial<Extract<PageDocumentDto, object>> = {},
-): PageDocumentDto => ({
-  pageId: faker.string.uuid(),
-  tiptapSchemaVersion: faker.number.float({ fractionDigits: 2 }),
-  yjsState: faker.string.alpha({ length: { min: 10, max: 20 } }),
-  ...overrideResponse,
-});
-
-export const getUpdatePageDocumentResponseMock = (
-  overrideResponse: Partial<Extract<PageDocumentDto, object>> = {},
-): PageDocumentDto => ({
-  pageId: faker.string.uuid(),
-  tiptapSchemaVersion: faker.number.float({ fractionDigits: 2 }),
-  yjsState: faker.string.alpha({ length: { min: 10, max: 20 } }),
   ...overrideResponse,
 });
 
@@ -438,54 +420,6 @@ export const getRestorePageMockHandler = (
     options,
   );
 };
-
-export const getGetPageDocumentMockHandler = (
-  overrideResponse?:
-    | PageDocumentDto
-    | ((
-        info: Parameters<Parameters<typeof http.get>[1]>[0],
-      ) => Promise<PageDocumentDto> | PageDocumentDto),
-  options?: RequestHandlerOptions,
-) => {
-  return http.get(
-    '*/api/v1/pages/:pageId/document',
-    async (info: Parameters<Parameters<typeof http.get>[1]>[0]) => {
-      return HttpResponse.json(
-        overrideResponse !== undefined
-          ? typeof overrideResponse === 'function'
-            ? await overrideResponse(info)
-            : overrideResponse
-          : getGetPageDocumentResponseMock(),
-        { status: 200 },
-      );
-    },
-    options,
-  );
-};
-
-export const getUpdatePageDocumentMockHandler = (
-  overrideResponse?:
-    | PageDocumentDto
-    | ((
-        info: Parameters<Parameters<typeof http.put>[1]>[0],
-      ) => Promise<PageDocumentDto> | PageDocumentDto),
-  options?: RequestHandlerOptions,
-) => {
-  return http.put(
-    '*/api/v1/pages/:pageId/document',
-    async (info: Parameters<Parameters<typeof http.put>[1]>[0]) => {
-      return HttpResponse.json(
-        overrideResponse !== undefined
-          ? typeof overrideResponse === 'function'
-            ? await overrideResponse(info)
-            : overrideResponse
-          : getUpdatePageDocumentResponseMock(),
-        { status: 200 },
-      );
-    },
-    options,
-  );
-};
 export const getPagesMock = () => [
   getCreatePageMockHandler(),
   getGetPageTreeMockHandler(),
@@ -499,6 +433,4 @@ export const getPagesMock = () => [
   getSetPageAccessModeMockHandler(),
   getPurgePageMockHandler(),
   getRestorePageMockHandler(),
-  getGetPageDocumentMockHandler(),
-  getUpdatePageDocumentMockHandler(),
 ];

@@ -8,9 +8,10 @@ import {
 } from './page-document-security-headers';
 
 describe('page document security headers', () => {
-  it('разрешает API и configured collaboration connections', () => {
+  // За единым origin схемы всё равно две: http: и ws: — разные источники для CSP.
+  it('разрешает HTTP и WebSocket через origin шлюза', () => {
     expect(PAGE_DOCUMENT_CONTENT_SECURITY_POLICY).toBe(
-      "connect-src 'self' http://localhost:3001 ws://localhost:3002; img-src 'self' https:; media-src 'self' https:; frame-src https://www.youtube-nocookie.com; object-src 'none'",
+      "connect-src 'self' http://localhost:8080 ws://localhost:8080; img-src 'self' https:; media-src 'self' https:; frame-src https://www.youtube-nocookie.com; object-src 'none'",
     );
   });
 

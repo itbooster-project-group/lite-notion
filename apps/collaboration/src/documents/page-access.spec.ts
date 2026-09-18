@@ -1,94 +1,70 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { ApiDeniedError, ApiUnavailableError } from '../api/internal-api-client.js';
 import { PageAccessDeniedError, PageAccessService } from './page-access.js';
 
-/**
- * Цепочку подменяем на уровне запроса: правила подъёма — забота общего пакета и его
- * интеграционных тестов, здесь проверяется только перевод роли в право записи.
- */
-function serviceFor(options: {
-  chain?: { ownerId: string; depth: number; role: 'VIEWER' | 'EDITOR' | null }[];
-  hasDocument?: boolean;
-}) {
-  const prisma = {
-    $queryRaw: vi.fn(async () => options.chain ?? []),
-    pageDocument: {
-      findUnique: vi.fn(async () => (options.hasDocument === false ? null : { pageId: 'page-id' })),
-    },
-  };
-
-  return { prisma, service: new PageAccessService(prisma as never) };
-}
-
-const OWNER = 'owner-id';
+const PAGE = 'page-id';
 const ACTOR = 'actor-id';
 
+function serviceWith(authorizePage: ReturnType<typeof vi.fn>) {
+  return new PageAccessService({ authorizePage } as never);
+}
+
 describe('PageAccessService', () => {
-  it('даёт владельцу чтение и запись', async () => {
-    const { service } = serviceFor({ chain: [{ depth: 0, ownerId: OWNER, role: null }] });
+  it('переносит право записи из вердикта API', async () => {
+    const service = serviceWith(
+      vi.fn(async () => ({ canWrite: true, pageId: PAGE, role: 'editor', userId: ACTOR })),
+    );
 
-    await expect(service.authorize(OWNER, 'page-id')).resolves.toEqual({
+    await expect(service.authorize('token', PAGE)).resolves.toEqual({
       canRead: true,
       canWrite: true,
-      pageId: 'page-id',
-      userId: OWNER,
+      pageId: PAGE,
+      userId: ACTOR,
     });
   });
 
-  it('даёт редактору чтение и запись', async () => {
-    const { service } = serviceFor({ chain: [{ depth: 0, ownerId: OWNER, role: 'EDITOR' }] });
+  it('читателю даёт чтение без записи', async () => {
+    const service = serviceWith(
+      vi.fn(async () => ({ canWrite: false, pageId: PAGE, role: 'viewer', userId: ACTOR })),
+    );
 
-    await expect(service.authorize(ACTOR, 'page-id')).resolves.toMatchObject({
-      canRead: true,
-      canWrite: true,
-    });
-  });
-
-  it('даёт читателю чтение без записи', async () => {
-    const { service } = serviceFor({ chain: [{ depth: 0, ownerId: OWNER, role: 'VIEWER' }] });
-
-    await expect(service.authorize(ACTOR, 'page-id')).resolves.toMatchObject({
+    await expect(service.authorize('token', PAGE)).resolves.toMatchObject({
       canRead: true,
       canWrite: false,
     });
   });
 
-  it('пускает по унаследованному разрешению с предка', async () => {
-    const { service } = serviceFor({
-      chain: [
-        { depth: 0, ownerId: OWNER, role: null },
-        { depth: 1, ownerId: OWNER, role: 'EDITOR' },
-      ],
-    });
+  it('пробрасывает токен клиента без изменений', async () => {
+    const authorizePage = vi.fn(async () => ({
+      canWrite: true,
+      pageId: PAGE,
+      role: 'editor',
+      userId: ACTOR,
+    }));
 
-    await expect(service.authorize(ACTOR, 'page-id')).resolves.toMatchObject({ canWrite: true });
+    await serviceWith(authorizePage).authorize('client-token', PAGE);
+
+    expect(authorizePage).toHaveBeenCalledWith('client-token', PAGE);
   });
 
-  it('одинаково отклоняет отсутствие доступа, удаление и границу restricted', async () => {
-    // Пустая цепочка приходит и для несуществующей страницы, и для удалённой, и для
-    // страницы удалённого проекта; оборванная — для границы restricted.
-    for (const chain of [[], [{ depth: 0, ownerId: OWNER, role: null }]]) {
-      const { service } = serviceFor({ chain });
+  it('переводит авторитетный отказ в отказ доступа', async () => {
+    const service = serviceWith(
+      vi.fn(async () => {
+        throw new ApiDeniedError(404);
+      }),
+    );
 
-      await expect(service.authorize(ACTOR, 'page-id')).rejects.toThrow(PageAccessDeniedError);
-    }
+    await expect(service.authorize('token', PAGE)).rejects.toBeInstanceOf(PageAccessDeniedError);
   });
 
-  it('отклоняет страницу без документа даже её владельцу', async () => {
-    const { service } = serviceFor({
-      chain: [{ depth: 0, ownerId: OWNER, role: null }],
-      hasDocument: false,
-    });
+  it('недоступность API отказом не считает', async () => {
+    const service = serviceWith(
+      vi.fn(async () => {
+        throw new ApiUnavailableError('timeout');
+      }),
+    );
 
-    await expect(service.authorize(OWNER, 'page-id')).rejects.toThrow(PageAccessDeniedError);
-  });
-
-  it('не спрашивает владельца страницы отдельным запросом', async () => {
-    const { prisma, service } = serviceFor({ chain: [{ depth: 0, ownerId: OWNER, role: null }] });
-
-    await service.authorize(OWNER, 'page-id');
-
-    // Собственного правила доступа здесь не осталось: роль приходит из пакета.
-    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    await expect(service.authorize('token', PAGE)).rejects.toBeInstanceOf(ApiUnavailableError);
   });
 });

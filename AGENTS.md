@@ -48,6 +48,7 @@ Every Pull Request into `main` must pass the required `lint`, `web`, and `api` G
 - Follow Biome formatting and lint rules. Do not hand-format against the configured style.
 - Keep controllers and route handlers free of business logic; place behavior in the appropriate application layer.
 - Prefer existing abstractions and the smallest scoped change over introducing parallel patterns.
+- Keep comments short and to the point. A comment states the non-obvious reason a line exists; it does not restate what the code already says, argue a case, weigh alternatives, or record the reasoning that led to the decision. One or two lines is the norm — if a comment needs a paragraph, the rationale belongs in the OpenSpec design document instead.
 - Add or update tests for observable behavior and regressions. Keep tests deterministic and independent of external services unless the change explicitly introduces them.
 - Do not commit generated output such as `.next`, `dist`, coverage, or TypeScript build info.
 

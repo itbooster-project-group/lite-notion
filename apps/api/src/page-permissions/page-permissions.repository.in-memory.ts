@@ -1,9 +1,8 @@
-import { PageRole } from '@lite-notion/page-permissions';
 import { Injectable } from '@nestjs/common';
-
 import type { TransactionScope } from '../database/transaction';
 import type { StoredPage } from '../pages/pages.repository.in-memory';
 import type { StoredProject } from '../projects/projects.repository.in-memory';
+import { PageRole } from './constants';
 import type {
   AccessiblePageRow,
   PagePermissionRecord,

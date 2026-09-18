@@ -10,22 +10,24 @@ import { resolveLanHost } from './lan-host.mjs';
 export const API_PORT = '3001';
 export const WEB_PORT = '3000';
 export const COLLABORATION_PORT = '3002';
+export const GATEWAY_PORT = '8080';
 
 const PNPM_COMMAND = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 
 export function createLanProcessConfig(lanHost, baseEnv = process.env) {
-  const webOrigin = `http://${lanHost}:${WEB_PORT}`;
-  const apiOrigin = `http://${lanHost}:${API_PORT}`;
-  const collaborationUrl = `ws://${lanHost}:${COLLABORATION_PORT}`;
+  // Весь трафик идёт через шлюз, поэтому origin один на всё: и frontend, и API, и
+  // WebSocket адресуются по нему. Порты процессов наружу не публикуются.
+  const gatewayOrigin = `http://${lanHost}:${GATEWAY_PORT}`;
+  const collaborationUrl = `ws://${lanHost}:${GATEWAY_PORT}/collaboration`;
 
   return {
-    apiOrigin,
+    gatewayOrigin,
     processes: [
       {
         args: ['--filter', '@lite-notion/collaboration', 'dev'],
         env: {
           ...baseEnv,
-          COLLABORATION_ALLOWED_ORIGIN: webOrigin,
+          COLLABORATION_ALLOWED_ORIGIN: gatewayOrigin,
           PORT: COLLABORATION_PORT,
         },
         label: 'Collaboration',
@@ -34,7 +36,7 @@ export function createLanProcessConfig(lanHost, baseEnv = process.env) {
         args: ['--filter', '@lite-notion/api', 'dev'],
         env: {
           ...baseEnv,
-          CORS_ORIGIN: webOrigin,
+          CORS_ORIGIN: gatewayOrigin,
           PORT: API_PORT,
         },
         label: 'API',
@@ -44,14 +46,13 @@ export function createLanProcessConfig(lanHost, baseEnv = process.env) {
         env: {
           ...baseEnv,
           LAN_HOST: lanHost,
-          NEXT_PUBLIC_API_BASE_URL: apiOrigin,
+          NEXT_PUBLIC_API_BASE_URL: gatewayOrigin,
           NEXT_PUBLIC_API_MOCKING: 'disabled',
           NEXT_PUBLIC_COLLABORATION_URL: collaborationUrl,
         },
         label: 'Web',
       },
     ],
-    webOrigin,
   };
 }
 
@@ -158,8 +159,7 @@ export function runDevLan() {
 
   const config = createLanProcessConfig(lanHost);
 
-  console.log(`Web: ${config.webOrigin}`);
-  console.log(`API: ${config.apiOrigin}`);
+  console.log(`App: ${config.gatewayOrigin}`);
 
   const runner = createRunner();
 

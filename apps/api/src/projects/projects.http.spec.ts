@@ -8,11 +8,11 @@ const owner = '11111111-1111-1111-1111-111111111111';
 
 describe('projects HTTP contract', () => {
   let context: HttpTestContext;
-  let authorization: string;
+  let authorization: Record<string, string>;
 
   beforeEach(async () => {
     context = await createHttpTestContext();
-    authorization = `Bearer ${await context.signAccessToken(owner)}`;
+    authorization = context.identityOf(owner);
   });
 
   afterEach(async () => {
@@ -22,7 +22,7 @@ describe('projects HTTP contract', () => {
   const post = (body: unknown) =>
     request(context.app.getHttpServer())
       .post('/api/v1/projects')
-      .set('Authorization', authorization)
+      .set(authorization)
       .send(body as object);
 
   it('создаёт проект и возвращает 201', async () => {
@@ -59,7 +59,7 @@ describe('projects HTTP contract', () => {
 
     const response = await request(context.app.getHttpServer())
       .get('/api/v1/projects')
-      .set('Authorization', authorization)
+      .set(authorization)
       .expect(200);
 
     expect(response.body).toHaveLength(1);
@@ -69,7 +69,7 @@ describe('projects HTTP contract', () => {
   it('возвращает пустой список, а не ошибку', async () => {
     const response = await request(context.app.getHttpServer())
       .get('/api/v1/projects')
-      .set('Authorization', authorization)
+      .set(authorization)
       .expect(200);
 
     expect(response.body).toEqual([]);

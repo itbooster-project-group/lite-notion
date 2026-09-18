@@ -1,8 +1,15 @@
-import { expect, test } from '@playwright/test';
+import { type Browser, type BrowserContext, expect, type Page, test } from '@playwright/test';
 
 const pageId = process.env.PLAYWRIGHT_PAGE_ID;
 
 type TestIdentity = Readonly<{ id: string; name: string }>;
+type TestCredentials = Readonly<{ email: string; password: string }>;
+
+function getTestCredentials(slot: 'A' | 'B'): TestCredentials | undefined {
+  const email = process.env[`PLAYWRIGHT_USER_${slot}_EMAIL`];
+  const password = process.env[`PLAYWRIGHT_USER_${slot}_PASSWORD`];
+  return email && password ? { email, password } : undefined;
+}
 
 function getTestIdentity(slot: 'A' | 'B'): TestIdentity | undefined {
   const id = process.env[`PLAYWRIGHT_USER_${slot}_ID`];
@@ -10,20 +17,47 @@ function getTestIdentity(slot: 'A' | 'B'): TestIdentity | undefined {
   return id && name ? { id, name } : undefined;
 }
 
+async function createAuthenticatedPage(
+  browser: Browser,
+  credentials: TestCredentials,
+): Promise<{ context: BrowserContext; page: Page }> {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  const targetPath = `/pages/${pageId}`;
+
+  await page.goto(`/login?next=${encodeURIComponent(targetPath)}`);
+  await page.locator('#login-email').fill(credentials.email);
+  await page.locator('#login-password').fill(credentials.password);
+  await Promise.all([
+    page.waitForURL((url) => url.pathname === '/'),
+    page.getByRole('button', { name: 'Войти' }).click(),
+  ]);
+  await page.goto(targetPath);
+
+  return { context, page };
+}
+
 test.describe('page editor collaboration', () => {
   test('synchronizes two independent browser contexts and restores persisted content', async ({
     browser,
   }) => {
     if (!pageId) {
-      throw new Error('PLAYWRIGHT_PAGE_ID is required for the collaboration E2E environment');
+      test.skip(true, 'PLAYWRIGHT_PAGE_ID is required for the collaboration E2E environment');
+      return;
     }
-    const storageStateA =
-      process.env.PLAYWRIGHT_STORAGE_STATE_A ?? process.env.PLAYWRIGHT_STORAGE_STATE;
-    const storageStateB = process.env.PLAYWRIGHT_STORAGE_STATE_A2 ?? storageStateA;
-    const contextA = await browser.newContext(storageStateA ? { storageState: storageStateA } : {});
-    const contextB = await browser.newContext(storageStateB ? { storageState: storageStateB } : {});
-    const pageA = await contextA.newPage();
-    const pageB = await contextB.newPage();
+    const credentials = getTestCredentials('A');
+    if (!credentials) {
+      test.skip(
+        true,
+        'PLAYWRIGHT_USER_A_EMAIL and PLAYWRIGHT_USER_A_PASSWORD are required for collaboration E2E',
+      );
+      return;
+    }
+    const [{ context: contextA, page: pageA }, { context: contextB, page: pageB }] =
+      await Promise.all([
+        createAuthenticatedPage(browser, credentials),
+        createAuthenticatedPage(browser, credentials),
+      ]);
     const documentPutRequests: string[] = [];
 
     pageA.on('request', (request) => {
@@ -70,26 +104,23 @@ test.describe('page editor collaboration', () => {
   });
 
   test('shows presence and remote caret for two different users', async ({ browser }) => {
-    const storageStateA = process.env.PLAYWRIGHT_STORAGE_STATE_A;
-    const storageStateB = process.env.PLAYWRIGHT_STORAGE_STATE_B;
+    const credentialsA = getTestCredentials('A');
+    const credentialsB = getTestCredentials('B');
     const userA = getTestIdentity('A');
     const userB = getTestIdentity('B');
-    if (!pageId || !storageStateA || !storageStateB || !userA || !userB) {
+    if (!pageId || !credentialsA || !credentialsB || !userA || !userB) {
       test.skip(
         true,
-        'PLAYWRIGHT_PAGE_ID, both storage states and explicit user identities are required',
+        'PLAYWRIGHT_PAGE_ID, both credentials and explicit user identities are required',
       );
       return;
     }
 
-    const contextA = await browser.newContext({
-      storageState: storageStateA,
-    });
-    const contextB = await browser.newContext({
-      storageState: storageStateB,
-    });
-    const pageA = await contextA.newPage();
-    const pageB = await contextB.newPage();
+    const [{ context: contextA, page: pageA }, { context: contextB, page: pageB }] =
+      await Promise.all([
+        createAuthenticatedPage(browser, credentialsA),
+        createAuthenticatedPage(browser, credentialsB),
+      ]);
 
     try {
       await Promise.all([pageA.goto(`/pages/${pageId}`), pageB.goto(`/pages/${pageId}`)]);
@@ -130,21 +161,17 @@ test.describe('page editor collaboration', () => {
   });
 
   test('deduplicates participants for two tabs of one user', async ({ browser }) => {
-    const storageStateA =
-      process.env.PLAYWRIGHT_STORAGE_STATE_A ?? process.env.PLAYWRIGHT_STORAGE_STATE;
-    const storageStateB = process.env.PLAYWRIGHT_STORAGE_STATE_A2;
+    const credentialsA = getTestCredentials('A');
     const userA = getTestIdentity('A');
-    if (!pageId || !storageStateA || !storageStateB || !userA) {
-      test.skip(
-        true,
-        'PLAYWRIGHT_PAGE_ID, two same-user storage states and user A identity are required',
-      );
+    if (!pageId || !credentialsA || !userA) {
+      test.skip(true, 'PLAYWRIGHT_PAGE_ID, user A credentials and user A identity are required');
       return;
     }
-    const contextA = await browser.newContext({ storageState: storageStateA });
-    const contextB = await browser.newContext({ storageState: storageStateB });
-    const pageA = await contextA.newPage();
-    const pageB = await contextB.newPage();
+    const [{ context: contextA, page: pageA }, { context: contextB, page: pageB }] =
+      await Promise.all([
+        createAuthenticatedPage(browser, credentialsA),
+        createAuthenticatedPage(browser, credentialsA),
+      ]);
 
     try {
       await Promise.all([pageA.goto(`/pages/${pageId}`), pageB.goto(`/pages/${pageId}`)]);
@@ -168,19 +195,20 @@ test.describe('page editor collaboration', () => {
   });
 
   test('keeps a viewer read-only while showing document presence', async ({ browser }) => {
-    const storageStateA = process.env.PLAYWRIGHT_STORAGE_STATE_A;
-    const storageStateB = process.env.PLAYWRIGHT_STORAGE_STATE_B;
+    const credentialsA = getTestCredentials('A');
+    const credentialsB = getTestCredentials('B');
     const userA = getTestIdentity('A');
     const userB = getTestIdentity('B');
-    if (!pageId || !storageStateA || !storageStateB || !userA || !userB) {
-      test.skip(true, 'Two storage states and explicit user identities are required');
+    if (!pageId || !credentialsA || !credentialsB || !userA || !userB) {
+      test.skip(true, 'Two credentials and explicit user identities are required');
       return;
     }
 
-    const contextA = await browser.newContext({ storageState: storageStateA });
-    const contextB = await browser.newContext({ storageState: storageStateB });
-    const pageA = await contextA.newPage();
-    const pageB = await contextB.newPage();
+    const [{ context: contextA, page: pageA }, { context: contextB, page: pageB }] =
+      await Promise.all([
+        createAuthenticatedPage(browser, credentialsA),
+        createAuthenticatedPage(browser, credentialsB),
+      ]);
 
     try {
       await Promise.all([pageA.goto(`/pages/${pageId}`), pageB.goto(`/pages/${pageId}`)]);
@@ -198,20 +226,21 @@ test.describe('page editor collaboration', () => {
   });
 
   test('cleans participants when one client switches to another page', async ({ browser }) => {
-    const storageStateA = process.env.PLAYWRIGHT_STORAGE_STATE_A;
-    const storageStateB = process.env.PLAYWRIGHT_STORAGE_STATE_B;
+    const credentialsA = getTestCredentials('A');
+    const credentialsB = getTestCredentials('B');
     const secondPageId = process.env.PLAYWRIGHT_SECOND_PAGE_ID;
     const userA = getTestIdentity('A');
     const userB = getTestIdentity('B');
-    if (!pageId || !storageStateA || !storageStateB || !secondPageId || !userA || !userB) {
-      test.skip(true, 'Two storage states, identities and PLAYWRIGHT_SECOND_PAGE_ID are required');
+    if (!pageId || !credentialsA || !credentialsB || !secondPageId || !userA || !userB) {
+      test.skip(true, 'Two credentials, identities and PLAYWRIGHT_SECOND_PAGE_ID are required');
       return;
     }
 
-    const contextA = await browser.newContext({ storageState: storageStateA });
-    const contextB = await browser.newContext({ storageState: storageStateB });
-    const pageA = await contextA.newPage();
-    const pageB = await contextB.newPage();
+    const [{ context: contextA, page: pageA }, { context: contextB, page: pageB }] =
+      await Promise.all([
+        createAuthenticatedPage(browser, credentialsA),
+        createAuthenticatedPage(browser, credentialsB),
+      ]);
 
     try {
       await Promise.all([pageA.goto(`/pages/${pageId}`), pageB.goto(`/pages/${pageId}`)]);
@@ -228,19 +257,20 @@ test.describe('page editor collaboration', () => {
   });
 
   test('reconnects the same session after a temporary network outage', async ({ browser }) => {
-    const storageStateA = process.env.PLAYWRIGHT_STORAGE_STATE_A;
-    const storageStateB = process.env.PLAYWRIGHT_STORAGE_STATE_B;
+    const credentialsA = getTestCredentials('A');
+    const credentialsB = getTestCredentials('B');
     const userA = getTestIdentity('A');
     const userB = getTestIdentity('B');
-    if (!pageId || !storageStateA || !storageStateB || !userA || !userB) {
-      test.skip(true, 'Two storage states and explicit user identities are required');
+    if (!pageId || !credentialsA || !credentialsB || !userA || !userB) {
+      test.skip(true, 'Two credentials and explicit user identities are required');
       return;
     }
 
-    const contextA = await browser.newContext({ storageState: storageStateA });
-    const contextB = await browser.newContext({ storageState: storageStateB });
-    const pageA = await contextA.newPage();
-    const pageB = await contextB.newPage();
+    const [{ context: contextA, page: pageA }, { context: contextB, page: pageB }] =
+      await Promise.all([
+        createAuthenticatedPage(browser, credentialsA),
+        createAuthenticatedPage(browser, credentialsB),
+      ]);
 
     try {
       await Promise.all([pageA.goto(`/pages/${pageId}`), pageB.goto(`/pages/${pageId}`)]);

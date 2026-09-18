@@ -8,12 +8,12 @@ const owner = '11111111-1111-1111-1111-111111111111';
 
 describe('pages HTTP contract', () => {
   let context: HttpTestContext;
-  let authorization: string;
+  let authorization: Record<string, string>;
   let projectId: string;
 
   beforeEach(async () => {
     context = await createHttpTestContext();
-    authorization = `Bearer ${await context.signAccessToken(owner)}`;
+    authorization = context.identityOf(owner);
     projectId = (await context.projects.create({ name: 'Workspace', ownerId: owner })).id;
   });
 
@@ -24,7 +24,7 @@ describe('pages HTTP contract', () => {
   const post = (body: unknown) =>
     request(context.app.getHttpServer())
       .post('/api/v1/pages')
-      .set('Authorization', authorization)
+      .set(authorization)
       .send(body as object);
 
   describe('валидация создания', () => {
@@ -81,7 +81,7 @@ describe('pages HTTP contract', () => {
 
         await request(context.app.getHttpServer())
           .patch(`/api/v1/pages/${page.body.id}`)
-          .set('Authorization', authorization)
+          .set(authorization)
           .send({ title: 'renamed', [field]: value })
           .expect(400);
       });
@@ -91,7 +91,7 @@ describe('pages HTTP contract', () => {
 
         await request(context.app.getHttpServer())
           .post(`/api/v1/pages/${page.body.id}/move`)
-          .set('Authorization', authorization)
+          .set(authorization)
           .send({ parentPageId: null, [field]: value })
           .expect(400);
       });
@@ -102,13 +102,13 @@ describe('pages HTTP contract', () => {
 
       await request(context.app.getHttpServer())
         .patch(`/api/v1/pages/${page.body.id}`)
-        .set('Authorization', authorization)
+        .set(authorization)
         .send({ projectId, title: 'renamed' })
         .expect(400);
 
       await request(context.app.getHttpServer())
         .post(`/api/v1/pages/${page.body.id}/move`)
-        .set('Authorization', authorization)
+        .set(authorization)
         .send({ parentPageId: null, projectId })
         .expect(400);
     });
@@ -120,7 +120,7 @@ describe('pages HTTP contract', () => {
 
       const response = await request(context.app.getHttpServer())
         .post(`/api/v1/pages/${page.body.id}/move`)
-        .set('Authorization', authorization)
+        .set(authorization)
         .send({ parentPageId: page.body.id })
         .expect(409);
 
@@ -134,7 +134,7 @@ describe('pages HTTP contract', () => {
 
       await request(context.app.getHttpServer())
         .post(`/api/v1/pages/${root.body.id}/move`)
-        .set('Authorization', authorization)
+        .set(authorization)
         .send({ parentPageId: null, previousSiblingId: child.body.id })
         .expect(400);
     });
@@ -146,7 +146,7 @@ describe('pages HTTP contract', () => {
 
       await request(context.app.getHttpServer())
         .post(`/api/v1/pages/${here.body.id}/move`)
-        .set('Authorization', authorization)
+        .set(authorization)
         .send({ parentPageId: there.body.id })
         .expect(400);
     });
@@ -154,7 +154,7 @@ describe('pages HTTP contract', () => {
     it('отвечает 400 на pageId не в формате UUID', async () => {
       await request(context.app.getHttpServer())
         .get('/api/v1/pages/not-a-uuid')
-        .set('Authorization', authorization)
+        .set(authorization)
         .expect(400);
     });
 
@@ -164,7 +164,7 @@ describe('pages HTTP contract', () => {
 
       const response = await request(context.app.getHttpServer())
         .get('/api/v1/pages')
-        .set('Authorization', authorization)
+        .set(authorization)
         .expect(200);
 
       expect(response.body).toHaveLength(1);

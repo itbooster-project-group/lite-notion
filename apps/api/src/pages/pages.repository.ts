@@ -1,4 +1,3 @@
-import { type PageAccessMode, PageDeletionOrigin } from '@lite-notion/database/enums';
 import { Inject, Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import {
@@ -6,6 +5,7 @@ import {
   databaseClientOf,
   type TransactionScope,
 } from '../database/transaction';
+import { type PageAccessMode, PageDeletionOrigin } from '../generated/prisma/enums';
 
 /**
  * Prisma отдаёт и принимает колонку `Bytes` как Uint8Array поверх обычного

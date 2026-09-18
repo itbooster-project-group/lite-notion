@@ -10,6 +10,10 @@ import { NodeEnvironment } from '../config/environment';
 import { PrismaService } from '../database/prisma.service';
 import { TransactionRunner } from '../database/transaction';
 import { InMemoryTransactionRunner } from '../database/transaction.in-memory';
+import {
+  INTERNAL_IDENTITY_SESSION_HEADER,
+  INTERNAL_IDENTITY_USER_HEADER,
+} from '../internal/constants';
 import { PagePermissionsRepository } from '../page-permissions/page-permissions.repository';
 import { InMemoryPagePermissionsRepository } from '../page-permissions/page-permissions.repository.in-memory';
 import { PageDocumentRepository } from '../pages/page-document/page-document.repository';
@@ -27,6 +31,8 @@ import {
 } from '../projects/projects.repository.in-memory';
 import { UsersService } from '../users/users.service';
 
+const TEST_SESSION_ID = '99999999-9999-9999-9999-999999999999';
+
 export interface HttpTestContext {
   app: INestApplication;
   pages: InMemoryPagesRepository;
@@ -36,8 +42,10 @@ export interface HttpTestContext {
   permissions: InMemoryPagePermissionsRepository;
   /** Позволяет тесту проверить, какие локи взяла операция. */
   transactions: InMemoryTransactionRunner;
-  /** Подписывает настоящий access-токен: guard проверяет подпись, а не мок. */
+  /** Подписывает настоящий access-токен: его проверяют внутренние маршруты. */
   signAccessToken: (userId: string) => Promise<string>;
+  /** Заголовки личности, как их проставляет шлюз после успешной проверки токена. */
+  identityOf: (userId: string) => Record<string, string>;
 }
 
 /**
@@ -111,6 +119,10 @@ export async function createHttpTestContext(): Promise<HttpTestContext> {
     projects,
     transactions,
     signAccessToken: (userId: string) =>
-      tokens.signAccessToken({ sid: '99999999-9999-9999-9999-999999999999', sub: userId }),
+      tokens.signAccessToken({ sid: TEST_SESSION_ID, sub: userId }),
+    identityOf: (userId: string) => ({
+      [INTERNAL_IDENTITY_SESSION_HEADER]: TEST_SESSION_ID,
+      [INTERNAL_IDENTITY_USER_HEADER]: userId,
+    }),
   };
 }
