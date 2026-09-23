@@ -180,6 +180,9 @@ export function WorkspaceTree({
     canRename: (item) =>
       item.getItemData().kind === 'page' &&
       getPageCapabilities(item.getItemData().accessRole).canRenamePage,
+    // Без этого `@headless-tree` никогда не вычисляет позицию "перед"/"после"
+    // элемента: любой drop трактуется как "сделать дочерним" наведённого узла.
+    canReorder: true,
     dataLoader: {
       getChildren: (itemId) => model.items[itemId]?.childrenIds.slice() ?? [],
       getItem: (itemId) => model.items[itemId] ?? rootData,
@@ -392,10 +395,12 @@ function toWorkspaceDropTarget(target: DragTarget<WorkspaceTreeItemData>): PageD
     };
   }
 
-  if (data.kind !== 'page' || !data.pageId) return null;
+  // `@headless-tree` проверяет неупорядоченной целью `{ item: parent }`, может ли
+  // страница вообще стать соседом внутри родителя; для корневых страниц родитель —
+  // проект, и без этой ветки перестановка на корневом уровне никогда не разрешается.
   return {
-    childCount: data.childrenIds.length,
-    parentPageId: data.pageId,
+    childPageIds: target.item.getChildren().flatMap((child) => child.getItemData().pageId ?? []),
+    parentPageId: data.kind === 'project' ? null : data.pageId,
     projectId: data.projectId,
     type: 'item',
   };

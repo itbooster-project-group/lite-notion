@@ -119,6 +119,9 @@ export function PageTree({
     canRename: (item) =>
       !item.getItemData().synthetic &&
       getPageCapabilities(item.getItemData().accessRole).canRenamePage,
+    // Без этого `@headless-tree` никогда не вычисляет позицию "перед"/"после"
+    // элемента: любой drop трактуется как "сделать дочерним" наведённого узла.
+    canReorder: true,
     dataLoader: {
       getChildren: (itemId) => projectTree.items[itemId]?.childrenIds.slice() ?? [],
       getItem: (itemId) => projectTree.items[itemId] ?? rootData,
@@ -309,7 +312,7 @@ function toPageDropTarget(target: DragTarget<PageTreeItemData>): PageDropTarget 
   }
 
   return {
-    childCount: targetData.childrenIds.length,
+    childPageIds: targetData.childrenIds,
     parentPageId: targetData.synthetic ? null : targetData.id,
     projectId: targetData.projectId,
     type: 'item',
