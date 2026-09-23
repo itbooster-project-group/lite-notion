@@ -32,7 +32,7 @@ import {
 } from '@/features/workspace-management';
 import type { ProjectDto } from '@/shared/api';
 import { workspacePagePath, workspaceProjectPath } from '@/shared/routing';
-import { Text, TREE_INDENT_PX } from '@/shared/ui';
+import { Text, TREE_INDENT_PX, TreeDropIndicator } from '@/shared/ui';
 import {
   buildWorkspaceTree,
   getPageItemId,
@@ -311,7 +311,8 @@ export function WorkspaceTree({
 
   return (
     <div className="space-y-2">
-      <div {...tree.getContainerProps('Проекты и страницы')} className="space-y-0.5">
+      <div {...tree.getContainerProps('Проекты и страницы')} className="relative space-y-0.5">
+        <TreeDropIndicator style={tree.getDragLineStyle()} />
         {items.map((item) => {
           const data = item.getItemData();
           const pageId = data.pageId;

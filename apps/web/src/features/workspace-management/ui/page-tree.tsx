@@ -26,7 +26,7 @@ import {
   parsePageTitle,
   toMoveIntent,
 } from '@/entities/page';
-import { Button, Text, TREE_INDENT_PX } from '@/shared/ui';
+import { Button, Text, TREE_INDENT_PX, TreeDropIndicator } from '@/shared/ui';
 import type { PageDeleteRequest } from '../model/delete-intent';
 import { MovePageDialog } from './move-page-dialog';
 import { PageDraft } from './page-draft';
@@ -253,7 +253,8 @@ export function PageTree({
         />
       ) : null}
 
-      <div {...tree.getContainerProps('Страницы проекта')} className="space-y-0.5">
+      <div {...tree.getContainerProps('Страницы проекта')} className="relative space-y-0.5">
+        <TreeDropIndicator style={tree.getDragLineStyle()} />
         {items.map((item) => (
           <PageTreeItem
             active={item.getId() === activePageId}
