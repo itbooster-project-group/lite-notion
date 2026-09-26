@@ -39,3 +39,4 @@ export { Text, type TextProps } from './text';
 export { Textarea, type TextareaProps } from './textarea';
 export { Tooltip } from './tooltip';
 export { TREE_INDENT_PX } from './tree';
+export { TreeDropIndicator, type TreeDropIndicatorProps } from './tree-drop-indicator';

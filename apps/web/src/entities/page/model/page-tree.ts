@@ -53,7 +53,7 @@ export type PageDropTarget =
       type: 'item';
       parentPageId: string | null;
       projectId: string;
-      childCount: number;
+      childPageIds: readonly string[];
     }>
   | Readonly<{
       type: 'insertion';
@@ -202,11 +202,13 @@ export function toMoveIntent(pageId: string, target: PageDropTarget): MoveIntent
     };
   }
 
+  // Индекс считается среди siblings без самой страницы, как в `isMoveIntentValid`:
+  // иначе drop в конец текущего parent выходит за границу и отклоняется.
   return {
     pageId,
     projectId: target.projectId,
     parentPageId: target.parentPageId,
-    index: target.childCount,
+    index: target.childPageIds.filter((id) => id !== pageId).length,
   };
 }
 

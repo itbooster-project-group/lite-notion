@@ -13,6 +13,7 @@ import {
   removeProjectPagesFromTree,
   renamePageInTree,
   resolvePageRouteContext,
+  toMoveIntent,
 } from './page-tree';
 
 function page(
@@ -145,6 +146,32 @@ describe('page tree domain model', () => {
         projectId: 'project-a',
       }),
     ).toBe(false);
+  });
+
+  it('drop в конец текущего parent не выходит за границу siblings', () => {
+    const normalized = normalizePageTree(source);
+    const intent = toMoveIntent('b', {
+      childPageIds: ['a', 'b', 'c'],
+      parentPageId: null,
+      projectId: 'project-a',
+      type: 'item',
+    });
+
+    expect(intent.index).toBe(2);
+    expect(isMoveIntentValid(normalized, intent)).toBe(true);
+  });
+
+  it('drop в конец другого parent добавляет страницу последним ребёнком', () => {
+    const normalized = normalizePageTree(source);
+    const intent = toMoveIntent('c', {
+      childPageIds: ['a-child'],
+      parentPageId: 'a',
+      projectId: 'project-a',
+      type: 'item',
+    });
+
+    expect(intent.index).toBe(1);
+    expect(isMoveIntentValid(normalized, intent)).toBe(true);
   });
 
   it('удаляет корневое поддерево страницы без изменения страниц других проектов', () => {

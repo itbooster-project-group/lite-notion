@@ -32,7 +32,7 @@ import {
 } from '@/features/workspace-management';
 import type { ProjectDto } from '@/shared/api';
 import { workspacePagePath, workspaceProjectPath } from '@/shared/routing';
-import { Text, TREE_INDENT_PX } from '@/shared/ui';
+import { Text, TREE_INDENT_PX, TreeDropIndicator } from '@/shared/ui';
 import {
   buildWorkspaceTree,
   getPageItemId,
@@ -180,6 +180,9 @@ export function WorkspaceTree({
     canRename: (item) =>
       item.getItemData().kind === 'page' &&
       getPageCapabilities(item.getItemData().accessRole).canRenamePage,
+    // Без этого `@headless-tree` никогда не вычисляет позицию "перед"/"после"
+    // элемента: любой drop трактуется как "сделать дочерним" наведённого узла.
+    canReorder: true,
     dataLoader: {
       getChildren: (itemId) => model.items[itemId]?.childrenIds.slice() ?? [],
       getItem: (itemId) => model.items[itemId] ?? rootData,
@@ -308,7 +311,8 @@ export function WorkspaceTree({
 
   return (
     <div className="space-y-2">
-      <div {...tree.getContainerProps('Проекты и страницы')} className="space-y-0.5">
+      <div {...tree.getContainerProps('Проекты и страницы')} className="relative space-y-0.5">
+        <TreeDropIndicator style={tree.getDragLineStyle()} />
         {items.map((item) => {
           const data = item.getItemData();
           const pageId = data.pageId;
@@ -392,10 +396,12 @@ function toWorkspaceDropTarget(target: DragTarget<WorkspaceTreeItemData>): PageD
     };
   }
 
-  if (data.kind !== 'page' || !data.pageId) return null;
+  // `@headless-tree` проверяет неупорядоченной целью `{ item: parent }`, может ли
+  // страница вообще стать соседом внутри родителя; для корневых страниц родитель —
+  // проект, и без этой ветки перестановка на корневом уровне никогда не разрешается.
   return {
-    childCount: data.childrenIds.length,
-    parentPageId: data.pageId,
+    childPageIds: target.item.getChildren().flatMap((child) => child.getItemData().pageId ?? []),
+    parentPageId: data.kind === 'project' ? null : data.pageId,
     projectId: data.projectId,
     type: 'item',
   };
