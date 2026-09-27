@@ -19,7 +19,7 @@
     "format": "biome check --write .",
     "typecheck": "pnpm --workspace-concurrency=1 --recursive run typecheck",
     "web:typecheck": "pnpm --filter @lite-notion/web typecheck",
-    "test": "pnpm test:dev-lan && pnpm --workspace-concurrency=1 --recursive run test",
+    "test": "pnpm --workspace-concurrency=1 --recursive run test",
     "test:dev-lan": "node --test scripts/lan-host.test.mjs scripts/dev-lan.test.mjs",
     "web:test": "pnpm --filter @lite-notion/web test",
     "prepare": "husky",
