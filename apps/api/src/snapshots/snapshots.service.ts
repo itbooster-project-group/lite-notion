@@ -23,14 +23,17 @@ export class SnapshotsService {
     input: CreateManualSnapshotInput,
     scope?: TransactionScope,
   ): Promise<SnapshotMetadata> {
-    return this.createSnapshot.createManual(input, scope);
+    return this.createSnapshot.createManual({ ...input, yjsState: input.yjsState.slice() }, scope);
   }
 
   createInternal(
     input: CreateInternalSnapshotInput,
     scope?: TransactionScope,
   ): Promise<SnapshotMetadata> {
-    return this.createSnapshot.createInternal(input, scope);
+    return this.createSnapshot.createInternal(
+      { ...input, yjsState: input.yjsState.slice() },
+      scope,
+    );
   }
 
   async listMetadata(pageId: string, actorId: string): Promise<SnapshotMetadata[]> {

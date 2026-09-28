@@ -161,6 +161,23 @@ describe('SnapshotsService', () => {
     expect(created.createdBy).toEqual({ id: EDITOR_ID, name: EDITOR_ID });
   });
 
+  it('сохраняет bytes, переданные на момент вызова, даже если caller меняет массив', async () => {
+    const { service, snapshots } = createService();
+    const yjsState = new Uint8Array([1, 2, 3]);
+    const creation = service.createManual({
+      createdById: OWNER_ID,
+      pageId: PAGE_ID,
+      storageRevision: 9n,
+      tiptapSchemaVersion: 3,
+      yjsState,
+    });
+
+    yjsState.fill(9);
+    await creation;
+
+    expect(snapshots.inserts[0]?.yjsState).toEqual(new Uint8Array([1, 2, 3]));
+  });
+
   it('разрешает owner и editor, но запрещает viewer создавать manual snapshot', async () => {
     const { service } = createService();
 

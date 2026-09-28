@@ -30,7 +30,7 @@
 
 ### Requirement: Создание пользовательских и внутренних snapshot имеет разные правила
 
-Пользовательское создание snapshot MUST назначать `reason = manual` и MUST разрешаться только владельцу или редактору страницы. Вызывающий код пользовательского application API MUST NOT выбирать reason. Только trusted internal API MUST принимать системные reasons `automatic`, `publication` и `restore`. Пользователь с недостаточной ролью на доступной ему странице MUST получить отказ доступа; для страницы без effective access MUST сохраняться безопасная not-found семантика проекта. Внутреннее создание MUST принимать системные reasons без требования пользовательского actor.
+Пользовательское создание snapshot MUST назначать `reason = manual` и MUST разрешаться только владельцу или редактору страницы. Вызывающий код пользовательского application API MUST NOT выбирать reason. Только trusted internal API MUST принимать системные reasons `automatic`, `publication` и `restore`. Effective role MUST проверяться существующим permission mechanism перед snapshot creation. Page-row lock MUST сериализовать revision allocation, но не гарантирует сериализацию отзыва permission относительно создания snapshot. Пользователь с недостаточной ролью на доступной ему странице MUST получить отказ доступа; для страницы без effective access MUST сохраняться безопасная not-found семантика проекта. Внутреннее создание MUST принимать системные reasons без требования пользовательского actor.
 
 #### Scenario: Владелец создаёт manual snapshot
 - **WHEN** владелец создаёт snapshot из captured document state

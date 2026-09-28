@@ -31,7 +31,7 @@
 
 - [Прямой SQL writer может обойти протокол блокировки строки страницы] → Сохранить `(pageId, revision)` как unique backstop; поддерживаемый путь записи проходит через snapshot application service. Database trigger не добавляется.
 - [Captured state может устареть до сохранения] → Сохранять source revision; согласование capture с collaboration storage относится к следующему этапу issue #48.
-- [Права могут измениться одновременно с созданием] → Вычислять effective role внутри snapshot transaction через существующий permission mechanism. Snapshot creation не вводит отдельное кешированное или дублирующее решение о правах.
+- [Permission может быть отозван одновременно с созданием] → Проверять effective role существующим permission mechanism перед snapshot creation. Page-row lock сериализует revision allocation для страницы, но revoke permission и создание snapshot не являются одной сериализованной операцией.
 - [Ошибка внешнего workflow может оставить snapshot, если запись выйдет за его транзакцию] → PostgreSQL integration test создаёт snapshot через caller-provided `TransactionScope`, выбрасывает ошибку и проверяет отсутствие строки после rollback.
 - [Глобальный поиск по snapshot id мог бы раскрыть существование snapshot другой страницы] → Выполнять page-scoped lookup по `pageId` и `snapshotId` одним запросом и проверять права на указанную страницу.
 
