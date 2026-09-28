@@ -11,6 +11,7 @@ import { InternalModule } from './internal/internal.module';
 import { PageDocumentModule } from './pages/page-document/page-document.module';
 import { PagesModule } from './pages/pages.module';
 import { ProjectsModule } from './projects/projects.module';
+import { SnapshotsModule } from './snapshots/snapshots.module';
 import { TrashCleanupModule } from './trash/trash-cleanup.module';
 
 @Module({
@@ -27,6 +28,7 @@ import { TrashCleanupModule } from './trash/trash-cleanup.module';
     PagesModule,
     PageDocumentModule,
     ProjectsModule,
+    SnapshotsModule,
     TrashCleanupModule,
     InternalModule,
   ],
