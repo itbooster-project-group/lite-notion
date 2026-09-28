@@ -19,6 +19,7 @@ model User {
   projects     Project[]
   ownedPages   Page[]    @relation("PageOwner")
   createdPages Page[]    @relation("PageCreatedBy")
+  createdSnapshots DocumentSnapshot[] @relation("DocumentSnapshotCreatedBy")
 
   pagePermissions        PagePermission[] @relation("PagePermissionUser")
   grantedPagePermissions PagePermission[] @relation("PagePermissionGrantedBy")
@@ -73,6 +74,13 @@ enum PagePermissionRole {
   EDITOR
 }
 
+enum SnapshotReason {
+  automatic
+  manual
+  publication
+  restore
+}
+
 /// Контейнер верхнего уровня для дерева страниц. Пара (id, ownerId) — составной
 /// ключ-кандидат: он существует только затем, чтобы на него мог сослаться composite
 /// FK со стороны Page и база сама держала «проект страницы принадлежит её владельцу».
@@ -122,6 +130,7 @@ model Page {
   parent      Page?            @relation("PageTree", fields: [parentPageId, ownerId, projectId], references: [id, ownerId, projectId], onDelete: Cascade, onUpdate: NoAction)
   children    Page[]           @relation("PageTree")
   document    PageDocument?
+  snapshots   DocumentSnapshot[]
   permissions PagePermission[]
 
   @@unique([id, ownerId, projectId])
@@ -170,4 +179,24 @@ model PageDocument {
   updatedAt           DateTime @updatedAt
 
   page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+}
+
+model DocumentSnapshot {
+  id                    String         @id @default(uuid()) @db.Uuid
+  pageId                String         @db.Uuid
+  createdById           String?        @db.Uuid
+  revision              BigInt
+  sourceStorageRevision BigInt
+  tiptapSchemaVersion   Int
+  yjsState              Bytes
+  reason                SnapshotReason
+  createdAt             DateTime       @default(now())
+
+  page      Page  @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("DocumentSnapshotCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@unique([pageId, revision])
+  @@index([pageId, revision(sort: Desc)])
+  @@index([pageId, sourceStorageRevision(sort: Desc)])
+  @@index([createdById])
 }
