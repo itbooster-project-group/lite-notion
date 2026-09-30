@@ -51,7 +51,12 @@ describe('internal page document HTTP contract', () => {
   it('читает пустой документ только что созданной страницы', async () => {
     const response = await read().expect(200);
 
-    expect(response.body).toEqual({ pageId, yjsState: '' });
+    expect(response.body).toEqual({
+      pageId,
+      storageRevision: '0',
+      tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
+      yjsState: '',
+    });
   });
 
   it('сохраняет состояние и отдаёт его следующим чтением', async () => {
@@ -59,7 +64,12 @@ describe('internal page document HTTP contract', () => {
 
     await write(state).expect(200);
 
-    expect((await read().expect(200)).body.yjsState).toBe(state);
+    expect((await read().expect(200)).body).toMatchObject({
+      pageId,
+      storageRevision: '1',
+      tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
+      yjsState: state,
+    });
   });
 
   it('инкрементирует storageRevision и не трогает tiptapSchemaVersion', async () => {

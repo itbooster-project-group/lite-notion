@@ -25,6 +25,49 @@ export interface PageAccessVerdict {
   userId: string;
 }
 
+export interface PersistedDocumentRecord {
+  pageId: string;
+  storageRevision: bigint;
+  tiptapSchemaVersion: number;
+  yjsState: Uint8Array;
+}
+
+interface InternalDocumentResponse {
+  pageId: string;
+  storageRevision: string;
+  tiptapSchemaVersion: number;
+  yjsState: string;
+}
+
+function decodeDocumentRecord(body: InternalDocumentResponse): PersistedDocumentRecord {
+  if (
+    typeof body.pageId !== 'string' ||
+    typeof body.storageRevision !== 'string' ||
+    !/^(0|[1-9]\d*)$/.test(body.storageRevision) ||
+    !Number.isInteger(body.tiptapSchemaVersion) ||
+    typeof body.yjsState !== 'string'
+  ) {
+    throw new ApiUnavailableError('MalformedDocumentResponse');
+  }
+
+  try {
+    const bytes = Buffer.from(body.yjsState, 'base64');
+
+    if (bytes.toString('base64') !== body.yjsState) {
+      throw new Error('Invalid base64');
+    }
+
+    return {
+      pageId: body.pageId,
+      storageRevision: BigInt(body.storageRevision),
+      tiptapSchemaVersion: body.tiptapSchemaVersion,
+      yjsState: new Uint8Array(bytes),
+    };
+  } catch {
+    throw new ApiUnavailableError('MalformedDocumentResponse');
+  }
+}
+
 export interface InternalApiClientOptions {
   baseUrl: string;
   serviceToken: string;
@@ -69,22 +112,28 @@ export class InternalApiClient {
   }
 
   async readDocument(pageId: string): Promise<Uint8Array> {
-    const body = await this.request<{ pageId: string; yjsState: string }>(
+    return (await this.readDocumentRecord(pageId)).yjsState;
+  }
+
+  async readDocumentRecord(pageId: string): Promise<PersistedDocumentRecord> {
+    const body = await this.request<InternalDocumentResponse>(
       'GET',
       `/internal/pages/${encodeURIComponent(pageId)}/document`,
       this.serviceHeaders(),
     );
 
-    return new Uint8Array(Buffer.from(body.yjsState, 'base64'));
+    return decodeDocumentRecord(body);
   }
 
-  async replaceDocument(pageId: string, yjsState: Uint8Array): Promise<void> {
-    await this.request(
+  async replaceDocument(pageId: string, yjsState: Uint8Array): Promise<PersistedDocumentRecord> {
+    const body = await this.request<InternalDocumentResponse>(
       'PUT',
       `/internal/pages/${encodeURIComponent(pageId)}/document`,
       { ...this.serviceHeaders(), 'content-type': 'application/json' },
       JSON.stringify({ yjsState: Buffer.from(yjsState).toString('base64') }),
     );
+
+    return decodeDocumentRecord(body);
   }
 
   private serviceHeaders(): Record<string, string> {
@@ -100,33 +149,31 @@ export class InternalApiClient {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.options.timeoutMs);
 
-    let response: Response;
-
     try {
-      response = await this.fetchImpl(`${this.options.baseUrl}${path}`, {
+      const response = await this.fetchImpl(`${this.options.baseUrl}${path}`, {
         ...(body === undefined ? {} : { body }),
         headers,
         method,
         signal: controller.signal,
       });
+
+      if (DENIAL_STATUSES.has(response.status)) {
+        throw new ApiDeniedError(response.status);
+      }
+
+      if (!response.ok) {
+        throw new ApiUnavailableError(`status ${response.status}`);
+      }
+
+      return (await response.json()) as T;
     } catch (error) {
+      if (error instanceof ApiDeniedError || error instanceof ApiUnavailableError) {
+        throw error;
+      }
+
       throw new ApiUnavailableError(error instanceof Error ? error.name : 'UnknownError');
     } finally {
       clearTimeout(timer);
-    }
-
-    if (DENIAL_STATUSES.has(response.status)) {
-      throw new ApiDeniedError(response.status);
-    }
-
-    if (!response.ok) {
-      throw new ApiUnavailableError(`status ${response.status}`);
-    }
-
-    try {
-      return (await response.json()) as T;
-    } catch {
-      throw new ApiUnavailableError('MalformedResponse');
     }
   }
 }

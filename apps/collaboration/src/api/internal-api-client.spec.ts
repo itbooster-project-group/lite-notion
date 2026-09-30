@@ -51,7 +51,14 @@ describe('InternalApiClient', () => {
   });
 
   it('предъявляет сервисный креденшл на документных операциях', async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse(200, { pageId: 'page', yjsState: '' }));
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(200, {
+        pageId: 'page',
+        storageRevision: '4',
+        tiptapSchemaVersion: 2,
+        yjsState: '',
+      }),
+    );
     const client = clientWith(fetchImpl as unknown as typeof fetch);
 
     await client.readDocument('page');
@@ -103,11 +110,37 @@ describe('InternalApiClient', () => {
     await expect(client.authorizePage('token', 'page')).rejects.toBeInstanceOf(ApiUnavailableError);
   });
 
+  it('сохраняет таймаут на время чтения тела ответа', async () => {
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => ({
+      ok: true,
+      status: 200,
+      json: () =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('aborted', 'AbortError'));
+          });
+        }),
+    }));
+    const client = new InternalApiClient({
+      baseUrl: 'http://api.test',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      serviceToken: 'service-token-value-of-32-characters',
+      timeoutMs: 10,
+    });
+
+    await expect(client.authorizePage('token', 'page')).rejects.toBeInstanceOf(ApiUnavailableError);
+  });
+
   it('декодирует содержимое документа из base64', async () => {
     const state = new Uint8Array([1, 2, 3, 4]);
     const client = clientWith(
       vi.fn(async () =>
-        jsonResponse(200, { pageId: 'page', yjsState: Buffer.from(state).toString('base64') }),
+        jsonResponse(200, {
+          pageId: 'page',
+          storageRevision: '8',
+          tiptapSchemaVersion: 3,
+          yjsState: Buffer.from(state).toString('base64'),
+        }),
       ) as unknown as typeof fetch,
     );
 
@@ -115,12 +148,39 @@ describe('InternalApiClient', () => {
   });
 
   it('кодирует содержимое документа в base64 при записи', async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse(200, { pageId: 'page', yjsState: 'AQID' }));
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(200, {
+        pageId: 'page',
+        storageRevision: '9',
+        tiptapSchemaVersion: 1,
+        yjsState: 'AQID',
+      }),
+    );
     const client = clientWith(fetchImpl as unknown as typeof fetch);
 
     await client.replaceDocument('page', new Uint8Array([1, 2, 3]));
 
     const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
     expect(JSON.parse(init.body as string)).toEqual({ yjsState: 'AQID' });
+  });
+
+  it('сохраняет точность storageRevision при чтении metadata', async () => {
+    const client = clientWith(
+      vi.fn(async () =>
+        jsonResponse(200, {
+          pageId: 'page',
+          storageRevision: '9007199254740993',
+          tiptapSchemaVersion: 5,
+          yjsState: 'AQID',
+        }),
+      ) as unknown as typeof fetch,
+    );
+
+    await expect(client.readDocumentRecord('page')).resolves.toMatchObject({
+      pageId: 'page',
+      storageRevision: 9007199254740993n,
+      tiptapSchemaVersion: 5,
+      yjsState: new Uint8Array([1, 2, 3]),
+    });
   });
 });

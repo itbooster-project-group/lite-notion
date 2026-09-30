@@ -17,6 +17,7 @@ import {
 } from '../documents/persistence.js';
 import type { CollaborationLogger } from '../logging/logger.js';
 import { createBroker } from './broker-readiness.js';
+import { handleInternalDocumentCapture } from './internal-document-capture.js';
 import { createReauthorizationSchedule, type ReauthorizationSchedule } from './reauthorization.js';
 
 export interface CollaborationContext {
@@ -78,7 +79,7 @@ export function createCollaborationServer(
     return { identity, pageAccess: await access.authorize(token, pageId) };
   };
 
-  return new Server<CollaborationContext>({
+  const server = new Server<CollaborationContext>({
     name: 'lite-notion-collaboration',
     ...(options.address ? { address: options.address } : {}),
     ...(typeof options.debounce === 'number' ? { debounce: options.debounce } : {}),
@@ -202,6 +203,24 @@ export function createCollaborationServer(
       logger.info('collaboration server stopped');
     },
   });
+
+  const hocuspocusRequestHandler = server.requestHandler;
+  server.httpServer.removeListener('request', hocuspocusRequestHandler);
+  server.httpServer.on('request', async (request, response) => {
+    const handled = await handleInternalDocumentCapture(
+      request,
+      response,
+      server.hocuspocus,
+      config,
+      api,
+    );
+
+    if (!handled) {
+      await hocuspocusRequestHandler(request, response);
+    }
+  });
+
+  return server;
 }
 
 export function registerShutdown(runtime: CollaborationRuntime, logger: CollaborationLogger): void {
