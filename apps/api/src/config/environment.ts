@@ -67,6 +67,15 @@ export class EnvironmentConfig {
   @IsHttpOrigin()
   CORS_ORIGIN!: string;
 
+  @IsHttpOrigin()
+  COLLABORATION_BASE_URL!: string;
+
+  @Transform(({ value }) => Number(value), { toClassOnly: true })
+  @IsInt()
+  @Min(1)
+  @Max(60_000)
+  COLLABORATION_TIMEOUT_MS!: number;
+
   @ValidateBy({
     name: 'isPostgreSqlUrl',
     validator: {
@@ -154,6 +163,8 @@ export function validateEnvironment(
     ACCESS_TOKEN_TTL_S: environment.ACCESS_TOKEN_TTL_S,
     BCRYPT_ROUNDS: environment.BCRYPT_ROUNDS,
     CORS_ORIGIN: environment.CORS_ORIGIN,
+    COLLABORATION_BASE_URL: environment.COLLABORATION_BASE_URL,
+    COLLABORATION_TIMEOUT_MS: environment.COLLABORATION_TIMEOUT_MS,
     DATABASE_CONNECTION_TIMEOUT_MS: environment.DATABASE_CONNECTION_TIMEOUT_MS,
     DATABASE_URL: environment.DATABASE_URL,
     INTERNAL_SERVICE_TOKEN: environment.INTERNAL_SERVICE_TOKEN,

@@ -48,11 +48,43 @@ export class InMemoryInternalApiClient {
 
   asClient(): InternalApiClient {
     const documents = new Map<string, Uint8Array>();
+    const documentRevisions = new Map<string, bigint>();
 
     const guard = (): void => {
       if (this.unavailable) {
         throw new Error('unavailable');
       }
+    };
+
+    const readDocumentRecord = async (pageId: string) => {
+      guard();
+      const state = documents.get(pageId);
+
+      if (this.isDeleted(pageId)) {
+        throw new ApiDeniedError(404);
+      }
+
+      return {
+        pageId,
+        storageRevision: documentRevisions.get(pageId) ?? 0n,
+        tiptapSchemaVersion: 1,
+        yjsState: state?.slice() ?? new Uint8Array(),
+      };
+    };
+
+    const replaceDocument = async (pageId: string, yjsState: Uint8Array) => {
+      guard();
+
+      if (this.isDeleted(pageId)) {
+        throw new ApiDeniedError(404);
+      }
+
+      const state = yjsState.slice();
+      const storageRevision = (documentRevisions.get(pageId) ?? 0n) + 1n;
+      documents.set(pageId, state);
+      documentRevisions.set(pageId, storageRevision);
+
+      return { pageId, storageRevision, tiptapSchemaVersion: 1, yjsState: state.slice() };
     };
 
     return {
@@ -91,24 +123,10 @@ export class InMemoryInternalApiClient {
         };
       },
       readDocument: async (pageId: string): Promise<Uint8Array> => {
-        guard();
-        const state = documents.get(pageId);
-
-        if (this.isDeleted(pageId)) {
-          throw new ApiDeniedError(404);
-        }
-
-        return state ?? new Uint8Array();
+        return (await readDocumentRecord(pageId)).yjsState;
       },
-      replaceDocument: async (pageId: string, yjsState: Uint8Array): Promise<void> => {
-        guard();
-
-        if (this.isDeleted(pageId)) {
-          throw new ApiDeniedError(404);
-        }
-
-        documents.set(pageId, yjsState);
-      },
+      readDocumentRecord,
+      replaceDocument,
     } as unknown as InternalApiClient;
   }
 

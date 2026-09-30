@@ -16,6 +16,8 @@ export class FailedOnlyReporter extends DefaultReporter {
 export default defineConfig({
   test: {
     env: {
+      COLLABORATION_BASE_URL: 'http://localhost:3002',
+      COLLABORATION_TIMEOUT_MS: '5000',
       CORS_ORIGIN: 'http://localhost:3000',
       DATABASE_CONNECTION_TIMEOUT_MS: '5000',
       DATABASE_URL: 'postgresql://lite_notion:lite_notion@localhost:5432/lite_notion?schema=public',

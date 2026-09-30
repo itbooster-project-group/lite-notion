@@ -35,6 +35,7 @@ export class InMemoryPageDocumentRepository extends PageDocumentRepository {
       ? null
       : {
           pageId,
+          storageRevision: BigInt(document.storageRevision),
           tiptapSchemaVersion: document.tiptapSchemaVersion,
           yjsState: document.yjsState,
         };

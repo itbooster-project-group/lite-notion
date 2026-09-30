@@ -89,6 +89,7 @@ describe('PageDocumentService', () => {
 
     await expect(service.read(page.id, owner)).resolves.toEqual({
       pageId: page.id,
+      storageRevision: 0n,
       tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
       yjsState: new Uint8Array(),
     });
@@ -107,6 +108,7 @@ describe('PageDocumentService', () => {
 
     await expect(service.read(page.id, owner)).resolves.toEqual({
       pageId: page.id,
+      storageRevision: 1n,
       tiptapSchemaVersion: 2,
       yjsState: state,
     });
@@ -170,7 +172,7 @@ describe('PageDocumentService', () => {
     expect(Buffer.from(document.yjsState).equals(Buffer.from(state))).toBe(true);
   });
 
-  it('инкрементирует счётчик ревизии и не выдаёт его наружу', async () => {
+  it('инкрементирует и возвращает счётчик ревизии вместе с состоянием', async () => {
     const page = await createPage();
 
     await service.replace({
@@ -187,11 +189,7 @@ describe('PageDocumentService', () => {
     });
 
     expect(documents.documents.get(page.id)?.storageRevision).toBe(2);
-    expect(Object.keys(await service.read(page.id, owner)).sort()).toEqual([
-      'pageId',
-      'tiptapSchemaVersion',
-      'yjsState',
-    ]);
+    expect((await service.read(page.id, owner)).storageRevision).toBe(2n);
   });
 
   it('отвечает одинаково на чужую и на несуществующую страницу при чтении', async () => {

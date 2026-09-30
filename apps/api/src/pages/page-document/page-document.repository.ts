@@ -10,6 +10,7 @@ import type { Bytes } from '../pages.repository';
 
 export interface PageDocumentRecord {
   pageId: string;
+  storageRevision: bigint;
   tiptapSchemaVersion: number;
   yjsState: Bytes;
 }
@@ -20,7 +21,12 @@ export interface ReplaceDocumentInput {
   yjsState: Bytes;
 }
 
-const DOCUMENT_FIELDS = { pageId: true, tiptapSchemaVersion: true, yjsState: true } as const;
+const DOCUMENT_FIELDS = {
+  pageId: true,
+  storageRevision: true,
+  tiptapSchemaVersion: true,
+  yjsState: true,
+} as const;
 
 /**
  * Абстрактный класс служит DI-токеном; тесты подставляют in-memory реализацию.
@@ -72,26 +78,41 @@ export class PrismaPageDocumentRepository extends PageDocumentRepository {
   }
 
   async replace(input: ReplaceDocumentInput): Promise<PageDocumentRecord | null> {
-    const { count } = await this.client.pageDocument.updateMany({
-      data: {
-        storageRevision: { increment: 1 },
-        tiptapSchemaVersion: input.tiptapSchemaVersion,
-        yjsState: input.yjsState,
-      },
-      // Мягкое удаление строку документа не трогает, поэтому одного `pageId` мало:
-      // условие по связи делает проверку живости и запись одним UPDATE.
-      where: { page: { deletedAt: null }, pageId: input.pageId },
-    });
+    const records = await this.client.$queryRaw<PageDocumentRecord[]>`
+      UPDATE "PageDocument" AS document
+      SET "storageRevision" = document."storageRevision" + 1,
+          "tiptapSchemaVersion" = ${input.tiptapSchemaVersion},
+          "yjsState" = ${input.yjsState},
+          "updatedAt" = NOW()
+      WHERE document."pageId" = ${input.pageId}::uuid
+        AND EXISTS (
+          SELECT 1
+          FROM "Page" AS page
+          WHERE page.id = document."pageId"
+            AND page."deletedAt" IS NULL
+        )
+      RETURNING document."pageId", document."storageRevision", document."tiptapSchemaVersion", document."yjsState"
+    `;
 
-    return count === 0 ? null : this.find(input.pageId);
+    return records[0] ?? null;
   }
 
   async replaceYjsState(pageId: string, yjsState: Bytes): Promise<PageDocumentRecord | null> {
-    const { count } = await this.client.pageDocument.updateMany({
-      data: { storageRevision: { increment: 1 }, yjsState },
-      where: { page: { deletedAt: null }, pageId },
-    });
+    const records = await this.client.$queryRaw<PageDocumentRecord[]>`
+      UPDATE "PageDocument" AS document
+      SET "storageRevision" = document."storageRevision" + 1,
+          "yjsState" = ${yjsState},
+          "updatedAt" = NOW()
+      WHERE document."pageId" = ${pageId}::uuid
+        AND EXISTS (
+          SELECT 1
+          FROM "Page" AS page
+          WHERE page.id = document."pageId"
+            AND page."deletedAt" IS NULL
+        )
+      RETURNING document."pageId", document."storageRevision", document."tiptapSchemaVersion", document."yjsState"
+    `;
 
-    return count === 0 ? null : this.find(pageId);
+    return records[0] ?? null;
   }
 }

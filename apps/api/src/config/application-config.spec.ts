@@ -12,6 +12,8 @@ describe('createApplicationConfig', () => {
       createApplicationConfig({
         ACCESS_TOKEN_TTL_S: '900',
         BCRYPT_ROUNDS: '12',
+        COLLABORATION_BASE_URL: 'http://localhost:3002',
+        COLLABORATION_TIMEOUT_MS: '5000',
         CORS_ORIGIN: 'http://localhost:3000',
         DATABASE_CONNECTION_TIMEOUT_MS: '5000',
         DATABASE_URL: 'postgresql://lite_notion:lite_notion@localhost:5432/lite_notion',
@@ -24,6 +26,8 @@ describe('createApplicationConfig', () => {
     ).toEqual({
       accessTokenTtlS: 900,
       bcryptRounds: 12,
+      collaborationBaseUrl: 'http://localhost:3002',
+      collaborationTimeoutMs: 5000,
       corsOrigin: 'http://localhost:3000',
       databaseConnectionTimeoutMs: 5000,
       databaseUrl: 'postgresql://lite_notion:lite_notion@localhost:5432/lite_notion',
@@ -40,6 +44,8 @@ describe('createApplicationConfig', () => {
       createApplicationConfig({
         ACCESS_TOKEN_TTL_S: '600',
         BCRYPT_ROUNDS: '10',
+        COLLABORATION_BASE_URL: 'https://collaboration.example.com',
+        COLLABORATION_TIMEOUT_MS: '4000',
         CORS_ORIGIN: 'https://notes.example.com',
         DATABASE_CONNECTION_TIMEOUT_MS: '2500',
         DATABASE_URL: 'postgres://app:secret@database.example.com:5432/notes',
@@ -53,6 +59,8 @@ describe('createApplicationConfig', () => {
     ).toEqual({
       accessTokenTtlS: 600,
       bcryptRounds: 10,
+      collaborationBaseUrl: 'https://collaboration.example.com',
+      collaborationTimeoutMs: 4000,
       corsOrigin: 'https://notes.example.com',
       databaseConnectionTimeoutMs: 2500,
       databaseUrl: 'postgres://app:secret@database.example.com:5432/notes',
@@ -69,6 +77,8 @@ describe('createApplicationConfig', () => {
       createApplicationConfig({
         ACCESS_TOKEN_TTL_S: '900',
         BCRYPT_ROUNDS: '12',
+        COLLABORATION_BASE_URL: 'http://localhost:3002',
+        COLLABORATION_TIMEOUT_MS: '5000',
         CORS_ORIGIN: 'http://localhost:3000',
         DATABASE_CONNECTION_TIMEOUT_MS: '5000',
         DATABASE_URL: 'postgresql://lite_notion:lite_notion@localhost:5432/lite_notion',
