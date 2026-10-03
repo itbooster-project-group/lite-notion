@@ -96,6 +96,10 @@ export class InMemoryPagesRepository extends PagesRepository {
     return page === undefined || page.deletedAt !== null ? null : this.toRecord(page);
   }
 
+  async lockLivePageForUpdate(id: string): Promise<boolean> {
+    return (await this.findLiveById(id)) !== null;
+  }
+
   async insert(input: InsertPageInput): Promise<PageRecord> {
     const page: StoredPage = {
       accessMode: 'INHERIT',

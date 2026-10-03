@@ -196,6 +196,7 @@ model DocumentSnapshot {
   createdBy User? @relation("DocumentSnapshotCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
   @@unique([pageId, revision])
+  @@unique([id, pageId])
   @@index([pageId, revision(sort: Desc)])
   @@index([pageId, sourceStorageRevision(sort: Desc)])
   @@index([createdById])
