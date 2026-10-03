@@ -2,7 +2,7 @@
 
 ### Requirement: Создание snapshot использует захваченное состояние документа
 
-Создание snapshot MUST принимать уже захваченное authoritative состояние документа: неизменяемые Yjs bytes, исходный storage revision и TipTap schema version. Система MUST сохранять эти значения вместе с последовательным page-scoped revision, reason, creator и временем создания. Revision MUST быть уникальным и consecutive в пределах страницы; allocation algorithm MUST NOT создавать пропуски. Существующий `@@unique([pageId, revision])` MUST оставаться дополнительной гарантией БД. Application API MUST NOT предоставлять операции обновления или замены созданного snapshot.
+Создание snapshot MUST принимать уже захваченное authoritative состояние документа: неизменяемые Yjs bytes, исходный storage revision и TipTap schema version. Каждый create use case MUST копировать входной `Uint8Array` синхронно до первого `await`, чтобы последующая мутация caller не меняла сохраняемые bytes. Система MUST сохранять эти значения вместе с последовательным page-scoped revision, reason, creator и временем создания. Revision MUST быть уникальным и consecutive в пределах страницы; allocation algorithm MUST NOT создавать пропуски. Существующий `@@unique([pageId, revision])` MUST оставаться дополнительной гарантией БД. Application API MUST NOT предоставлять операции обновления или замены созданного snapshot.
 
 #### Scenario: Первый snapshot страницы
 - **WHEN** для страницы без предыдущих snapshot создаётся snapshot
@@ -30,7 +30,7 @@
 
 ### Requirement: Создание пользовательских и внутренних snapshot имеет разные правила
 
-Пользовательское создание snapshot MUST назначать `reason = manual` и MUST разрешаться только владельцу или редактору страницы. Вызывающий код пользовательского application API MUST NOT выбирать reason. Только trusted internal API MUST принимать системные reasons `automatic`, `publication` и `restore`. Effective role MUST проверяться существующим permission mechanism перед snapshot creation. Page-row lock MUST сериализовать revision allocation, но не гарантирует сериализацию отзыва permission относительно создания snapshot. Пользователь с недостаточной ролью на доступной ему странице MUST получить отказ доступа; для страницы без effective access MUST сохраняться безопасная not-found семантика проекта. Внутреннее создание MUST принимать системные reasons без требования пользовательского actor.
+Write operations MUST быть представлены отдельными `CreateSnapshotManualUseCase.execute()` и `CreateSnapshotInternalUseCase.execute()`; один use case соответствует одной application operation и имеет один публичный entry point `execute()`. Пользовательское создание snapshot MUST назначать `reason = manual` и MUST разрешаться только владельцу или редактору страницы. Вызывающий код пользовательского application API MUST NOT выбирать reason. Только trusted internal use case MUST принимать системные reasons `automatic`, `publication` и `restore`. Effective role MUST проверяться существующим permission mechanism перед snapshot creation. Page-row lock MUST сериализовать revision allocation, но не гарантирует сериализацию отзыва permission относительно создания snapshot. Пользователь с недостаточной ролью на доступной ему странице MUST получить отказ доступа; для страницы без effective access MUST сохраняться безопасная not-found семантика проекта. Внутреннее создание MUST принимать системные reasons без требования пользовательского actor. `SnapshotsService` MUST отвечать только за metadata reads; internal creation use case MUST быть доступен через `SnapshotsModule` для будущих backend workflows.
 
 #### Scenario: Владелец создаёт manual snapshot
 - **WHEN** владелец создаёт snapshot из captured document state
@@ -54,10 +54,10 @@
 
 ### Requirement: Создание snapshot участвует во внешней транзакции
 
-Создание snapshot MUST поддерживать самостоятельное выполнение в транзакции и выполнение внутри переданного caller transaction scope. При наличии внешнего scope запись MUST использовать его и MUST NOT открывать отдельную транзакцию; rollback внешней транзакции MUST отменять создание snapshot.
+Оба create use case MUST поддерживать самостоятельное выполнение в транзакции и выполнение внутри переданного caller transaction scope. При наличии внешнего scope запись MUST использовать его и MUST NOT открывать отдельную транзакцию; rollback внешней транзакции MUST отменять создание snapshot.
 
 #### Scenario: Создание snapshot внутри внешней транзакции
-- **WHEN** внутренний use case создаёт snapshot с активным transaction scope
+- **WHEN** create use case создаёт snapshot с активным transaction scope
 - **THEN** snapshot записывается в этой транзакции и фиксируется либо откатывается вместе с вызывающим кодом
 
 #### Scenario: Внешняя транзакция откатывает snapshot

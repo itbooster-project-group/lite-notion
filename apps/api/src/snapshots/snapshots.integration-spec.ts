@@ -11,9 +11,11 @@ import { PrismaPagesRepository } from '../pages/pages.repository';
 import type { UsersService } from '../users/users.service';
 import { PrismaSnapshotsRepository } from './snapshots.repository';
 import { SnapshotsService } from './snapshots.service';
-import { CreateSnapshotUseCase } from './use-cases/create-snapshot.use-case';
+import { CreateSnapshotInternalUseCase } from './use-cases/create-snapshot-internal.use-case';
+import { CreateSnapshotManualUseCase } from './use-cases/create-snapshot-manual.use-case';
+import { SnapshotCreationWorkflow } from './use-cases/snapshot-creation.workflow';
 
-describe('SnapshotsService on PostgreSQL', () => {
+describe('Snapshot use cases and metadata service on PostgreSQL', () => {
   let prisma: PrismaClient;
   let ownerId: string;
   let editorId: string;
@@ -21,7 +23,8 @@ describe('SnapshotsService on PostgreSQL', () => {
   let strangerId: string;
   let projectId: string;
   let transactions: PrismaTransactionRunner;
-  let createSnapshot: CreateSnapshotUseCase;
+  let createSnapshotInternal: CreateSnapshotInternalUseCase;
+  let createSnapshotManual: CreateSnapshotManualUseCase;
   let snapshots: SnapshotsService;
   const createdPageIds: string[] = [];
 
@@ -61,7 +64,7 @@ describe('SnapshotsService on PostgreSQL', () => {
   }
 
   async function createInternal(pageId: string) {
-    return createSnapshot.createInternal(internalInput(pageId));
+    return createSnapshotInternal.execute(internalInput(pageId));
   }
 
   function sortedRevisions(revisions: bigint[]): bigint[] {
@@ -96,16 +99,17 @@ describe('SnapshotsService on PostgreSQL', () => {
     const permissionsRepository = new PrismaPagePermissionsRepository(client);
     const snapshotsRepository = new PrismaSnapshotsRepository(client);
     transactions = new PrismaTransactionRunner(prisma as unknown as PrismaService);
-    createSnapshot = new CreateSnapshotUseCase(
+    const creation = new SnapshotCreationWorkflow(
       transactions,
       pagesRepository,
-      permissionsRepository,
       snapshotsRepository,
     );
+    createSnapshotInternal = new CreateSnapshotInternalUseCase(creation);
+    createSnapshotManual = new CreateSnapshotManualUseCase(permissionsRepository, creation);
     const permissions = new PagePermissionsService(permissionsRepository, {
       findByEmail: async () => null,
     } as unknown as UsersService);
-    snapshots = new SnapshotsService(createSnapshot, snapshotsRepository, permissions);
+    snapshots = new SnapshotsService(snapshotsRepository, permissions);
   });
 
   afterEach(async () => {
@@ -193,7 +197,7 @@ describe('SnapshotsService on PostgreSQL', () => {
 
     await expect(
       transactions.run(async (scope) => {
-        const created = await createSnapshot.createInternal(internalInput(pageId), scope);
+        const created = await createSnapshotInternal.execute(internalInput(pageId), scope);
         createdSnapshotId = created.id;
         throw new Error('outer transaction failed');
       }),
@@ -246,14 +250,14 @@ describe('SnapshotsService on PostgreSQL', () => {
     await grant(pageId, viewerId, 'VIEWER');
     const state = new Uint8Array([8, 9]);
 
-    const ownerSnapshot = await snapshots.createManual({
+    const ownerSnapshot = await createSnapshotManual.execute({
       createdById: ownerId,
       pageId,
       storageRevision: 11n,
       tiptapSchemaVersion: 6,
       yjsState: state,
     });
-    const editorSnapshot = await snapshots.createManual({
+    const editorSnapshot = await createSnapshotManual.execute({
       createdById: editorId,
       pageId,
       storageRevision: 12n,
@@ -274,7 +278,7 @@ describe('SnapshotsService on PostgreSQL', () => {
       tiptapSchemaVersion: 7,
     });
     await expect(
-      snapshots.createManual({
+      createSnapshotManual.execute({
         createdById: viewerId,
         pageId,
         storageRevision: 13n,
@@ -283,7 +287,7 @@ describe('SnapshotsService on PostgreSQL', () => {
       }),
     ).rejects.toBeInstanceOf(PageRoleInsufficientError);
     await expect(
-      snapshots.createManual({
+      createSnapshotManual.execute({
         createdById: strangerId,
         pageId,
         storageRevision: 13n,

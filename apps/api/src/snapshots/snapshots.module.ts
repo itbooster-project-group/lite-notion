@@ -4,13 +4,17 @@ import { PagePermissionsModule } from '../page-permissions/page-permissions.modu
 import { PagesModule } from '../pages/pages.module';
 import { PrismaSnapshotsRepository, SnapshotsRepository } from './snapshots.repository';
 import { SnapshotsService } from './snapshots.service';
-import { CreateSnapshotUseCase } from './use-cases/create-snapshot.use-case';
+import { CreateSnapshotInternalUseCase } from './use-cases/create-snapshot-internal.use-case';
+import { CreateSnapshotManualUseCase } from './use-cases/create-snapshot-manual.use-case';
+import { SnapshotCreationWorkflow } from './use-cases/snapshot-creation.workflow';
 
 @Module({
-  exports: [SnapshotsService],
+  exports: [CreateSnapshotInternalUseCase, SnapshotsService],
   imports: [DatabaseModule, PagePermissionsModule, PagesModule],
   providers: [
-    CreateSnapshotUseCase,
+    CreateSnapshotInternalUseCase,
+    CreateSnapshotManualUseCase,
+    SnapshotCreationWorkflow,
     SnapshotsService,
     { provide: SnapshotsRepository, useClass: PrismaSnapshotsRepository },
   ],

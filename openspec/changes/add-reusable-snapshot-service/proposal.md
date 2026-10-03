@@ -5,10 +5,12 @@
 ## Что меняется
 
 - Добавляется составной unique key snapshot `(id, pageId)` для будущего composite FK без изменения существующих ограничений и индексов.
-- Создаётся отдельный NestJS snapshots module, экспортирующий `SnapshotsService`, с append-only созданием, transaction-aware API и metadata queries.
-- Создание использует переданный captured document state; сервис не читает Hocuspocus или `PageDocument`.
+- Создаётся отдельный NestJS snapshots module с раздельными `CreateSnapshotManualUseCase.execute()` и `CreateSnapshotInternalUseCase.execute()` для append-only создания и `SnapshotsService` только для metadata reads.
+- Create use cases используют переданный captured document state и не читают Hocuspocus или `PageDocument`.
 - Revision allocation сериализуется блокировкой строки страницы; создание и metadata reads используют существующий механизм page permissions.
-- User creation всегда фиксирует `reason = manual`; выбирать `automatic`, `publication` или `restore` может только trusted internal API.
+- Каждый write use case предоставляет один `execute()`. Manual creation всегда фиксирует `reason = manual`; только trusted internal use case принимает системные reasons `automatic`, `publication` или `restore`.
+- `CreateSnapshotInternalUseCase` экспортируется для будущих publication/history/capture workflows; `SnapshotsService` экспортируется для read capability, а manual use case остаётся внутренним provider.
+- Backend движется к CQRS: write operations идут через use cases, текущие metadata reads остаются за `SnapshotsService`, целевое направление read-side — специализированный query layer.
 - Для metadata добавляются permission-protected list и page-scoped lookup с безопасными not-found ответами.
 - Не добавляются publication flow, rendering, assets, restore, collaboration capture, REST endpoints или frontend UI.
 
