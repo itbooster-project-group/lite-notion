@@ -39,8 +39,8 @@
 - **WHEN** capture не находит live page document
 - **THEN** он возвращает существующий not-found результат и snapshot не создаётся
 
-### Requirement: Snapshot orchestration повторно использует один captured state
-Application MUST получить одно captured document state для snapshot operation и передать то же состояние в соответствующий snapshot creation use case. Manual snapshot creation MUST проверить существующую edit permission страницы до capture и MUST сохранить существующие правила manual reason и creator. Capture-specific behavior MUST оставаться вне snapshot creation use cases.
+### Requirement: Manual current snapshot use case повторно использует один captured state
+`CreateCurrentManualSnapshotUseCase` MUST получить одно captured document state через самостоятельную `DocumentCapture` application boundary и передать те же bytes и provenance в `CreateSnapshotManualUseCase`. Manual snapshot creation MUST проверить существующую edit permission страницы до capture и MUST сохранить существующие правила manual reason и creator. `CreateSnapshotManualUseCase` MUST сохранить финальную permission-проверку перед вставкой. Capture-specific behavior MUST оставаться вне snapshot creation use cases; будущие consumers, включая publication, MUST зависеть напрямую от `DocumentCapture`.
 
 #### Scenario: Создание manual snapshot
 - **WHEN** пользователь с edit permission запрашивает manual snapshot
@@ -50,9 +50,9 @@ Application MUST получить одно captured document state для snapsh
 - **WHEN** пользователь без edit permission запрашивает manual snapshot
 - **THEN** запрос отклоняется до capture и snapshot не создаётся
 
-#### Scenario: Ошибка capture при orchestration snapshot
+#### Scenario: Ошибка capture при создании manual current snapshot
 - **WHEN** capture завершается ошибкой
-- **THEN** application не вызывает snapshot creation
+- **THEN** `CreateCurrentManualSnapshotUseCase` не вызывает snapshot creation
 
 #### Scenario: Ошибка вставки snapshot после успешного capture
 - **WHEN** persistence документа завершается успешно, но вставка snapshot завершается ошибкой

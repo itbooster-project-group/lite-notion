@@ -3,7 +3,7 @@ import type { ConfigType } from '@nestjs/config';
 
 import { applicationConfig } from '../config/application-config';
 import { PageNotFoundError } from '../pages/errors';
-import type { CapturedDocumentState } from './types/captured-document-state';
+import type { CapturedDocumentState } from './captured-document-state';
 
 export class DocumentCaptureUnavailableError extends Error {
   constructor() {

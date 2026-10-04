@@ -54,10 +54,6 @@ export class PageDocumentService {
     return this.require(await this.documents.find(pageId));
   }
 
-  async replaceYjsStateUnchecked(pageId: string, yjsState: Bytes): Promise<PageDocumentRecord> {
-    return this.require(await this.documents.replaceYjsState(pageId, yjsState));
-  }
-
   /**
    * Связь «страница — документ» обязательна, поэтому после успешной проверки
    * страницы строка обязана существовать. `null` здесь означает, что страница

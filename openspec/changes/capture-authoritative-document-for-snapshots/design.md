@@ -11,7 +11,7 @@
 - Использовать существующий application contract `CapturedDocumentState`.
 - Связывать возвращённые bytes с revision, выделенной при сохранении именно этих bytes, и соответствующей schema version.
 - Поддержать active и не загруженный документы в рамках текущей single-instance модели collaboration.
-- Выполнять orchestration manual snapshot выше `SnapshotsService`, сохраняя результат capture для повторного использования.
+- Выполнять manual current snapshot в `CreateCurrentManualSnapshotUseCase`, используя отдельную от snapshots `DocumentCapture` boundary.
 
 **Не входит в изменение:**
 
@@ -66,9 +66,11 @@ API вызывает настроенный прямой collaboration base URL,
 
 JSON-ответ содержит `pageId`, base64 `yjsState`, десятичную строку `storageRevision` и числовой `tiptapSchemaVersion`. API проверяет форму ответа, декодирует base64, преобразует revision в `bigint` и формирует `CapturedDocumentState`. Используются `COLLABORATION_BASE_URL` (локальное значение по умолчанию `http://localhost:3002`) и настраиваемый `COLLABORATION_TIMEOUT_MS` (по умолчанию 5000 мс). Timeout и transport error преобразуются в service-unavailable ошибку; not-found — в существующую ошибку страницы. Некорректный ответ, encode error или persistence error не возвращают capture.
 
-### Граница orchestration snapshot и permissions
+### Граница capture и manual snapshot use case
 
-API `SnapshotApplicationService` получает `DocumentCaptureClient`, существующий `PagePermissionsService` и `CreateSnapshotManualUseCase`. Manual flow сначала требует `EDITOR`, затем один раз захватывает состояние и передаёт его в `CreateSnapshotManualUseCase.execute`. Use case повторно проверяет permission внутри своей транзакции перед вставкой snapshot. Используется существующий permission algorithm; предварительная проверка не запускает capture для неавторизованного пользователя. `SnapshotsService` остаётся read-only metadata API согласно архитектуре snapshot creation из #92.
+`DocumentCapture` — самостоятельная API application boundary, реализованная клиентом collaboration internal endpoint и доступная consumers вне snapshot-модуля. `CreateCurrentManualSnapshotUseCase` получает её вместе с существующим `PagePermissionsService` и `CreateSnapshotManualUseCase`. Manual flow сначала требует `EDITOR`, затем ровно один раз захватывает состояние и передаёт те же bytes и provenance в `CreateSnapshotManualUseCase.execute`. Последний повторно проверяет permission внутри своей транзакции перед вставкой snapshot. Предварительная проверка не запускает capture для неавторизованного пользователя; повторная защищает от revoke между capture и вставкой. `SnapshotsService` остаётся read-only metadata API. Будущая publication зависит непосредственно от `DocumentCapture`, а не от snapshot слоя.
+
+Internal document persistence вызывается из `InternalController` через `PersistPageDocumentStateUseCase`, который передаёт write в `PageDocumentRepository`. `PageDocumentService` остаётся read-side для internal document reads. Repository сохраняет атомарные `UPDATE ... RETURNING`, live-page predicate и текущую семантику `storageRevision`.
 
 Доверенный caller может запросить capture и передать тот же объект в `CreateSnapshotInternalUseCase.execute` вместе с derived operations. Capture result остаётся пригодным для других производных операций. Snapshot use cases не знают о collaboration endpoint и не запрашивают Y.Doc повторно.
 
@@ -94,4 +96,4 @@ API capture client обращается к настроенному collaboratio
 
 ## План миграции
 
-Миграция базы не нужна. API изменения persistence contract, collaboration capture endpoint, API orchestration и configuration развёртываются вместе. Для окружения задаются прямой collaboration URL и timeout. Откат может удалить orchestration и capture endpoint; дополнительные поля внутреннего ответа и атомарная persistence остаются совместимыми с обычными store callers.
+Миграция базы не нужна. API изменения persistence contract, collaboration capture endpoint, use cases и configuration развёртываются вместе. Для окружения задаются прямой collaboration URL и timeout. Откат может удалить manual current snapshot use case и capture endpoint; дополнительные поля внутреннего ответа и атомарная persistence остаются совместимыми с обычными store callers.
