@@ -1,13 +1,17 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { TransactionScope } from '../../database/transaction';
+import { TransactionRunner, type TransactionScope } from '../../database/transaction';
+import { PageNotFoundError } from '../../pages/errors';
+import { PagesRepository } from '../../pages/pages.repository';
+import { type InsertSnapshotInput, SnapshotsRepository } from '../snapshots.repository';
 import type { CreateInternalSnapshotInput } from '../types/snapshot-creation';
 import type { SnapshotMetadata } from '../types/snapshot-metadata';
-import { SnapshotCreationWorkflow } from './snapshot-creation.workflow';
 
 @Injectable()
 export class CreateSnapshotInternalUseCase {
   constructor(
-    @Inject(SnapshotCreationWorkflow) private readonly creation: SnapshotCreationWorkflow,
+    @Inject(TransactionRunner) private readonly transactions: TransactionRunner,
+    @Inject(PagesRepository) private readonly pages: PagesRepository,
+    @Inject(SnapshotsRepository) private readonly snapshots: SnapshotsRepository,
   ) {}
 
   execute(
@@ -15,7 +19,29 @@ export class CreateSnapshotInternalUseCase {
     externalScope?: TransactionScope,
   ): Promise<SnapshotMetadata> {
     const capturedInput = { ...input, yjsState: input.yjsState.slice() };
+    const operation = async (scope: TransactionScope): Promise<SnapshotMetadata> => {
+      const pages = this.pages.bind(scope);
+      if (!(await pages.lockLivePageForUpdate(capturedInput.pageId))) {
+        throw new PageNotFoundError();
+      }
 
-    return this.creation.create(capturedInput, input.reason, externalScope);
+      const snapshots = this.snapshots.bind(scope);
+      const latestRevision = await snapshots.findLatestRevision(capturedInput.pageId);
+      const insert: InsertSnapshotInput = {
+        createdById: capturedInput.createdById,
+        pageId: capturedInput.pageId,
+        reason: capturedInput.reason,
+        revision: (latestRevision ?? 0n) + 1n,
+        sourceStorageRevision: capturedInput.storageRevision,
+        tiptapSchemaVersion: capturedInput.tiptapSchemaVersion,
+        yjsState: capturedInput.yjsState,
+      };
+
+      return snapshots.insert(insert);
+    };
+
+    return externalScope === undefined
+      ? this.transactions.run(operation)
+      : operation(externalScope);
   }
 }

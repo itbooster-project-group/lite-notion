@@ -13,7 +13,6 @@ import { PrismaSnapshotsRepository } from './snapshots.repository';
 import { SnapshotsService } from './snapshots.service';
 import { CreateSnapshotInternalUseCase } from './use-cases/create-snapshot-internal.use-case';
 import { CreateSnapshotManualUseCase } from './use-cases/create-snapshot-manual.use-case';
-import { SnapshotCreationWorkflow } from './use-cases/snapshot-creation.workflow';
 
 describe('Snapshot use cases and metadata service on PostgreSQL', () => {
   let prisma: PrismaClient;
@@ -99,13 +98,17 @@ describe('Snapshot use cases and metadata service on PostgreSQL', () => {
     const permissionsRepository = new PrismaPagePermissionsRepository(client);
     const snapshotsRepository = new PrismaSnapshotsRepository(client);
     transactions = new PrismaTransactionRunner(prisma as unknown as PrismaService);
-    const creation = new SnapshotCreationWorkflow(
+    createSnapshotInternal = new CreateSnapshotInternalUseCase(
       transactions,
       pagesRepository,
       snapshotsRepository,
     );
-    createSnapshotInternal = new CreateSnapshotInternalUseCase(creation);
-    createSnapshotManual = new CreateSnapshotManualUseCase(permissionsRepository, creation);
+    createSnapshotManual = new CreateSnapshotManualUseCase(
+      permissionsRepository,
+      transactions,
+      pagesRepository,
+      snapshotsRepository,
+    );
     const permissions = new PagePermissionsService(permissionsRepository, {
       findByEmail: async () => null,
     } as unknown as UsersService);

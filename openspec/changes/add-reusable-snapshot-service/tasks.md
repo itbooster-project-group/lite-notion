@@ -6,7 +6,7 @@
 ## 2. Snapshot application operations
 
 - [x] 2.1 Добавить типы captured document и metadata, snapshots repository и NestJS module.
-- [x] 2.2 Реализовать общую transaction-aware persistence логику с блокировкой строки страницы, page-scoped revision allocation и append-only insert.
+- [x] 2.2 Реализовать в каждом create use case собственную transaction-aware последовательность с блокировкой строки страницы, page-scoped revision allocation и append-only insert.
 - [x] 2.3 Представить manual и internal creation отдельными use case с одним методом `execute()` каждый; для manual использовать существующий page permission mechanism.
 - [x] 2.4 Добавить permission-protected metadata list и page-scoped lookup, которые не выбирают Yjs state и сохраняют безопасную not-found семантику.
 - [x] 2.5 Экспортировать internal create use case для будущих backend workflows, оставить manual use case внутренним provider, а `SnapshotsService` — read-only API; скопировать Yjs bytes до первого `await` в обоих use case.

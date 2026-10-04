@@ -12,7 +12,6 @@ import { SnapshotsService } from './snapshots.service';
 import type { SnapshotMetadata } from './types/snapshot-metadata';
 import { CreateSnapshotInternalUseCase } from './use-cases/create-snapshot-internal.use-case';
 import { CreateSnapshotManualUseCase } from './use-cases/create-snapshot-manual.use-case';
-import { SnapshotCreationWorkflow } from './use-cases/snapshot-creation.workflow';
 
 const OWNER_ID = 'owner';
 const EDITOR_ID = 'editor';
@@ -98,9 +97,13 @@ function createService() {
   } as unknown as PagesRepository;
   const snapshots = new MemorySnapshotsRepository();
   const transactions = new InMemoryTransactionRunner();
-  const creation = new SnapshotCreationWorkflow(transactions, pages, snapshots);
-  const createManual = new CreateSnapshotManualUseCase(permissionRepository, creation);
-  const createInternal = new CreateSnapshotInternalUseCase(creation);
+  const createManual = new CreateSnapshotManualUseCase(
+    permissionRepository,
+    transactions,
+    pages,
+    snapshots,
+  );
+  const createInternal = new CreateSnapshotInternalUseCase(transactions, pages, snapshots);
   const service = new SnapshotsService(snapshots, permissions);
 
   return {
