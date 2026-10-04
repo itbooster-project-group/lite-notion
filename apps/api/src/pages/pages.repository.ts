@@ -108,6 +108,9 @@ export abstract class PagesRepository {
   /** Живая страница без фильтра по владельцу. Только после проверки прав. */
   abstract findLiveById(id: string): Promise<PageRecord | null>;
 
+  /** Блокирует живую страницу до конца текущей транзакции. */
+  abstract lockLivePageForUpdate(id: string): Promise<boolean>;
+
   abstract insert(input: InsertPageInput): Promise<PageRecord>;
 
   /** Ранг последней страницы уровня. `null`, когда уровень пуст. */
@@ -231,6 +234,17 @@ export class PrismaPagesRepository extends PagesRepository {
 
   findLiveById(id: string): Promise<PageRecord | null> {
     return this.client.page.findFirst({ select: PAGE_FIELDS, where: { deletedAt: null, id } });
+  }
+
+  async lockLivePageForUpdate(id: string): Promise<boolean> {
+    const rows = await this.client.$queryRaw<{ id: string }[]>`
+      SELECT "id"
+      FROM "Page"
+      WHERE "id" = ${id}::uuid AND "deletedAt" IS NULL
+      FOR UPDATE
+    `;
+
+    return rows.length > 0;
   }
 
   insert(input: InsertPageInput): Promise<PageRecord> {
