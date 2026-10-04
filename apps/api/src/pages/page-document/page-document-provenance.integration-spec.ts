@@ -10,8 +10,7 @@ import { PagePermissionsService } from '../../page-permissions/page-permissions.
 import type { DocumentCaptureClient } from '../../snapshots/document-capture.client';
 import { SnapshotApplicationService } from '../../snapshots/snapshot-application.service';
 import { PrismaSnapshotsRepository } from '../../snapshots/snapshots.repository';
-import { SnapshotsService } from '../../snapshots/snapshots.service';
-import { CreateSnapshotUseCase } from '../../snapshots/use-cases/create-snapshot.use-case';
+import { CreateSnapshotManualUseCase } from '../../snapshots/use-cases/create-snapshot-manual.use-case';
 import type { UsersService } from '../../users/users.service';
 import { PrismaPagesRepository } from '../pages.repository';
 import { PrismaPageDocumentRepository } from './page-document.repository';
@@ -123,13 +122,12 @@ describe('PageDocument provenance on PostgreSQL', () => {
     const permissionsRepository = new PrismaPagePermissionsRepository(client);
     const permissions = new PagePermissionsService(permissionsRepository, {} as UsersService);
     const snapshotsRepository = new PrismaSnapshotsRepository(client);
-    const createSnapshot = new CreateSnapshotUseCase(
+    const createSnapshot = new CreateSnapshotManualUseCase(
+      permissionsRepository,
       new PrismaTransactionRunner(prisma as unknown as PrismaService),
       pages,
-      permissionsRepository,
       snapshotsRepository,
     );
-    const snapshots = new SnapshotsService(createSnapshot, snapshotsRepository, permissions);
     const captureClient = {
       capture: async () => ({
         storageRevision: persisted.storageRevision,
@@ -137,7 +135,7 @@ describe('PageDocument provenance on PostgreSQL', () => {
         yjsState: persisted.yjsState,
       }),
     } as unknown as DocumentCaptureClient;
-    const application = new SnapshotApplicationService(captureClient, permissions, snapshots);
+    const application = new SnapshotApplicationService(captureClient, permissions, createSnapshot);
 
     const created = await application.createManual(pageId, ownerId);
     const stored = await prisma.documentSnapshot.findUniqueOrThrow({ where: { id: created.id } });
@@ -165,8 +163,8 @@ describe('PageDocument provenance on PostgreSQL', () => {
         yjsState: persisted.yjsState,
       })),
     } as unknown as DocumentCaptureClient;
-    const snapshots = {
-      createManual: vi.fn(async () => Promise.reject(new Error('insert failed'))),
+    const createSnapshotManual = {
+      execute: vi.fn(async () => Promise.reject(new Error('insert failed'))),
     };
     const permissions = {
       requireRole: vi.fn(async () => undefined),
@@ -174,7 +172,7 @@ describe('PageDocument provenance on PostgreSQL', () => {
     const application = new SnapshotApplicationService(
       captureClient,
       permissions,
-      snapshots as unknown as SnapshotsService,
+      createSnapshotManual as unknown as CreateSnapshotManualUseCase,
     );
 
     await expect(application.createManual(pageId, ownerId)).rejects.toThrow('insert failed');

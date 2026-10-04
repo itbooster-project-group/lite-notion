@@ -10,7 +10,8 @@ import type { UsersService } from '../users/users.service';
 import { type InsertSnapshotInput, SnapshotsRepository } from './snapshots.repository';
 import { SnapshotsService } from './snapshots.service';
 import type { SnapshotMetadata } from './types/snapshot-metadata';
-import { CreateSnapshotUseCase } from './use-cases/create-snapshot.use-case';
+import { CreateSnapshotInternalUseCase } from './use-cases/create-snapshot-internal.use-case';
+import { CreateSnapshotManualUseCase } from './use-cases/create-snapshot-manual.use-case';
 
 const OWNER_ID = 'owner';
 const EDITOR_ID = 'editor';
@@ -96,15 +97,24 @@ function createService() {
   } as unknown as PagesRepository;
   const snapshots = new MemorySnapshotsRepository();
   const transactions = new InMemoryTransactionRunner();
-  const createSnapshot = new CreateSnapshotUseCase(
+  const createManual = new CreateSnapshotManualUseCase(
+    permissionRepository,
     transactions,
     pages,
-    permissionRepository,
     snapshots,
   );
-  const service = new SnapshotsService(createSnapshot, snapshots, permissions);
+  const createInternal = new CreateSnapshotInternalUseCase(transactions, pages, snapshots);
+  const service = new SnapshotsService(snapshots, permissions);
 
-  return { createSnapshot, pages, permissionRepository, service, snapshots, transactions };
+  return {
+    createInternal,
+    createManual,
+    pages,
+    permissionRepository,
+    service,
+    snapshots,
+    transactions,
+  };
 }
 
 function capturedState() {
@@ -115,21 +125,21 @@ function capturedState() {
   };
 }
 
-describe('SnapshotsService', () => {
+describe('Snapshot use cases and SnapshotsService', () => {
   it('создаёт первый и следующий snapshot с page-scoped последовательными revision', async () => {
-    const { service } = createService();
+    const { createInternal, createManual } = createService();
 
-    const first = await service.createManual({
+    const first = await createManual.execute({
       ...capturedState(),
       createdById: OWNER_ID,
       pageId: PAGE_ID,
     });
-    const second = await service.createManual({
+    const second = await createManual.execute({
       ...capturedState(),
       createdById: OWNER_ID,
       pageId: PAGE_ID,
     });
-    const otherPage = await service.createInternal({
+    const otherPage = await createInternal.execute({
       ...capturedState(),
       createdById: null,
       pageId: 'other-page',
@@ -140,10 +150,10 @@ describe('SnapshotsService', () => {
   });
 
   it('сохраняет captured state, manual reason и creator', async () => {
-    const { service, snapshots } = createService();
+    const { createManual, snapshots } = createService();
     const state = capturedState();
 
-    const created = await service.createManual({
+    const created = await createManual.execute({
       ...state,
       createdById: EDITOR_ID,
       pageId: PAGE_ID,
@@ -162,9 +172,9 @@ describe('SnapshotsService', () => {
   });
 
   it('сохраняет bytes, переданные на момент вызова, даже если caller меняет массив', async () => {
-    const { service, snapshots } = createService();
+    const { createManual, snapshots } = createService();
     const yjsState = new Uint8Array([1, 2, 3]);
-    const creation = service.createManual({
+    const creation = createManual.execute({
       createdById: OWNER_ID,
       pageId: PAGE_ID,
       storageRevision: 9n,
@@ -178,32 +188,50 @@ describe('SnapshotsService', () => {
     expect(snapshots.inserts[0]?.yjsState).toEqual(new Uint8Array([1, 2, 3]));
   });
 
+  it('копирует internal Yjs state до начала асинхронной работы', async () => {
+    const { createInternal, snapshots } = createService();
+    const yjsState = new Uint8Array([1, 2, 3]);
+    const creation = createInternal.execute({
+      createdById: null,
+      pageId: PAGE_ID,
+      reason: SnapshotReason.automatic,
+      storageRevision: 9n,
+      tiptapSchemaVersion: 3,
+      yjsState,
+    });
+
+    yjsState.fill(9);
+    await creation;
+
+    expect(snapshots.inserts[0]?.yjsState).toEqual(new Uint8Array([1, 2, 3]));
+  });
+
   it('разрешает owner и editor, но запрещает viewer создавать manual snapshot', async () => {
-    const { service } = createService();
+    const { createManual } = createService();
 
     await expect(
-      service.createManual({ ...capturedState(), createdById: OWNER_ID, pageId: PAGE_ID }),
+      createManual.execute({ ...capturedState(), createdById: OWNER_ID, pageId: PAGE_ID }),
     ).resolves.toMatchObject({ reason: SnapshotReason.manual });
     await expect(
-      service.createManual({ ...capturedState(), createdById: EDITOR_ID, pageId: PAGE_ID }),
+      createManual.execute({ ...capturedState(), createdById: EDITOR_ID, pageId: PAGE_ID }),
     ).resolves.toMatchObject({ reason: SnapshotReason.manual });
     await expect(
-      service.createManual({ ...capturedState(), createdById: VIEWER_ID, pageId: PAGE_ID }),
+      createManual.execute({ ...capturedState(), createdById: VIEWER_ID, pageId: PAGE_ID }),
     ).rejects.toBeInstanceOf(PageRoleInsufficientError);
   });
 
   it('сохраняет not-found semantics для недоступной страницы', async () => {
-    const { service } = createService();
+    const { createManual } = createService();
 
     await expect(
-      service.createManual({ ...capturedState(), createdById: 'stranger', pageId: PAGE_ID }),
+      createManual.execute({ ...capturedState(), createdById: 'stranger', pageId: PAGE_ID }),
     ).rejects.toBeInstanceOf(PageNotFoundError);
   });
 
   it('позволяет trusted internal API задавать system reason без creator', async () => {
-    const { service, snapshots } = createService();
+    const { createInternal, snapshots } = createService();
 
-    const created = await service.createInternal({
+    const created = await createInternal.execute({
       ...capturedState(),
       createdById: null,
       pageId: PAGE_ID,
@@ -215,10 +243,10 @@ describe('SnapshotsService', () => {
   });
 
   it('использует переданный transaction scope, не открывая отдельную транзакцию', async () => {
-    const { service, transactions } = createService();
+    const { createInternal, createManual, transactions } = createService();
     const externalScope = { lock: vi.fn(async () => undefined) };
 
-    await service.createInternal(
+    await createInternal.execute(
       {
         ...capturedState(),
         createdById: null,
@@ -227,13 +255,17 @@ describe('SnapshotsService', () => {
       },
       externalScope,
     );
+    await createManual.execute(
+      { ...capturedState(), createdById: OWNER_ID, pageId: PAGE_ID },
+      externalScope,
+    );
 
     expect(transactions.scopes).toHaveLength(0);
   });
 
   it('разрешает owner, editor и viewer читать metadata без Yjs state', async () => {
-    const { service } = createService();
-    await service.createInternal({
+    const { createInternal, service } = createService();
+    await createInternal.execute({
       ...capturedState(),
       createdById: null,
       pageId: PAGE_ID,
@@ -248,13 +280,13 @@ describe('SnapshotsService', () => {
   });
 
   it('возвращает metadata по revision DESC и ограничивает get указанной страницей', async () => {
-    const { service } = createService();
-    const first = await service.createManual({
+    const { createManual, service } = createService();
+    const first = await createManual.execute({
       ...capturedState(),
       createdById: OWNER_ID,
       pageId: PAGE_ID,
     });
-    await service.createManual({ ...capturedState(), createdById: OWNER_ID, pageId: PAGE_ID });
+    await createManual.execute({ ...capturedState(), createdById: OWNER_ID, pageId: PAGE_ID });
 
     await expect(service.listMetadata(PAGE_ID, VIEWER_ID)).resolves.toMatchObject([
       { revision: 2n },

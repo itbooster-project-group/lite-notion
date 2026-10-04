@@ -14,8 +14,8 @@
 ## 3. API capture и snapshot orchestration
 
 - [x] 3.1 Добавить API collaboration URL/timeout configuration и internal capture client с проверкой ответа, декодированием base64 и преобразованием десятичной storage revision в `bigint`.
-- [x] 3.2 Добавить application service: проверять существующую editor permission до capture и передавать один captured result в `SnapshotsService.createManual`; открыть повторное использование capture для доверенных internal callers, не перенося collaboration logic в `SnapshotsService`.
-- [x] 3.3 Проверить unit tests порядок permission check, точные bytes/provenance для `SnapshotsService`, отсутствие snapshot при capture error и обработку timeout/unavailable/not-found.
+- [x] 3.2 Добавить application service: проверять существующую editor permission до capture и передавать один captured result в `CreateSnapshotManualUseCase.execute`; открыть повторное использование capture для доверенных internal callers, не перенося collaboration logic в snapshot use cases.
+- [x] 3.3 Проверить unit tests порядок permission check, точные bytes/provenance для manual creation use case, отсутствие snapshot при capture error и обработку timeout/unavailable/not-found.
 - [x] 3.4 Добавить PostgreSQL API integration coverage: snapshot хранит captured bytes, `sourceStorageRevision` и `tiptapSchemaVersion`; успешная persistence документа может сохраниться при ошибке вставки snapshot.
 
 ## 4. Проверки

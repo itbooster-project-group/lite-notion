@@ -6,7 +6,7 @@ Snapshot-инфраструктура уже сохраняет неизменя
 
 - Добавляется единый capture contract, который возвращает Yjs bytes, persisted revision этих bytes и TipTap schema version документа.
 - Для active Hocuspocus document capture один раз кодирует и сохраняет именно live bytes; если документа нет в памяти, используется согласованная persisted запись.
-- API orchestration для manual snapshot сначала проверяет edit permission, получает capture и передаёт его в существующий `SnapshotsService`.
+- API orchestration для manual snapshot сначала проверяет edit permission, получает capture и передаёт его в `CreateSnapshotManualUseCase`; metadata reads остаются в read-only `SnapshotsService`.
 - Capture result можно повторно использовать в будущих workflows, включая publication, без добавления publication/rendering логики.
 - Гарантия ограничена текущим single-instance collaboration; public snapshot endpoint и изменение snapshot schema или allocation не добавляются.
 

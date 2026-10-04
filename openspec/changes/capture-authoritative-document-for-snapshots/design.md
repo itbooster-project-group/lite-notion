@@ -68,9 +68,9 @@ JSON-ответ содержит `pageId`, base64 `yjsState`, десятичну
 
 ### Граница orchestration snapshot и permissions
 
-API `SnapshotApplicationService` получает `DocumentCaptureClient`, существующий `PagePermissionsService` и `SnapshotsService`. Manual flow сначала требует `EDITOR`, затем один раз захватывает состояние и передаёт его в `SnapshotsService.createManual`. Существующая финальная проверка permissions внутри `SnapshotsService` сохраняется для защиты от изменения доступа до вставки snapshot. Используется существующий permission algorithm; предварительная проверка не запускает capture для неавторизованного пользователя.
+API `SnapshotApplicationService` получает `DocumentCaptureClient`, существующий `PagePermissionsService` и `CreateSnapshotManualUseCase`. Manual flow сначала требует `EDITOR`, затем один раз захватывает состояние и передаёт его в `CreateSnapshotManualUseCase.execute`. Use case повторно проверяет permission внутри своей транзакции перед вставкой snapshot. Используется существующий permission algorithm; предварительная проверка не запускает capture для неавторизованного пользователя. `SnapshotsService` остаётся read-only metadata API согласно архитектуре snapshot creation из #92.
 
-Внутренний caller может запросить capture и передать тот же объект в `SnapshotsService.createInternal`. Capture result остаётся пригодным для других производных операций. `SnapshotsService` не знает о collaboration endpoint и не запрашивает Y.Doc повторно.
+Доверенный caller может запросить capture и передать тот же объект в `CreateSnapshotInternalUseCase.execute` вместе с derived operations. Capture result остаётся пригодным для других производных операций. Snapshot use cases не знают о collaboration endpoint и не запрашивают Y.Doc повторно.
 
 ### Ограничение по числу инстансов
 

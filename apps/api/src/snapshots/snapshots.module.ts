@@ -6,13 +6,15 @@ import { DocumentCaptureClient } from './document-capture.client';
 import { SnapshotApplicationService } from './snapshot-application.service';
 import { PrismaSnapshotsRepository, SnapshotsRepository } from './snapshots.repository';
 import { SnapshotsService } from './snapshots.service';
-import { CreateSnapshotUseCase } from './use-cases/create-snapshot.use-case';
+import { CreateSnapshotInternalUseCase } from './use-cases/create-snapshot-internal.use-case';
+import { CreateSnapshotManualUseCase } from './use-cases/create-snapshot-manual.use-case';
 
 @Module({
-  exports: [SnapshotApplicationService, SnapshotsService],
+  exports: [CreateSnapshotInternalUseCase, SnapshotApplicationService, SnapshotsService],
   imports: [DatabaseModule, PagePermissionsModule, PagesModule],
   providers: [
-    CreateSnapshotUseCase,
+    CreateSnapshotInternalUseCase,
+    CreateSnapshotManualUseCase,
     DocumentCaptureClient,
     SnapshotApplicationService,
     SnapshotsService,
