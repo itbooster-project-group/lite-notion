@@ -40,7 +40,7 @@
 - **THEN** он возвращает существующий not-found результат и snapshot не создаётся
 
 ### Requirement: Snapshot orchestration повторно использует один captured state
-Application MUST получить одно captured document state для snapshot operation и передать то же состояние в reusable snapshot persistence service. Manual snapshot creation MUST проверить существующую edit permission страницы до capture и MUST сохранить существующие правила manual reason и creator. Capture-specific behavior MUST оставаться вне низкоуровневого snapshot persistence service.
+Application MUST получить одно captured document state для snapshot operation и передать то же состояние в соответствующий snapshot creation use case. Manual snapshot creation MUST проверить существующую edit permission страницы до capture и MUST сохранить существующие правила manual reason и creator. Capture-specific behavior MUST оставаться вне snapshot creation use cases.
 
 #### Scenario: Создание manual snapshot
 - **WHEN** пользователь с edit permission запрашивает manual snapshot
