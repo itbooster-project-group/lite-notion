@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { CapturedDocumentState } from '../../document-capture/captured-document-state';
+import { CapturedDocumentState } from '../../document-capture/document-capture.client';
 import { SnapshotReason } from '../../generated/prisma/enums';
 import { PageRole } from '../../page-permissions/constants';
 import { PageRoleInsufficientError } from '../../pages/errors';

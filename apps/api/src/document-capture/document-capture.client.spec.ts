@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ApplicationConfig } from '../config/application-config';
 import { NodeEnvironment } from '../config/environment';
 import { PageNotFoundError } from '../pages/errors';
-import { DocumentCaptureClient, DocumentCaptureUnavailableError } from './document-capture.client';
+import { DocumentCaptureClient } from './document-capture.client';
+import { DocumentCaptureUnavailableError } from './errors/document-capture-unavailable.error';
 
 const config: ApplicationConfig = {
   accessTokenTtlS: 900,
