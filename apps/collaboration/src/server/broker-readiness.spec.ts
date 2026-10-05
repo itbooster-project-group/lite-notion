@@ -4,7 +4,7 @@ import {
   assertBrokerReachable,
   type BrokerProbe,
   BrokerUnavailableError,
-} from './broker-readiness.js';
+} from './broker-readiness.function.js';
 
 type ErrorListener = (event: 'error', listener: (error: Error) => void) => unknown;
 

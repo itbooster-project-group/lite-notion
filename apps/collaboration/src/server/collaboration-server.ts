@@ -16,9 +16,12 @@ import {
   PageDocumentPersistence,
 } from '../documents/persistence.js';
 import type { CollaborationLogger } from '../logging/logger.js';
-import { createBroker } from './broker-readiness.js';
-import { handleInternalDocumentCapture } from './internal-document-capture.js';
-import { createReauthorizationSchedule, type ReauthorizationSchedule } from './reauthorization.js';
+import { createBroker } from './broker-readiness.function.js';
+import { handleInternalDocumentCapture } from './internal-document-capture.function.js';
+import {
+  createReauthorizationSchedule,
+  type ReauthorizationSchedule,
+} from './reauthorization.function.js';
 
 export interface CollaborationContext {
   /** Срок жизни токена этого соединения, а не последнего вошедшего в комнату. */

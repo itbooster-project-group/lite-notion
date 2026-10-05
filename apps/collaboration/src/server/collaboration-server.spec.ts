@@ -7,7 +7,7 @@ import { InMemoryInternalApiClient } from '../api/internal-api-client.in-memory.
 import type { CollaborationConfig } from '../config/environment.js';
 import type { CollaborationLogger } from '../logging/logger.js';
 import { createCollaborationServer } from './collaboration-server.js';
-import type { ReauthorizationSchedule } from './reauthorization.js';
+import type { ReauthorizationSchedule } from './reauthorization.function.js';
 
 const ownerId = '550e8400-e29b-41d4-a716-446655440000';
 const pageId = '550e8400-e29b-41d4-a716-446655440001';

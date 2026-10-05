@@ -1,7 +1,7 @@
 import { InternalApiClient } from './api/internal-api-client.js';
 import { createCollaborationConfig } from './config/environment.js';
 import { consoleLogger } from './logging/logger.js';
-import { assertBrokerReachable, createBroker } from './server/broker-readiness.js';
+import { assertBrokerReachable, createBroker } from './server/broker-readiness.function.js';
 import { createCollaborationServer, registerShutdown } from './server/collaboration-server.js';
 
 async function main(): Promise<void> {

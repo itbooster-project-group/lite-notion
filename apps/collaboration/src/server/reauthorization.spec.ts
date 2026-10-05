@@ -1,7 +1,10 @@
 import type { Connection } from '@hocuspocus/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createReauthorizationSchedule, type ReauthorizationTimings } from './reauthorization.js';
+import {
+  createReauthorizationSchedule,
+  type ReauthorizationTimings,
+} from './reauthorization.function.js';
 
 const timings: ReauthorizationTimings = {
   jitterMs: 1_000,
