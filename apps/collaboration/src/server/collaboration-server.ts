@@ -1,11 +1,8 @@
 import type { Redis } from '@hocuspocus/extension-redis';
 import { type Connection, Server } from '@hocuspocus/server';
 
-import {
-  ApiDeniedError,
-  type InternalApiClient,
-  type VerifiedIdentity,
-} from '../api/internal-api-client.js';
+import { ApiDeniedError } from '../api/errors/api-denied.error.js';
+import type { InternalApiClient, VerifiedIdentity } from '../api/internal-api-client.js';
 import { assertAllowedOrigin } from '../auth/origin.js';
 import type { CollaborationConfig } from '../config/environment.js';
 import { parsePageDocumentName } from '../documents/document-name.js';

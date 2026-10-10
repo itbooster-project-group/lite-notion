@@ -13,6 +13,8 @@
   "dependencies": {
     "@hocuspocus/extension-redis": "^4.7.0",
     "@hocuspocus/server": "^4.7.0",
+    "class-transformer": "catalog:",
+    "class-validator": "catalog:",
     "yjs": "catalog:"
   },
   "devDependencies": {

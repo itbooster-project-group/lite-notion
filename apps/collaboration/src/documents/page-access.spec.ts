@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { ApiDeniedError, ApiUnavailableError } from '../api/internal-api-client.js';
+import { ApiDeniedError } from '../api/errors/api-denied.error.js';
+import { ApiUnavailableError } from '../api/errors/api-unavailable.error.js';
 import { PageAccessDeniedError, PageAccessService } from './page-access.js';
 
 const PAGE = 'page-id';

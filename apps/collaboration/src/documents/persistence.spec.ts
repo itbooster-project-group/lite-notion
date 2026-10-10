@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
 
-import { ApiDeniedError, ApiUnavailableError } from '../api/internal-api-client.js';
+import { ApiDeniedError } from '../api/errors/api-denied.error.js';
+import { ApiUnavailableError } from '../api/errors/api-unavailable.error.js';
 import {
   DOCUMENT_MAX_BYTES,
   DocumentLoadError,

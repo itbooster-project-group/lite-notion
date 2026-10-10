@@ -15,6 +15,12 @@ catalogs:
     '@types/node':
       specifier: ^22.0.0
       version: 22.20.1
+    class-transformer:
+      specifier: ^0.5.1
+      version: 0.5.1
+    class-validator:
+      specifier: ^0.15.1
+      version: 0.15.1
     pg:
       specifier: ^8.23.0
       version: 8.23.0
@@ -87,10 +93,10 @@ importers:
         specifier: ^6.0.0
         version: 6.0.0
       class-transformer:
-        specifier: ^0.5.1
+        specifier: 'catalog:'
         version: 0.5.1
       class-validator:
-        specifier: ^0.15.1
+        specifier: 'catalog:'
         version: 0.15.1
       cookie-parser:
         specifier: ^1.4.7
@@ -159,6 +165,12 @@ importers:
       '@hocuspocus/server':
         specifier: ^4.7.0
         version: 4.7.0(y-protocols@1.0.7(yjs@13.6.32))(yjs@13.6.32)
+      class-transformer:
+        specifier: 'catalog:'
+        version: 0.5.1
+      class-validator:
+        specifier: 'catalog:'
+        version: 0.15.1
       yjs:
         specifier: 'catalog:'
         version: 13.6.32

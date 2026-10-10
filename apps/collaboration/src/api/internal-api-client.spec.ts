@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { ApiDeniedError, ApiUnavailableError, InternalApiClient } from './internal-api-client.js';
+import { ApiDeniedError } from './errors/api-denied.error.js';
+import { ApiUnavailableError } from './errors/api-unavailable.error.js';
+import { InternalApiClient } from './internal-api-client.js';
 
 function clientWith(fetchImpl: typeof fetch): InternalApiClient {
   return new InternalApiClient({
@@ -19,6 +21,105 @@ function jsonResponse(status: number, body: unknown): Response {
 }
 
 describe('InternalApiClient', () => {
+  describe.each(['readDocumentRecord', 'replaceDocument'] as const)('%s', (operation) => {
+    const validRecord = {
+      pageId: 'page',
+      storageRevision: '9007199254740993',
+      tiptapSchemaVersion: 2,
+      yjsState: 'AQIDBA==',
+    };
+
+    function requestDocument(
+      client: InternalApiClient,
+    ): ReturnType<typeof client.readDocumentRecord> {
+      return operation === 'readDocumentRecord'
+        ? client.readDocumentRecord('page')
+        : client.replaceDocument('page', new Uint8Array([1, 2, 3, 4]));
+    }
+
+    it('возвращает bytes и точные persisted metadata', async () => {
+      const client = clientWith(vi.fn(async () => jsonResponse(200, validRecord)));
+
+      await expect(requestDocument(client)).resolves.toEqual({
+        pageId: 'page',
+        storageRevision: 9007199254740993n,
+        tiptapSchemaVersion: 2,
+        yjsState: new Uint8Array([1, 2, 3, 4]),
+      });
+    });
+
+    it('принимает пустое состояние и начальную revision', async () => {
+      const client = clientWith(
+        vi.fn(async () =>
+          jsonResponse(200, {
+            ...validRecord,
+            storageRevision: '0',
+            tiptapSchemaVersion: 1,
+            yjsState: '',
+          }),
+        ),
+      );
+
+      await expect(requestDocument(client)).resolves.toEqual({
+        pageId: 'page',
+        storageRevision: 0n,
+        tiptapSchemaVersion: 1,
+        yjsState: new Uint8Array(),
+      });
+    });
+
+    it.each([
+      ...['', '-1', '01', '1.5', '1e3', 'revision', ' 1', 1, null, undefined].map(
+        (storageRevision) => ({ field: 'storageRevision', value: storageRevision }),
+      ),
+      ...[0, -1, 1.5, '1', null, undefined].map((tiptapSchemaVersion) => ({
+        field: 'tiptapSchemaVersion',
+        value: tiptapSchemaVersion,
+      })),
+      ...['!!!', 'AQ', 'AQ=', 'AQ===', 'AQ==\n', 'AQ-_', 'AR==', 'AQJ=', 123, null, undefined].map(
+        (yjsState) => ({ field: 'yjsState', value: yjsState }),
+      ),
+      ...[123, null, undefined].map((pageId) => ({ field: 'pageId', value: pageId })),
+    ])('отклоняет некорректное поле $field: $value', async ({ field, value }) => {
+      const client = clientWith(
+        vi.fn(async () => jsonResponse(200, { ...validRecord, [field]: value })),
+      );
+      const response = requestDocument(client);
+
+      await expect(response).rejects.toBeInstanceOf(ApiUnavailableError);
+      await expect(response).rejects.toMatchObject({ reason: 'MalformedDocumentResponse' });
+    });
+
+    it.each(
+      [null, false, 42, 'document', {}, [], [validRecord], { constructor: null }].map((body) => ({
+        body,
+      })),
+    )('отклоняет некорректное тело ответа: $body', async ({ body }) => {
+      const client = clientWith(vi.fn(async () => jsonResponse(200, body)));
+      const response = requestDocument(client);
+
+      await expect(response).rejects.toBeInstanceOf(ApiUnavailableError);
+      await expect(response).rejects.toMatchObject({ reason: 'MalformedDocumentResponse' });
+    });
+
+    it.each([400, 401, 403, 404])('сохраняет авторитетный отказ %s без retry', async (status) => {
+      const fetchImpl = vi.fn(async () => jsonResponse(status, {}));
+      const response = requestDocument(clientWith(fetchImpl));
+
+      await expect(response).rejects.toBeInstanceOf(ApiDeniedError);
+      await expect(response).rejects.toMatchObject({ status });
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([500, 502, 503])('сохраняет недоступность API при %s', async (status) => {
+      const client = clientWith(vi.fn(async () => jsonResponse(status, {})));
+      const response = requestDocument(client);
+
+      await expect(response).rejects.toBeInstanceOf(ApiUnavailableError);
+      await expect(response).rejects.toMatchObject({ reason: `status ${status}` });
+    });
+  });
+
   it('возвращает личность с моментом истечения', async () => {
     const expiresAt = new Date(Date.now() + 900_000);
     const client = clientWith(

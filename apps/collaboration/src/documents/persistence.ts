@@ -1,6 +1,7 @@
 import * as Y from 'yjs';
 
-import { ApiDeniedError, type InternalApiClient } from '../api/internal-api-client.js';
+import { ApiDeniedError } from '../api/errors/api-denied.error.js';
+import type { InternalApiClient } from '../api/internal-api-client.js';
 import { parsePageDocumentName } from './document-name.js';
 
 /** Предел итогового Yjs state. WebSocket payload ограничивается отдельно. */

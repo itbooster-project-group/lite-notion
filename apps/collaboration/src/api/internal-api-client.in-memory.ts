@@ -1,8 +1,8 @@
-import {
-  ApiDeniedError,
-  type InternalApiClient,
-  type PageAccessVerdict,
-  type VerifiedIdentity,
+import { ApiDeniedError } from './errors/api-denied.error.js';
+import type {
+  InternalApiClient,
+  PageAccessVerdict,
+  VerifiedIdentity,
 } from './internal-api-client.js';
 
 export interface InMemoryApiPage {

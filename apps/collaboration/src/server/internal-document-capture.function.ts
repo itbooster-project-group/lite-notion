@@ -2,11 +2,9 @@ import { timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Hocuspocus } from '@hocuspocus/server';
 
-import {
-  ApiDeniedError,
-  ApiUnavailableError,
-  type InternalApiClient,
-} from '../api/internal-api-client.js';
+import { ApiDeniedError } from '../api/errors/api-denied.error.js';
+import { ApiUnavailableError } from '../api/errors/api-unavailable.error.js';
+import type { InternalApiClient } from '../api/internal-api-client.js';
 import type { CollaborationConfig } from '../config/environment.js';
 import { DocumentCapture, DocumentCaptureEncodingError } from '../documents/document-capture.js';
 import { parsePageDocumentName } from '../documents/document-name.js';

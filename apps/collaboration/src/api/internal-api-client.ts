@@ -1,16 +1,8 @@
-/** Авторитетный отказ API: решение принято, повторять незачем. */
-export class ApiDeniedError extends Error {
-  constructor(readonly status: number) {
-    super('API denied the request');
-  }
-}
-
-/** Вердикт получить не удалось. Отказом это NOT является. */
-export class ApiUnavailableError extends Error {
-  constructor(readonly reason: string) {
-    super('API is unavailable');
-  }
-}
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
+import { InternalDocumentDto } from './dto/internal-document.dto.js';
+import { ApiDeniedError } from './errors/api-denied.error.js';
+import { ApiUnavailableError } from './errors/api-unavailable.error.js';
 
 export interface VerifiedIdentity {
   expiresAt: Date;
@@ -30,42 +22,6 @@ export interface PersistedDocumentRecord {
   storageRevision: bigint;
   tiptapSchemaVersion: number;
   yjsState: Uint8Array;
-}
-
-interface InternalDocumentResponse {
-  pageId: string;
-  storageRevision: string;
-  tiptapSchemaVersion: number;
-  yjsState: string;
-}
-
-function decodeDocumentRecord(body: InternalDocumentResponse): PersistedDocumentRecord {
-  if (
-    typeof body.pageId !== 'string' ||
-    typeof body.storageRevision !== 'string' ||
-    !/^(0|[1-9]\d*)$/.test(body.storageRevision) ||
-    !Number.isInteger(body.tiptapSchemaVersion) ||
-    typeof body.yjsState !== 'string'
-  ) {
-    throw new ApiUnavailableError('MalformedDocumentResponse');
-  }
-
-  try {
-    const bytes = Buffer.from(body.yjsState, 'base64');
-
-    if (bytes.toString('base64') !== body.yjsState) {
-      throw new Error('Invalid base64');
-    }
-
-    return {
-      pageId: body.pageId,
-      storageRevision: BigInt(body.storageRevision),
-      tiptapSchemaVersion: body.tiptapSchemaVersion,
-      yjsState: new Uint8Array(bytes),
-    };
-  } catch {
-    throw new ApiUnavailableError('MalformedDocumentResponse');
-  }
 }
 
 export interface InternalApiClientOptions {
@@ -116,24 +72,55 @@ export class InternalApiClient {
   }
 
   async readDocumentRecord(pageId: string): Promise<PersistedDocumentRecord> {
-    const body = await this.request<InternalDocumentResponse>(
+    const body = await this.request<unknown>(
       'GET',
       `/internal/pages/${encodeURIComponent(pageId)}/document`,
       this.serviceHeaders(),
     );
 
-    return decodeDocumentRecord(body);
+    return this.decodeDocumentRecord(body);
   }
 
   async replaceDocument(pageId: string, yjsState: Uint8Array): Promise<PersistedDocumentRecord> {
-    const body = await this.request<InternalDocumentResponse>(
+    const body = await this.request<unknown>(
       'PUT',
       `/internal/pages/${encodeURIComponent(pageId)}/document`,
       { ...this.serviceHeaders(), 'content-type': 'application/json' },
       JSON.stringify({ yjsState: Buffer.from(yjsState).toString('base64') }),
     );
 
-    return decodeDocumentRecord(body);
+    return this.decodeDocumentRecord(body);
+  }
+
+  private async decodeDocumentRecord(value: unknown): Promise<PersistedDocumentRecord> {
+    try {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        throw new ApiUnavailableError('MalformedDocumentResponse');
+      }
+
+      const dto = plainToInstance(InternalDocumentDto, value);
+      const errors = await validate(dto);
+
+      if (errors.length > 0) {
+        throw new ApiUnavailableError('MalformedDocumentResponse');
+      }
+
+      const bytes = Buffer.from(dto.yjsState, 'base64');
+
+      // IsBase64 does not reject nonzero padding bits.
+      if (bytes.toString('base64') !== dto.yjsState) {
+        throw new ApiUnavailableError('MalformedDocumentResponse');
+      }
+
+      return {
+        pageId: dto.pageId,
+        storageRevision: BigInt(dto.storageRevision),
+        tiptapSchemaVersion: dto.tiptapSchemaVersion,
+        yjsState: new Uint8Array(bytes),
+      };
+    } catch {
+      throw new ApiUnavailableError('MalformedDocumentResponse');
+    }
   }
 
   private serviceHeaders(): Record<string, string> {
