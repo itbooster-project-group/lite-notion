@@ -1,16 +1,8 @@
-/** Авторитетный отказ API: решение принято, повторять незачем. */
-export class ApiDeniedError extends Error {
-  constructor(readonly status: number) {
-    super('API denied the request');
-  }
-}
-
-/** Вердикт получить не удалось. Отказом это NOT является. */
-export class ApiUnavailableError extends Error {
-  constructor(readonly reason: string) {
-    super('API is unavailable');
-  }
-}
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
+import { InternalDocumentDto } from './dto/internal-document.dto.js';
+import { ApiDeniedError } from './errors/api-denied.error.js';
+import { ApiUnavailableError } from './errors/api-unavailable.error.js';
 
 export interface VerifiedIdentity {
   expiresAt: Date;
@@ -23,6 +15,13 @@ export interface PageAccessVerdict {
   pageId: string;
   role: string;
   userId: string;
+}
+
+export interface PersistedDocumentRecord {
+  pageId: string;
+  storageRevision: bigint;
+  tiptapSchemaVersion: number;
+  yjsState: Uint8Array;
 }
 
 export interface InternalApiClientOptions {
@@ -69,22 +68,59 @@ export class InternalApiClient {
   }
 
   async readDocument(pageId: string): Promise<Uint8Array> {
-    const body = await this.request<{ pageId: string; yjsState: string }>(
+    return (await this.readDocumentRecord(pageId)).yjsState;
+  }
+
+  async readDocumentRecord(pageId: string): Promise<PersistedDocumentRecord> {
+    const body = await this.request<unknown>(
       'GET',
       `/internal/pages/${encodeURIComponent(pageId)}/document`,
       this.serviceHeaders(),
     );
 
-    return new Uint8Array(Buffer.from(body.yjsState, 'base64'));
+    return this.decodeDocumentRecord(body);
   }
 
-  async replaceDocument(pageId: string, yjsState: Uint8Array): Promise<void> {
-    await this.request(
+  async replaceDocument(pageId: string, yjsState: Uint8Array): Promise<PersistedDocumentRecord> {
+    const body = await this.request<unknown>(
       'PUT',
       `/internal/pages/${encodeURIComponent(pageId)}/document`,
       { ...this.serviceHeaders(), 'content-type': 'application/json' },
       JSON.stringify({ yjsState: Buffer.from(yjsState).toString('base64') }),
     );
+
+    return this.decodeDocumentRecord(body);
+  }
+
+  private async decodeDocumentRecord(value: unknown): Promise<PersistedDocumentRecord> {
+    try {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        throw new ApiUnavailableError('MalformedDocumentResponse');
+      }
+
+      const dto = plainToInstance(InternalDocumentDto, value);
+      const errors = await validate(dto);
+
+      if (errors.length > 0) {
+        throw new ApiUnavailableError('MalformedDocumentResponse');
+      }
+
+      const bytes = Buffer.from(dto.yjsState, 'base64');
+
+      // IsBase64 does not reject nonzero padding bits.
+      if (bytes.toString('base64') !== dto.yjsState) {
+        throw new ApiUnavailableError('MalformedDocumentResponse');
+      }
+
+      return {
+        pageId: dto.pageId,
+        storageRevision: BigInt(dto.storageRevision),
+        tiptapSchemaVersion: dto.tiptapSchemaVersion,
+        yjsState: new Uint8Array(bytes),
+      };
+    } catch {
+      throw new ApiUnavailableError('MalformedDocumentResponse');
+    }
   }
 
   private serviceHeaders(): Record<string, string> {
@@ -100,33 +136,31 @@ export class InternalApiClient {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.options.timeoutMs);
 
-    let response: Response;
-
     try {
-      response = await this.fetchImpl(`${this.options.baseUrl}${path}`, {
+      const response = await this.fetchImpl(`${this.options.baseUrl}${path}`, {
         ...(body === undefined ? {} : { body }),
         headers,
         method,
         signal: controller.signal,
       });
+
+      if (DENIAL_STATUSES.has(response.status)) {
+        throw new ApiDeniedError(response.status);
+      }
+
+      if (!response.ok) {
+        throw new ApiUnavailableError(`status ${response.status}`);
+      }
+
+      return (await response.json()) as T;
     } catch (error) {
+      if (error instanceof ApiDeniedError || error instanceof ApiUnavailableError) {
+        throw error;
+      }
+
       throw new ApiUnavailableError(error instanceof Error ? error.name : 'UnknownError');
     } finally {
       clearTimeout(timer);
-    }
-
-    if (DENIAL_STATUSES.has(response.status)) {
-      throw new ApiDeniedError(response.status);
-    }
-
-    if (!response.ok) {
-      throw new ApiUnavailableError(`status ${response.status}`);
-    }
-
-    try {
-      return (await response.json()) as T;
-    } catch {
-      throw new ApiUnavailableError('MalformedResponse');
     }
   }
 }

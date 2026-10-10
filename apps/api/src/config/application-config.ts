@@ -5,6 +5,8 @@ import { type NodeEnvironment, validateEnvironment } from './environment';
 export interface ApplicationConfig {
   accessTokenTtlS: number;
   bcryptRounds: number;
+  collaborationBaseUrl: string;
+  collaborationTimeoutMs: number;
   corsOrigin: string;
   databaseConnectionTimeoutMs: number;
   databaseUrl: string;
@@ -21,6 +23,8 @@ export function createApplicationConfig(environment: Record<string, unknown>): A
   return {
     accessTokenTtlS: validatedEnvironment.ACCESS_TOKEN_TTL_S,
     bcryptRounds: validatedEnvironment.BCRYPT_ROUNDS,
+    collaborationBaseUrl: validatedEnvironment.COLLABORATION_BASE_URL,
+    collaborationTimeoutMs: validatedEnvironment.COLLABORATION_TIMEOUT_MS,
     corsOrigin: validatedEnvironment.CORS_ORIGIN,
     databaseConnectionTimeoutMs: validatedEnvironment.DATABASE_CONNECTION_TIMEOUT_MS,
     databaseUrl: validatedEnvironment.DATABASE_URL,

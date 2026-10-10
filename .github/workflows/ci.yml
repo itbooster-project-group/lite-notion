@@ -56,6 +56,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CORS_ORIGIN: http://localhost:8080
+      COLLABORATION_BASE_URL: http://localhost:3002
+      COLLABORATION_TIMEOUT_MS: 5000
       DATABASE_CONNECTION_TIMEOUT_MS: 5000
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       INTERNAL_SERVICE_TOKEN: local-development-only-change-me-before-deploy

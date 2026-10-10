@@ -7,7 +7,7 @@ import { InMemoryInternalApiClient } from '../api/internal-api-client.in-memory.
 import type { CollaborationConfig } from '../config/environment.js';
 import type { CollaborationLogger } from '../logging/logger.js';
 import { createCollaborationServer } from './collaboration-server.js';
-import type { ReauthorizationSchedule } from './reauthorization.js';
+import type { ReauthorizationSchedule } from './reauthorization.function.js';
 
 const ownerId = '550e8400-e29b-41d4-a716-446655440000';
 const pageId = '550e8400-e29b-41d4-a716-446655440001';
@@ -103,7 +103,7 @@ describe('collaboration Hocuspocus runtime', () => {
   async function start(
     api: InMemoryInternalApiClient,
     schedule?: ReauthorizationSchedule,
-  ): Promise<{ logger: TestLogger; url: string }> {
+  ): Promise<{ httpUrl: string; logger: TestLogger; url: string }> {
     const logger = createLogger();
     // Redis отключён: синхронизация реплик проверяется отдельным тестом.
     const server = createCollaborationServer(createConfig(), api.asClient(), logger, {
@@ -116,8 +116,46 @@ describe('collaboration Hocuspocus runtime', () => {
     servers.push(server);
     await server.listen();
 
-    return { logger, url: `ws://127.0.0.1:${server.address.port}` };
+    return {
+      httpUrl: `http://127.0.0.1:${server.address.port}`,
+      logger,
+      url: `ws://127.0.0.1:${server.address.port}`,
+    };
   }
+
+  it('serves persisted document capture only with the service credential', async () => {
+    const { httpUrl } = await start(createApi());
+    const endpoint = `${httpUrl}/internal/documents/${pageId}/capture`;
+    const denied = await fetch(endpoint, { method: 'POST' });
+
+    expect(denied.status).toBe(401);
+
+    const response = await fetch(endpoint, {
+      headers: { 'x-internal-service-token': createConfig().internalServiceToken },
+      method: 'POST',
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      pageId,
+      storageRevision: '0',
+      tiptapSchemaVersion: 1,
+      yjsState: '',
+    });
+  });
+
+  it('returns not found when the page is deleted before capture', async () => {
+    const api = createApi();
+    api.deletePage(pageId);
+    const { httpUrl } = await start(api);
+    const response = await fetch(`${httpUrl}/internal/documents/${pageId}/capture`, {
+      headers: { 'x-internal-service-token': createConfig().internalServiceToken },
+      method: 'POST',
+    });
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({ code: 'not_found' });
+  });
 
   it('отклоняет missing token', async () => {
     const { url } = await start(createApi());

@@ -20,6 +20,7 @@ import { Public } from '../common/decorators/public.decorator';
 import { PagePermissionsService } from '../page-permissions/page-permissions.service';
 import { toHttpException } from '../pages/helpers';
 import { PageDocumentService } from '../pages/page-document/page-document.service';
+import { PersistPageDocumentStateUseCase } from '../pages/page-document/use-cases/persist-page-document-state.use-case';
 import {
   INTERNAL_AUTHENTICATE_PATH,
   INTERNAL_IDENTITY_SESSION_HEADER,
@@ -55,6 +56,8 @@ export class InternalController {
     @Inject(TokenService) private readonly tokens: TokenService,
     @Inject(PagePermissionsService) private readonly permissions: PagePermissionsService,
     @Inject(PageDocumentService) private readonly documents: PageDocumentService,
+    @Inject(PersistPageDocumentStateUseCase)
+    private readonly persistDocument: PersistPageDocumentStateUseCase,
   ) {}
 
   /** Заголовки личности переносит шлюз, тело читает collaboration runtime. */
@@ -109,7 +112,7 @@ export class InternalController {
     const yjsState = new Uint8Array(Buffer.from(body.yjsState, 'base64'));
 
     return InternalDocumentDto.fromRecord(
-      await toHttpException(() => this.documents.replaceYjsStateUnchecked(pageId, yjsState)),
+      await toHttpException(() => this.persistDocument.execute(pageId, yjsState)),
     );
   }
 }

@@ -8,6 +8,8 @@ import { PrismaService } from './prisma.service';
 const config: ApplicationConfig = {
   accessTokenTtlS: 900,
   bcryptRounds: 4,
+  collaborationBaseUrl: 'http://localhost:3002',
+  collaborationTimeoutMs: 5000,
   corsOrigin: 'http://localhost:3000',
   databaseConnectionTimeoutMs: 100,
   databaseUrl: 'postgresql://lite_notion:lite_notion@localhost:5432/lite_notion',

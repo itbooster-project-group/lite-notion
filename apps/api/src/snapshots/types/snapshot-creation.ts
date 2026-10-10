@@ -1,6 +1,6 @@
+import { CapturedDocumentState } from '../../document-capture/document-capture.client';
 import type { SnapshotReason as SnapshotReasonType } from '../../generated/prisma/enums';
 import { SnapshotReason } from '../../generated/prisma/enums';
-import type { CapturedDocumentState } from './captured-document-state';
 
 export type SystemSnapshotReason = Exclude<SnapshotReasonType, typeof SnapshotReason.manual>;
 

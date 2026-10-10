@@ -1,11 +1,8 @@
 import type { Redis } from '@hocuspocus/extension-redis';
 import { type Connection, Server } from '@hocuspocus/server';
 
-import {
-  ApiDeniedError,
-  type InternalApiClient,
-  type VerifiedIdentity,
-} from '../api/internal-api-client.js';
+import { ApiDeniedError } from '../api/errors/api-denied.error.js';
+import type { InternalApiClient, VerifiedIdentity } from '../api/internal-api-client.js';
 import { assertAllowedOrigin } from '../auth/origin.js';
 import type { CollaborationConfig } from '../config/environment.js';
 import { parsePageDocumentName } from '../documents/document-name.js';
@@ -16,8 +13,12 @@ import {
   PageDocumentPersistence,
 } from '../documents/persistence.js';
 import type { CollaborationLogger } from '../logging/logger.js';
-import { createBroker } from './broker-readiness.js';
-import { createReauthorizationSchedule, type ReauthorizationSchedule } from './reauthorization.js';
+import { createBroker } from './broker-readiness.function.js';
+import { handleInternalDocumentCapture } from './internal-document-capture.function.js';
+import {
+  createReauthorizationSchedule,
+  type ReauthorizationSchedule,
+} from './reauthorization.function.js';
 
 export interface CollaborationContext {
   /** Срок жизни токена этого соединения, а не последнего вошедшего в комнату. */
@@ -78,7 +79,7 @@ export function createCollaborationServer(
     return { identity, pageAccess: await access.authorize(token, pageId) };
   };
 
-  return new Server<CollaborationContext>({
+  const server = new Server<CollaborationContext>({
     name: 'lite-notion-collaboration',
     ...(options.address ? { address: options.address } : {}),
     ...(typeof options.debounce === 'number' ? { debounce: options.debounce } : {}),
@@ -202,6 +203,24 @@ export function createCollaborationServer(
       logger.info('collaboration server stopped');
     },
   });
+
+  const hocuspocusRequestHandler = server.requestHandler;
+  server.httpServer.removeListener('request', hocuspocusRequestHandler);
+  server.httpServer.on('request', async (request, response) => {
+    const handled = await handleInternalDocumentCapture(
+      request,
+      response,
+      server.hocuspocus,
+      config,
+      api,
+    );
+
+    if (!handled) {
+      await hocuspocusRequestHandler(request, response);
+    }
+  });
+
+  return server;
 }
 
 export function registerShutdown(runtime: CollaborationRuntime, logger: CollaborationLogger): void {

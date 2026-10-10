@@ -1,4 +1,5 @@
-import { ApiDeniedError, type InternalApiClient } from '../api/internal-api-client.js';
+import { ApiDeniedError } from '../api/errors/api-denied.error.js';
+import type { InternalApiClient } from '../api/internal-api-client.js';
 
 export interface PageAccess {
   canRead: boolean;

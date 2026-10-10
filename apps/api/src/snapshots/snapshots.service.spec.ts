@@ -10,6 +10,7 @@ import type { UsersService } from '../users/users.service';
 import { type InsertSnapshotInput, SnapshotsRepository } from './snapshots.repository';
 import { SnapshotsService } from './snapshots.service';
 import type { SnapshotMetadata } from './types/snapshot-metadata';
+import { CreateCurrentManualSnapshotUseCase } from './use-cases/create-current-manual-snapshot.use-case';
 import { CreateSnapshotInternalUseCase } from './use-cases/create-snapshot-internal.use-case';
 import { CreateSnapshotManualUseCase } from './use-cases/create-snapshot-manual.use-case';
 
@@ -114,6 +115,8 @@ function createService() {
     service,
     snapshots,
     transactions,
+    roles,
+    permissions,
   };
 }
 
@@ -218,6 +221,28 @@ describe('Snapshot use cases and SnapshotsService', () => {
     await expect(
       createManual.execute({ ...capturedState(), createdById: VIEWER_ID, pageId: PAGE_ID }),
     ).rejects.toBeInstanceOf(PageRoleInsufficientError);
+  });
+
+  it('повторно проверяет permission после capture, если роль отозвали во время capture', async () => {
+    const { createManual, permissions, roles, snapshots } = createService();
+    const capture = {
+      capture: vi.fn(async () => {
+        roles.set(`${EDITOR_ID}:${PAGE_ID}`, PageRole.VIEWER);
+        return capturedState();
+      }),
+    };
+    const createCurrent = new CreateCurrentManualSnapshotUseCase(
+      permissions,
+      capture as never,
+      createManual,
+    );
+
+    await expect(createCurrent.execute(PAGE_ID, EDITOR_ID)).rejects.toBeInstanceOf(
+      PageRoleInsufficientError,
+    );
+
+    expect(capture.capture).toHaveBeenCalledOnce();
+    expect(snapshots.records).toEqual([]);
   });
 
   it('сохраняет not-found semantics для недоступной страницы', async () => {
