@@ -78,6 +78,8 @@ export class PrismaPageDocumentRepository extends PageDocumentRepository {
   }
 
   async replace(input: ReplaceDocumentInput): Promise<PageDocumentRecord | null> {
+    // Raw SQL keeps the live-page check, state write, storageRevision increment and
+    // RETURNING in one statement, so concurrent writes cannot mix bytes and metadata.
     const records = await this.client.$queryRaw<PageDocumentRecord[]>`
       UPDATE "PageDocument" AS document
       SET "storageRevision" = document."storageRevision" + 1,
@@ -98,6 +100,8 @@ export class PrismaPageDocumentRepository extends PageDocumentRepository {
   }
 
   async replaceYjsState(pageId: string, yjsState: Bytes): Promise<PageDocumentRecord | null> {
+    // Raw SQL keeps the live-page check, state write, storageRevision increment and
+    // RETURNING in one statement, so concurrent writes cannot mix bytes and metadata.
     const records = await this.client.$queryRaw<PageDocumentRecord[]>`
       UPDATE "PageDocument" AS document
       SET "storageRevision" = document."storageRevision" + 1,
