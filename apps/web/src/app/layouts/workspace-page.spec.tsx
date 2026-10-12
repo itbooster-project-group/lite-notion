@@ -131,6 +131,15 @@ function createDeferred() {
 }
 
 describe('workspace page', () => {
+  it('показывает breadcrumb корзины на маршруте /trash', async () => {
+    renderPrivateContent('/trash', <h1>Корзина</h1>);
+
+    await screen.findByRole('heading', { name: 'Корзина' });
+    const breadcrumbs = screen.getByRole('navigation', { name: 'Хлебные крошки' });
+    expect(breadcrumbs).toHaveTextContent('Корзина');
+    expect(within(breadcrumbs).getByText('Корзина')).toHaveAttribute('aria-current', 'page');
+  });
+
   it('показывает общее дерево на корневом маршруте и создаёт проект', async () => {
     const createRequests = vi.fn();
     server.use(

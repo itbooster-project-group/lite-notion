@@ -100,7 +100,8 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
   }, [deleteCleanupCoordinator, routeContext]);
 
   const crumbs: Breadcrumb[] = [{ href: '/', isHome: true, title: 'На главную' }];
-  if (pathname === '/profile') crumbs.push({ title: 'Профиль', href: '/profile' });
+  if (pathname === '/trash') crumbs.push({ title: 'Корзина', href: '/trash' });
+  else if (pathname === '/profile') crumbs.push({ title: 'Профиль', href: '/profile' });
   else if (
     !treeQuery.isPending &&
     !treeQuery.isError &&
