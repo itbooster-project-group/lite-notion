@@ -1,10 +1,11 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useEffect } from 'react';
 
 import { useSession } from '@/entities/session';
+import { getSafeReturnPath } from '@/features/auth';
 
 import { SessionError, SessionLoading } from './session-state';
 
@@ -14,13 +15,14 @@ type AuthRouteProps = Readonly<{
 
 export function AuthRoute({ children }: AuthRouteProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { restoreSession, status } = useSession();
 
   useEffect(() => {
     if (status === 'authenticated') {
-      router.replace('/');
+      router.replace(getSafeReturnPath(searchParams?.get('next')));
     }
-  }, [router, status]);
+  }, [router, searchParams, status]);
 
   if (status === 'loading' || status === 'authenticated') {
     return <SessionLoading />;

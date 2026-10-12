@@ -16,7 +16,9 @@ import {
 } from '@/entities/page';
 import {
   type CreatePageDto,
+  getGetPageTrashQueryKey,
   getGetPageTreeQueryKey,
+  getGetProjectTrashQueryKey,
   type PageTreeNodeDto,
   useCreatePage as useCreatePageMutation,
   useDeletePage as useDeletePageMutation,
@@ -107,6 +109,10 @@ export function usePageManagement(routeContext: WorkspaceRouteContext | undefine
     }
 
     await deleteMutation.mutateAsync({ pageId });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: getGetPageTrashQueryKey() }),
+      queryClient.invalidateQueries({ queryKey: getGetProjectTrashQueryKey() }),
+    ]);
 
     if (affectsCurrentRoute) {
       router.replace(workspaceProjectPath(page.projectId));

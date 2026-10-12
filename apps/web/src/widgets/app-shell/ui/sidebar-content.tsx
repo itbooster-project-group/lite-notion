@@ -10,10 +10,14 @@ export function SidebarContent({ actions, pageTree, user }: SidebarContentProps)
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {user ? <div data-slot="sidebar-user">{user}</div> : null}
-      {actions ? <div data-slot="sidebar-actions">{actions}</div> : null}
       {pageTree ? (
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2" data-slot="sidebar-page-tree">
           {pageTree}
+        </div>
+      ) : null}
+      {actions ? (
+        <div className="mt-auto shrink-0" data-slot="sidebar-actions">
+          {actions}
         </div>
       ) : null}
     </div>
