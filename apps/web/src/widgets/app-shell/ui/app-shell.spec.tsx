@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -90,6 +91,50 @@ describe('AppShell', () => {
     expect(document.querySelector('[data-slot="sidebar-user"]')).not.toBeInTheDocument();
     expect(document.querySelector('[data-slot="sidebar-actions"]')).not.toBeInTheDocument();
     expect(document.querySelector('[data-slot="sidebar-page-tree"]')).not.toBeInTheDocument();
+  });
+
+  it('показывает ссылку из actions в desktop и mobile навигации', async () => {
+    render(
+      <AppShell actions={<Link href="/trash">Корзина</Link>}>
+        <h1>Рабочая область</h1>
+      </AppShell>,
+    );
+    expect(await screen.findByRole('link', { name: 'Корзина', hidden: true })).toHaveAttribute(
+      'href',
+      '/trash',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Открыть боковую панель' }));
+    await screen.findByRole('button', { name: 'Закрыть боковую панель' });
+    const mobileSidebar = document.getElementById('mobile-sidebar');
+    expect(mobileSidebar).not.toBeNull();
+    expect(
+      within(mobileSidebar as HTMLElement).getByRole('link', { name: 'Корзина' }),
+    ).toHaveAttribute('href', '/trash');
+  });
+
+  it('размещает actions после прокручиваемого дерева у нижнего края сайдбара', async () => {
+    renderShell();
+
+    const assertSlotsAtBottom = (sidebar: HTMLElement) => {
+      const pageTreeSlot = sidebar.querySelector('[data-slot="sidebar-page-tree"]');
+      const actionsSlot = sidebar.querySelector('[data-slot="sidebar-actions"]');
+
+      expect(pageTreeSlot).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
+      expect(actionsSlot).toHaveClass('mt-auto', 'shrink-0');
+      expect(pageTreeSlot?.compareDocumentPosition(actionsSlot as Node)).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+    };
+
+    const desktopSidebar = document.getElementById('desktop-sidebar');
+    expect(desktopSidebar).not.toBeNull();
+    assertSlotsAtBottom(desktopSidebar as HTMLElement);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Открыть боковую панель' }));
+    await screen.findByRole('button', { name: 'Закрыть боковую панель' });
+    const mobileSidebar = document.getElementById('mobile-sidebar');
+    expect(mobileSidebar).not.toBeNull();
+    assertSlotsAtBottom(mobileSidebar as HTMLElement);
   });
 
   it('передаёт mobile trigger в render-prop children без overlay positioning contract', async () => {

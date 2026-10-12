@@ -1166,7 +1166,7 @@ Restore проекта очищает deletion только у страниц с
 
 Релизное правило publication: удаление page/project должно делать public route недоступным. Если #52 реализует это переводом publication в `unpublished`, restore не должен неявно выполнять republish.
 
-Permissions и Yjs content сохраняются при soft delete. Physical deletion — более поздняя retention/GC operation.
+Permissions и Yjs content сохраняются при soft delete. В текущем backend доступны ручные permanent delete страницы и проекта, а также очистка корзины; дополнительно действует ежедневная очистка записей старше 30 дней. Для issue #87 требуется интерфейс этих уже существующих API, а не новая backend-реализация lifecycle. Остальные разделы этого документа по-прежнему описывают целевую схему и будущие интеграции.
 
 ---
 

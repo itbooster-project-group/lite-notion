@@ -4,7 +4,12 @@ import { delay, HttpResponse, http } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkspaceDeleteCleanupProvider } from '@/features/workspace-management';
 import { WorkspacePage } from '@/pages/workspace';
-import type { PageDto, PageTreeNodeDto } from '@/shared/api';
+import {
+  getGetPageTrashQueryKey,
+  getGetProjectTrashQueryKey,
+  type PageDto,
+  type PageTreeNodeDto,
+} from '@/shared/api';
 import { server } from '@/shared/api/mocks/server';
 import { useAppShellStore } from '@/widgets/app-shell/model/app-shell-store';
 import { PrivateWorkspace } from './private-workspace';
@@ -80,6 +85,8 @@ afterEach(() => {
 function renderPage() {
   navigation.pathname = '/pages/child';
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  queryClient.setQueryData(getGetPageTrashQueryKey(), []);
+  queryClient.setQueryData(getGetProjectTrashQueryKey(), []);
   render(
     <QueryClientProvider client={queryClient}>
       <WorkspaceDeleteCleanupProvider>
@@ -89,9 +96,44 @@ function renderPage() {
       </WorkspaceDeleteCleanupProvider>
     </QueryClientProvider>,
   );
+  return queryClient;
 }
 
 describe('workspace mutation orchestration', () => {
+  it('инвалидирует обе корзины после soft delete страницы', async () => {
+    const queryClient = renderPage();
+    server.use(
+      http.delete('*/api/v1/pages/:pageId', () => new HttpResponse(null, { status: 204 })),
+    );
+    await screen.findByRole('heading', { name: 'Child page' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Действия для Child page' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
+
+    await waitFor(() => {
+      expect(queryClient.getQueryState(getGetPageTrashQueryKey())?.isInvalidated).toBe(true);
+      expect(queryClient.getQueryState(getGetProjectTrashQueryKey())?.isInvalidated).toBe(true);
+    });
+  });
+
+  it('инвалидирует обе корзины после soft delete проекта', async () => {
+    const queryClient = renderPage();
+    server.use(
+      http.delete('*/api/v1/projects/:projectId', () => new HttpResponse(null, { status: 204 })),
+    );
+    await screen.findByRole('heading', { name: 'Child page' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Действия для проекта Project Alpha' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить проект' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Удалить' }));
+
+    await waitFor(() => {
+      expect(queryClient.getQueryState(getGetPageTrashQueryKey())?.isInvalidated).toBe(true);
+      expect(queryClient.getQueryState(getGetProjectTrashQueryKey())?.isInvalidated).toBe(true);
+    });
+  });
+
   it('создаёт child из server response, обновляет cache и открывает полученный id', async () => {
     const requestBody = vi.fn();
     server.use(

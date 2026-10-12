@@ -10,11 +10,16 @@ import { server } from '@/shared/api/mocks/server';
 import { AuthRoute } from './auth-route';
 import { PrivateRoute } from './private-route';
 
-const navigation = vi.hoisted(() => ({ pathname: '/profile', replace: vi.fn() }));
+const navigation = vi.hoisted(() => ({
+  next: undefined as string | undefined,
+  pathname: '/profile',
+  replace: vi.fn(),
+}));
 
 vi.mock('next/navigation', () => ({
   usePathname: () => navigation.pathname,
   useRouter: () => ({ replace: navigation.replace }),
+  useSearchParams: () => new URLSearchParams(navigation.next ? `next=${navigation.next}` : ''),
 }));
 
 beforeEach(() => {
@@ -28,6 +33,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   navigation.pathname = '/profile';
+  navigation.next = undefined;
   navigation.replace.mockReset();
 });
 
@@ -79,5 +85,16 @@ describe('auth route guards', () => {
 
     await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('/'));
     expect(screen.queryByText('Форма входа')).not.toBeInTheDocument();
+  });
+
+  it('возвращает пользователя на разрешённый защищённый маршрут после входа', async () => {
+    navigation.next = '/trash';
+    renderWithSession(
+      <AuthRoute>
+        <p>Форма входа</p>
+      </AuthRoute>,
+    );
+
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith('/trash'));
   });
 });

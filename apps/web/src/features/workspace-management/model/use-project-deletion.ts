@@ -4,7 +4,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { normalizePageTree, removeProjectPagesFromTree, selectPage } from '@/entities/page';
 import {
+  getGetPageTrashQueryKey,
   getGetPageTreeQueryKey,
+  getGetProjectTrashQueryKey,
   getListProjectsQueryKey,
   type PageTreeNodeDto,
   type ProjectDto,
@@ -38,6 +40,10 @@ export function useProjectDeletion(routeContext: WorkspaceRouteContext | undefin
     }
 
     await deleteMutation.mutateAsync({ projectId });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: getGetPageTrashQueryKey() }),
+      queryClient.invalidateQueries({ queryKey: getGetProjectTrashQueryKey() }),
+    ]);
 
     if (affectsCurrentRoute && routeContext) {
       router.replace(workspaceRootPath());

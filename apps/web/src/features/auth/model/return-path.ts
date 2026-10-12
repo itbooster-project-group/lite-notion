@@ -1,4 +1,4 @@
-const allowedReturnPaths = new Set(['/', '/profile']);
+const allowedReturnPaths = new Set(['/', '/profile', '/trash']);
 
 export function getSafeReturnPath(candidate: string | null | undefined): string {
   return candidate !== undefined && candidate !== null && allowedReturnPaths.has(candidate)

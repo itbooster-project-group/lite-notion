@@ -1,6 +1,6 @@
 'use client';
 
-import { House } from 'lucide-react';
+import { House, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
@@ -100,7 +100,8 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
   }, [deleteCleanupCoordinator, routeContext]);
 
   const crumbs: Breadcrumb[] = [{ href: '/', isHome: true, title: 'На главную' }];
-  if (pathname === '/profile') crumbs.push({ title: 'Профиль', href: '/profile' });
+  if (pathname === '/trash') crumbs.push({ title: 'Корзина', href: '/trash' });
+  else if (pathname === '/profile') crumbs.push({ title: 'Профиль', href: '/profile' });
   else if (
     !treeQuery.isPending &&
     !treeQuery.isError &&
@@ -258,7 +259,21 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
   return (
     <WorkspaceDataProvider value={workspaceData}>
       <WorkspaceTreeExpansionProvider>
-        <AppShell pageTree={navigation}>
+        <AppShell
+          actions={
+            <Button
+              aria-current={pathname === '/trash' ? 'page' : undefined}
+              className="mx-3 my-2 w-[calc(100%-1.5rem)] justify-start"
+              nativeButton={false}
+              render={<Link href="/trash" />}
+              variant={pathname === '/trash' ? 'secondary' : 'ghost'}
+            >
+              <Trash2 aria-hidden="true" />
+              Корзина
+            </Button>
+          }
+          pageTree={navigation}
+        >
           {({ mobileNavigationTrigger }) => (
             <>
               <PrivateShell breadcrumbs={breadcrumbs} headerStart={mobileNavigationTrigger}>
