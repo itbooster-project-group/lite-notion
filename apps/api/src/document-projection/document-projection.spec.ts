@@ -121,6 +121,75 @@ describe('projectDocument', () => {
     });
   });
 
+  it('preserves schema-supported persisted node attrs and canonicalizes allowed link URLs', () => {
+    const yjsState = createState((fragment) => {
+      const heading = appendElement(fragment, 'heading', { level: 3 });
+      appendText(heading, 'Heading');
+
+      const orderedList = appendElement(fragment, 'orderedList', {
+        start: -2.5,
+        type: 'custom',
+      });
+      const listItem = appendElement(orderedList, 'listItem');
+      appendText(appendElement(listItem, 'paragraph'), 'Item');
+
+      const taskList = appendElement(fragment, 'taskList');
+      const taskItem = appendElement(taskList, 'taskItem', { checked: true });
+      appendText(appendElement(taskItem, 'paragraph'), 'Done');
+
+      const paragraph = appendElement(fragment, 'paragraph');
+      appendText(paragraph, 'http', { link: { href: 'http://example.com/path' } });
+      appendText(paragraph, 'mail', { link: { href: 'mailto:editor@example.com' } });
+      appendText(paragraph, 'bare', { link: { href: 'example.com/docs' } });
+    });
+
+    const projection = projectDocument({ yjsState, tiptapSchemaVersion: 1 });
+    const [heading, orderedList, taskList, paragraph] = projection.contentJson.content ?? [];
+    expect(heading?.attrs).toMatchObject({ level: 3 });
+    expect(orderedList?.attrs).toMatchObject({ start: -2.5, type: 'custom' });
+    expect(taskList?.content?.[0]?.attrs).toMatchObject({ checked: true });
+    expect(paragraph?.content?.map((node) => node.marks?.[0]?.attrs?.href)).toEqual([
+      'http://example.com/path',
+      'mailto:editor@example.com',
+      'https://example.com/docs',
+    ]);
+  });
+
+  it('rejects malformed persisted node attrs and invalid link href values', () => {
+    const cases = [
+      createState((fragment) => appendElement(fragment, 'heading', { level: 0 })),
+      createState((fragment) => appendElement(fragment, 'heading', { level: 4 })),
+      createState((fragment) => appendElement(fragment, 'heading', { level: '2' })),
+      createState((fragment) => {
+        const taskList = appendElement(fragment, 'taskList');
+        appendElement(taskList, 'taskItem', { checked: 'false' });
+      }),
+      createState((fragment) => {
+        const orderedList = appendElement(fragment, 'orderedList', { start: '1' });
+        appendText(appendElement(appendElement(orderedList, 'listItem'), 'paragraph'), 'Item');
+      }),
+      createState((fragment) => {
+        const orderedList = appendElement(fragment, 'orderedList', { type: 1 });
+        appendText(appendElement(appendElement(orderedList, 'listItem'), 'paragraph'), 'Item');
+      }),
+      createState((fragment) => {
+        const paragraph = appendElement(fragment, 'paragraph');
+        appendText(paragraph, 'Unsafe link', { link: { href: 'javascript:alert(1)' } });
+      }),
+      createState((fragment) => {
+        const paragraph = appendElement(fragment, 'paragraph');
+        appendText(paragraph, 'Wrong href type', { link: { href: 42 } });
+      }),
+    ];
+
+    for (const yjsState of cases) {
+      expectProjectionError(
+        () => projectDocument({ yjsState, tiptapSchemaVersion: 1 }),
+        'unsupported_content',
+      );
+    }
+  });
+
   it('keeps one external reference per image occurrence and only references images', () => {
     const yjsState = createState((fragment) => {
       appendElement(fragment, 'image', {
@@ -354,6 +423,26 @@ describe('projectDocument', () => {
         });
       }),
       createState((fragment) => appendElement(fragment, 'taskItem')),
+    ];
+
+    for (const yjsState of states) {
+      expectProjectionError(
+        () => projectDocument({ yjsState, tiptapSchemaVersion: 1 }),
+        'unsupported_content',
+      );
+    }
+  });
+
+  it('fails closed for prototype-sensitive and unknown attribute names', () => {
+    const prototypeAttr = Object.create(null) as Record<string, unknown>;
+    Object.defineProperty(prototypeAttr, '__proto__', {
+      enumerable: true,
+      value: 'must not disappear',
+    });
+    const states = [
+      createState((fragment) => appendElement(fragment, 'paragraph', prototypeAttr)),
+      createState((fragment) => appendElement(fragment, 'paragraph', { constructor: 'unknown' })),
+      createState((fragment) => appendElement(fragment, 'paragraph', { prototype: 'unknown' })),
     ];
 
     for (const yjsState of states) {

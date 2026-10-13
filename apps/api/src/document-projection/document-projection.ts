@@ -46,6 +46,7 @@ export type ProjectDocumentInput = Readonly<{
 
 const MEDIA_NODE_TYPES = new Set(['image', 'video', 'youtube']);
 const MEDIA_ALIGNMENTS = new Set(['start', 'center', 'end']);
+const ALLOWED_LINK_PROTOCOLS = new Set(['http:', 'https:', 'mailto:']);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const YOUTUBE_VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
 const HASHED_MARK_NAME_PATTERN = /(.*)(--[a-zA-Z0-9+/=]{8})$/;
@@ -105,13 +106,54 @@ function toJsonValue(value: unknown, seen = new Set<object>()): JsonValue {
       throw invalidContent('Yjs content contains a non-plain object.');
     }
 
-    const result: Record<string, JsonValue> = {};
+    const result = Object.create(null) as Record<string, JsonValue>;
     for (const [key, item] of Object.entries(value)) {
       result[key] = toJsonValue(item, seen);
     }
     return result;
   } finally {
     seen.delete(value);
+  }
+}
+
+function normalizePageDocumentLink(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  const hasProtocol = /^[a-z][a-z\d+.-]*:/i.test(trimmed);
+  const candidate = hasProtocol ? trimmed : `https://${trimmed}`;
+
+  try {
+    const url = new URL(candidate);
+    if (!ALLOWED_LINK_PROTOCOLS.has(url.protocol)) return undefined;
+    if (url.protocol === 'mailto:') return url.pathname ? url.href : undefined;
+    return url.hostname && !url.username && !url.password ? url.href : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function validatePersistedNodeAttrs(
+  type: string,
+  attrs: Readonly<Record<string, JsonValue>>,
+): void {
+  if (type === 'heading' && attrs.level !== undefined) {
+    if (typeof attrs.level !== 'number' || ![1, 2, 3].includes(attrs.level)) {
+      throw invalidContent('heading node has an invalid level.');
+    }
+  }
+
+  if (type === 'taskItem' && attrs.checked !== undefined && typeof attrs.checked !== 'boolean') {
+    throw invalidContent('taskItem node has an invalid checked attr.');
+  }
+
+  if (type === 'orderedList') {
+    if (attrs.start !== undefined && typeof attrs.start !== 'number') {
+      throw invalidContent('orderedList node has an invalid start attr.');
+    }
+    if (attrs.type !== undefined && attrs.type !== null && typeof attrs.type !== 'string') {
+      throw invalidContent('orderedList node has an invalid type attr.');
+    }
   }
 }
 
@@ -248,9 +290,19 @@ function marksFromDeltaAttributes(attributes: unknown): readonly ProseMirrorMark
     const attrs = toJsonObject(rawAttrs, `Mark "${name}" attrs`);
     assertKnownKeys(attrs, new Set(Object.keys(markType.spec.attrs ?? {})), `Mark "${name}" attrs`);
 
+    let markAttrs = attrs;
+    if (name === 'link') {
+      if (typeof attrs.href !== 'string') {
+        throw invalidContent('link mark has a missing or invalid href.');
+      }
+      const href = normalizePageDocumentLink(attrs.href);
+      if (!href) throw invalidContent('link mark has an invalid href.');
+      markAttrs = { ...attrs, href };
+    }
+
     let mark: ProseMirrorMark;
     try {
-      mark = markType.create(attrs);
+      mark = markType.create(markAttrs);
     } catch (error) {
       throw invalidContent(`Mark "${name}" has invalid attrs.`, error);
     }
@@ -300,12 +352,16 @@ function serializeXmlElement(
   const nodeType = documentProjectionSchema.nodes[type];
   if (!nodeType) throw invalidContent(`Unsupported node "${type}".`);
 
+  if (element.hasAttribute('__proto__')) {
+    throw invalidContent(`Node "${type}" contains unsupported key "__proto__".`);
+  }
   const rawAttrs = toJsonObject(element.getAttributes(), `Node "${type}" attrs`);
   assertKnownKeys(
     rawAttrs,
     new Set(Object.keys(nodeType.spec.attrs ?? {})),
     `Node "${type}" attrs`,
   );
+  validatePersistedNodeAttrs(type, rawAttrs);
 
   let attrs = rawAttrs;
   if (MEDIA_NODE_TYPES.has(type)) {
