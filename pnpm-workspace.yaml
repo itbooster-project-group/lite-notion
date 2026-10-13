@@ -26,4 +26,5 @@ catalog:
   tsx: ^4.23.12
   typescript: ^5.9.0
   vitest: ^4.0.0
+  "@tiptap/pm": ^3.30.5
   yjs: ^13.6.32

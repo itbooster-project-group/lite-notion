@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "yjsUpdate": "ATPN2/vlCgAHAQdkZWZhdWx0AwlwYXJhZ3JhcGgHAM3b++UKAAYGAM3b++UKAQRsaW5rI3siaHJlZiI6Imh0dHBzOi8vZXhhbXBsZS5jb20vZG9jcyJ9hs3b++UKAgRib2xkAnt9hs3b++UKAwZpdGFsaWMCe32Ezdv75QoEC0NvbmN1cnJlbnQghs3b++UKDwRsaW5rBG51bGyGzdv75QoQBGJvbGQEbnVsbIbN2/vlChEGaXRhbGljBG51bGyGzdv75QoSBGJvbGQCe32Gzdv75QoTBml0YWxpYwJ7fYTN2/vlChQFbWFya3OGzdv75QoZBGJvbGQEbnVsbIbN2/vlChoGaXRhbGljBG51bGyEzdv75QobCSBzdXJ2aXZlLofN2/vlCgADCmJ1bGxldExpc3QHAM3b++UKJQMIbGlzdEl0ZW0HAM3b++UKJgMJcGFyYWdyYXBoBwDN2/vlCicGBADN2/vlCigJTGlzdCBpdGVth83b++UKJQMIdGFza0xpc3QHAM3b++UKMgMIdGFza0l0ZW0HAM3b++UKMwMJcGFyYWdyYXBoBwDN2/vlCjQGBADN2/vlCjULUGFyZW50IHRhc2uHzdv75Qo0Awh0YXNrTGlzdAcAzdv75QpBAwh0YXNrSXRlbQcAzdv75QpCAwlwYXJhZ3JhcGgHAM3b++UKQwYEAM3b++UKRAtOZXN0ZWQgdGFzaygAzdv75QpCB2NoZWNrZWQBeCgAzdv75QozB2NoZWNrZWQBeYfN2/vlCjIDBWltYWdlKADN2/vlClIJYWxpZ25tZW50AXcFc3RhcnQoAM3b++UKUgdjYXB0aW9uAXcLSGlraW5nIHRyaXAoAM3b++UKUgZub2RlSWQBdyQxMTExMTExMS0xMTExLTQxMTEtODExMS0xMTExMTExMTExMTEoAM3b++UKUgx3aWR0aFBlcmNlbnQBfTwoAM3b++UKUgNhbHQBdwlNb3VudGFpbnMoAM3b++UKUgpkZWNvcmF0aXZlAXkoAM3b++UKUgNzcmMBdyFodHRwczovL2V4YW1wbGUuY29tL21vdW50YWlucy5qcGeHzdv75QpSAwV2aWRlbygAzdv75QpaCWFsaWdubWVudAF3BmNlbnRlcigAzdv75QpaB2NhcHRpb24BdwlEZW1vIGNsaXAoAM3b++UKWgZub2RlSWQBdyQyMjIyMjIyMi0yMjIyLTQyMjItODIyMi0yMjIyMjIyMjIyMjIoAM3b++UKWgx3aWR0aFBlcmNlbnQBfZABKADN2/vlCloDc3JjAXccaHR0cHM6Ly9leGFtcGxlLmNvbS9kZW1vLm1wNIfN2/vlCloDB3lvdXR1YmUoAM3b++UKYAlhbGlnbm1lbnQBdwNlbmQoAM3b++UKYAZub2RlSWQBdyQzMzMzMzMzMy0zMzMzLTQzMzMtODMzMy0zMzMzMzMzMzMzMzMoAM3b++UKYAx3aWR0aFBlcmNlbnQBfYsBKADN2/vlCmAHdmlkZW9JZAF3C2RRdzR3OVdnWGNRAA==",
+  "expectedContentJson": {
+    "type": "doc",
+    "content": [
+      {
+        "type": "paragraph",
+        "content": [
+          {
+            "type": "text",
+            "marks": [
+              {
+                "type": "link",
+                "attrs": {
+                  "href": "https://example.com/docs"
+                }
+              },
+              {
+                "type": "bold"
+              },
+              {
+                "type": "italic"
+              }
+            ],
+            "text": "Concurrent "
+          },
+          {
+            "type": "text",
+            "marks": [
+              {
+                "type": "bold"
+              },
+              {
+                "type": "italic"
+              }
+            ],
+            "text": "marks"
+          },
+          {
+            "type": "text",
+            "text": " survive."
+          }
+        ]
+      },
+      {
+        "type": "bulletList",
+        "content": [
+          {
+            "type": "listItem",
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "List item"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "taskList",
+        "content": [
+          {
+            "type": "taskItem",
+            "attrs": {
+              "checked": false
+            },
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Parent task"
+                  }
+                ]
+              },
+              {
+                "type": "taskList",
+                "content": [
+                  {
+                    "type": "taskItem",
+                    "attrs": {
+                      "checked": true
+                    },
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Nested task"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "image",
+        "attrs": {
+          "alignment": "start",
+          "caption": "Hiking trip",
+          "nodeId": "11111111-1111-4111-8111-111111111111",
+          "widthPercent": 60,
+          "alt": "Mountains",
+          "decorative": false,
+          "src": "https://example.com/mountains.jpg"
+        }
+      },
+      {
+        "type": "video",
+        "attrs": {
+          "alignment": "center",
+          "caption": "Demo clip",
+          "nodeId": "22222222-2222-4222-8222-222222222222",
+          "widthPercent": 80,
+          "src": "https://example.com/demo.mp4"
+        }
+      },
+      {
+        "type": "youtube",
+        "attrs": {
+          "alignment": "end",
+          "caption": null,
+          "nodeId": "33333333-3333-4333-8333-333333333333",
+          "widthPercent": 75,
+          "videoId": "dQw4w9WgXcQ"
+        }
+      }
+    ]
+  }
+}
