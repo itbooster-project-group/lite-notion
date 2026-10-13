@@ -1,133 +1,154 @@
 ## Context
 
-См. `proposal.md` и `specs/document-projection/spec.md`. Сейчас `apps/web/src/entities/page-document` владеет schema v1, `PAGE_CONTENT_YJS_FIELD = 'default'`, Yjs decoding и преобразованием `yXmlFragmentToProseMirrorRootNode` из `y-prosemirror`. `apps/api` содержит `DocumentCaptureClient`, который возвращает согласованные `yjsState`, `storageRevision` и `tiptapSchemaVersion`, но не интерпретирует содержимое. В OpenSpec уже закреплены opaque Yjs persistence, schema v1 и запрет молчаливо терять неизвестные nodes.
+См. `proposal.md` и `specs/document-projection/spec.md`. `apps/web/src/entities/page-document` владеет persisted editor schema v1, Yjs field `default` и преобразованием через y-prosemirror. API получает согласованные `yjsState`, `storageRevision` и `tiptapSchemaVersion` через `DocumentCaptureClient`; projection принимает только первые и третье значения. `tiptapSchemaVersion` сейчас равен 1.
 
-В текущей schema зарегистрированы nodes `doc`, `text`, `paragraph`, `heading`, `bulletList`, `orderedList`, `listItem`, `taskList`, `taskItem`, `hardBreak`, `image`, `video`, `youtube`; marks: `bold`, `code`, `italic`, `link`, `strike`. Image v1 хранит `nodeId`, HTTPS `src`, `alt`, `decorative`, `caption`, `alignment`, `widthPercent`. Web media URL validation принимает HTTPS; ID image nodes — UUID.
+Persisted schema v1 включает nodes `doc`, `text`, `paragraph`, `heading`, `bulletList`, `orderedList`, `listItem`, `taskList`, `taskItem`, `hardBreak`, `image`, `video`, `youtube` и marks `bold`, `code`, `italic`, `link`, `strike`. Их content expressions, группы и defaults проверены по `getPageDocumentSchema()` текущего редактора:
+
+| Node | Persisted shape / attrs и defaults |
+| --- | --- |
+| `doc` | `block+`; attrs нет |
+| `paragraph` | `inline*`, group `block`; attrs нет |
+| `heading` | `inline*`, group `block`; `level: 1`, editor levels `[1, 2, 3]` |
+| `bulletList` | `listItem+`, group `block list`; attrs нет |
+| `orderedList` | `listItem+`, group `block list`; `start: 1`, `type: null` |
+| `listItem` | `paragraph block*`; attrs нет |
+| `taskList` | `taskItem+`, group `block list`; attrs нет |
+| `taskItem` | `paragraph block*`; `checked: false` |
+| `hardBreak` | inline node, group `inline`; attrs нет |
+| `image` | atom, group `block`; `alignment: 'center'`, `caption: null`, `nodeId: null`, `widthPercent: 100`, `alt: ''`, `decorative: false`, `src: null` |
+| `video` | atom, group `block`; `alignment: 'center'`, `caption: null`, `nodeId: null`, `widthPercent: 100`, `src: null` |
+| `youtube` | atom, group `block`; `alignment: 'center'`, `caption: null`, `nodeId: null`, `widthPercent: 100`, `videoId: null` |
+| `text` | group `inline`; attrs нет |
+
+Marks `bold`, `italic` и `strike` не имеют attrs; `code` не имеет attrs и исключает остальные marks; `link` сохраняет только `href: null`. Backend дублирует эти persisted declarations и стандартные ProseMirror mark/node semantics, но не TipTap DOM parsing/rendering, команды, collaboration, расширения editor или UI. Для всех трёх существующих media nodes projection повторяет persisted validation и normalization из frontend: UUID `nodeId`; общие `alignment`, `caption`, `widthPercent`; image `src`, `alt`, `decorative`; video `src`; youtube `videoId`. `mediaReferences` при этом содержит только image occurrences.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- Иметь один browser-independent владелец редакторской schema и Yjs → ProseMirror conversion для web и backend.
-- Получать JSON и media references из одного captured state, используя переданную версию schema.
-- Сделать projection stateless и тестируемой без БД, Hocuspocus, сети или editor instance.
-- Сохранить external image URLs и предусмотреть добавление internal asset references без переписывания boundary.
+- Дать API минимальную backend-local schema v1 и один детерминированный projection boundary для повторного использования #47, #51 и #52.
+- Fail closed на любом неизвестном или теряемом содержимом до возврата JSON.
+- Держать frontend runtime неизменным и контролировать дублированные persisted schema declarations реальными versioned fixtures.
+- Сохранить external media как постоянный тип источника и оставить boundary пригодной для будущих asset references.
 
 **Non-Goals:**
 
-- Capture, повторное чтение `PAGE_DOCUMENTS`, snapshot creation, publication orchestration или сохранение `DOCUMENT_RENDERINGS`/asset tables.
-- `PAGE_ASSETS`, `SNAPSHOT_ASSETS`, `ASSETS`, object storage, Prisma migrations, upload, signed URL resolution или authorization.
-- Search/plain-text indexing, API endpoints/OpenAPI, editor UI, новые frontend media extensions или collaboration protocol changes.
-- Schema migration framework или внедрение будущей image schema в editor в рамках этого change.
+- Общий workspace package, перенос schema/Yjs кода из `apps/web`, frontend import/re-export changes, рефакторинг Collaboration, NodeIdDeconflict или editor composition.
+- Реализация schema v2, текущая поддержка внутренних asset nodes, asset resolution/authorization, публикации, storage/persistence, search indexing, БД migrations, endpoints, SSR или UI.
+- Автоматическая синхронизация schema, миграционный framework, plugin registry, factories или иерархия projection services.
 
 ## Decisions
 
-### 1. Общий package владеет browser-independent document schema
-
-Добавить `apps/page-document` в существующую workspace область `apps/*`. Это доменный package, общий для двух конкретных потребителей — web editor и API projection, а не пакет исключительно для одного projection use case. В него перенести стабильные schema/version/Yjs conversion части текущей web entity. Web-only composition останется в web: Collaboration extension/caret, provider, React, editor surface и UI. API зависит только от общего package и не импортирует web app.
+### 1. Projection и schema остаются локальными в API
 
 Рекомендуемая структура:
 
 ```text
-apps/page-document/src/
-  model/editor-schema.ts       # schema extensions v1 без editor/provider UI
-  model/schema-version.ts      # version 1 и Yjs field `default`
-  lib/yjs-state.ts             # decode, empty-state handling, JSON conversion
-  lib/media-source.ts          # source contract и versioned image mapping
 apps/api/src/document-projection/
-  document-projection.ts       # чистая projection-функция
-  document-projection.types.ts # вход, JSON, media references
-  document-projection.errors.ts# typed decode/schema/media errors
-  document-projection.spec.ts  # unit tests с реальными Yjs fixtures
-apps/web/src/entities/page-document/
-  ...                           # UI adapter/barrel делегируют общий schema package
+  document-projection.ts          # pure projectDocument() и orchestration локальных шагов
+  document-projection.schema.ts   # минимальная ProseMirror schema v1
+  document-projection.errors.ts   # typed decode/schema/media errors
+  document-projection.spec.ts     # unit и негативные conversion tests
+  document-projection.compatibility.spec.ts # проверка общей v1 fixture
+fixtures/page-document/schema-v1/
+  rich-document.json              # Yjs update base64 и ожидаемый ProseMirror JSON
 ```
 
-Package export surface остаётся небольшим: schema factory/version, Yjs decode/conversion и media source types/mapping. Он не импортирует NestJS, React, Hocuspocus, database package или frontend aliases. Зависимости `@tiptap/core`, необходимые schema extensions, `@tiptap/pm`, `y-prosemirror` и `yjs` объявляются прямыми зависимостями общего package. Повторно используемые прямые версии TipTap/Yjs должны идти через pnpm catalog по repository policy; `@tiptap/react` и collaboration/caret extensions остаются в web.
+`projectDocument({ yjsState, tiptapSchemaVersion })` принимает captured bytes, не `CapturedDocumentState` целиком, и возвращает `{ contentJson, mediaReferences, schemaVersion }`. Это pure function без Nest provider/module, DI, mutable state или editor instance. Внутри создаётся собственный временный `Y.Doc`; empty bytes обрабатываются как пустой документ без вызова `Y.applyUpdate`. Текущий frontend conversion представляет полностью пустой Yjs fragment как `{ "type": "doc" }`. Это совместимое persisted/frontend представление, хотя оно не проходит validation текущего ProseMirror top node с content expression `block+`; API сохраняет его отдельной empty-document веткой. Будущие publication и SSR consumers обязаны распознавать это значение как пустой документ и не трактовать его как повреждённый projection. Projection не получает capture client, storage revision или доступ к странице.
 
-Альтернатива — скопировать schema definitions в API — отклонена: она допускает drift persisted node attrs и defaults. Orval не подходит как schema source: он генерирует только REST types/client из `apps/api/openapi.json`, где нет TipTap nodes или Yjs contract.
-
-### 2. Projection получает только captured bytes и schema version
-
-Public application boundary концептуально:
-
-```ts
-interface DocumentProjection {
-  contentJson: JSONContent;
-  mediaReferences: MediaReference[];
-  schemaVersion: number;
-}
-
-function projectDocument(input: {
-  yjsState: Uint8Array;
-  tiptapSchemaVersion: number;
-}): DocumentProjection;
-```
-
-`storageRevision` остаётся у orchestration потребителя как provenance и не нужен для детерминированного преобразования. Caller передаёт поля уже полученного `CapturedDocumentState`; projection сама не инжектирует и не вызывает `DocumentCaptureClient`. Boundary — чистая функция с typed errors вместо Nest provider: она не открывает транзакции, не вызывает repositories и не имеет mutable state.
+Data flow:
 
 ```mermaid
 flowchart LR
-  A[DocumentCaptureClient result] -->|yjsState + tiptapSchemaVersion| B[API Document Projection]
-  B --> C[Shared page-document schema v1]
-  C --> D[y-prosemirror + Yjs decode]
-  D --> E[ProseMirror JSON]
-  E --> F[Media source mapping]
+  A[CapturedDocumentState from capture] -->|yjsState + tiptapSchemaVersion| B[projectDocument in API]
+  B --> C[Version admission: schema v1]
+  C --> D[Decode private Y.Doc and read default fragment]
+  D --> E[Read-only Yjs XML adapter]
+  E --> F[Fail-closed ProseMirror schema validation]
   F --> G[contentJson + mediaReferences + schemaVersion]
-  G --> H[#47 assets]
-  G --> I[#51 search]
-  G --> J[#52 publication]
+  G --> H[#47 assets consumer]
+  G --> I[#51 search consumer]
+  G --> J[#52 publication consumer]
 ```
 
-Projection создаёт собственный Y.Doc из bytes, декодирует согласованный fragment `default` и сериализует ProseMirror root в JSON через существующую библиотечную конвертацию. Входные bytes и caller-owned документ не меняются; editor instance, transaction и HTML rendering не создаются. Пустые bytes представляют valid empty Y.Doc и обрабатываются отдельно от `Y.applyUpdate`, согласованно с collaboration persistence contract. Ошибки декодирования нормализуются в явную projection error, не возвращая частичный output.
+API объявляет прямые runtime dependencies только на `yjs` и `@tiptap/pm`: первый уже находится в pnpm catalog, второй используется также web и получает общую catalog version. `y-prosemirror` остаётся dependency frontend, но API не импортирует его conversion helpers. Это не создаёт package/workspace participant и не меняет frontend runtime.
 
-### 3. Поддержка schema version минимальна и fail-closed
+Рассматривался общий schema package, но он расширил бы scope изменениями frontend imports и ownership. Ручная backend-local схема меньше по радиусу изменений и допускает намеренное дублирование, если оно проверяется fixtures.
 
-На старте поддерживается только `PAGE_DOCUMENT_SCHEMA_VERSION = 1`, уже хранимая в `PAGE_DOCUMENTS.tiptapSchemaVersion`. Version admission выполняется до decode/mapping; неизвестное или некорректное значение завершается typed unsupported-schema error. Schema v1 формируется теми же TipTap extensions, что используют editor и conversion. Тест закрепляет точный набор nodes/marks и сопоставление ProseMirror JSON с Yjs fixture.
+### 2. Schema v1 дублирует только persisted ProseMirror contract
 
-Не вводить общий миграционный framework. При добавлении schema v2 общий package получит отдельное versioned описание и явное правило read/compatibility в следующем согласованном change; registry из плагинов/классов не создаётся. Известный node type должен быть валиден в schema конкретной версии. Неизвестный node или невозможность сохранить содержимое приводит к явной ошибке; unsupported content не фильтруется.
+Backend `Schema` описывает точный список nodes/marks текущего editor schema и все данные, влияющие на persisted JSON: content expressions, группы, inline/block/atom свойства, attrs, defaults и mark attrs. Она не импортирует исходники `apps/web` и не создаёт TipTap extensions. `tiptapSchemaVersion = 1` и fragment name `default` фиксируются backend-local.
 
-### 4. Image source contract сохраняет legacy v1 и поддерживает asset future
+Корневые versioned fixtures хранят base64 Yjs updates, созданные реальным frontend editor schema v1, и ожидаемый JSON. Основной compatibility fixture включает текст с несколькими одновременными marks, `link` с attrs, соседние текстовые сегменты, вложенные list/task nodes и валидные `image`, `video`, `youtube` nodes одновременно. Web compatibility test сверяет fixture с текущим `pageDocumentToJSON`; API test применяет те же bytes к локальной schema и сверяет полный JSON, типы и вложенность nodes, наборы marks, mark attrs, media attrs и defaults. Отдельные fixtures покрывают пустой и error-state cases. Backend и web читают одни и те же versioned fixture files без общего package.
 
-Для v1 JSON остаётся фактическим ProseMirror JSON: legacy attrs `src` и `nodeId` не переписываются в `contentJson`. Media mapper строит из них derived reference:
+При изменении persisted schema разработчик вручную обновляет frontend schema version, backend-local schema/validation, versioned fixture и оба compatibility tests в одном согласованном изменении. Автоматический extractor, codegen или schema synchronization framework не добавляется.
+
+### 3. Read-only adapter строит JSON, затем schema валидирует его
+
+Backend-local adapter обходит уже декодированные публичные Yjs типы и строит JSON без чтения CRDT internals или обработки update bytes:
+
+1. `Y.XmlFragment` и `Y.XmlElement` обходятся через `toArray()`; элементы сериализуются как `{ type: nodeName, attrs?, content? }`, сохраняя порядок и все attrs.
+2. `Y.XmlText` читается через `toDelta()`. Каждый string insert становится text node; каждый delta format становится ProseMirror mark с исходными attrs. Неподдерживаемые inserts, XML child types или не-JSON attrs завершаются typed error.
+3. Для совместимости с y-prosemirror v1.3.7 adapter понимает mark keys по правилу `/(.*)(--[a-zA-Z0-9+/=]{8})$/`: только соответствующий suffix удаляется для определения типа mark, а attrs mark передаются без изменения. Обычные и hash-suffixed keys должны давать тот же mark type и сохранять его attrs при нормализации; несколько одновременно применённых marks не теряются. Неизвестные marks и конфликтующие marks, которые после декодирования схлопываются в один тип с разными attrs, завершаются явной ошибкой. Это локальная реализация persisted naming convention, без импорта y-prosemirror API или private internals. Основные compatibility fixtures создаёт frontend; отдельная настоящая Yjs delta fixture, построенная публичным Yjs API, покрывает hash-suffix формат, который текущий editor может не генерировать.
+4. Неизвестные node/mark types и attrs проверяются до normalization, поскольку ProseMirror conversion может игнорировать лишние attrs. Для media nodes backend применяет persisted frontend validators к attrs; если validator принимает значение и нормализует его, adapter записывает канонические attrs в projection JSON. Если validator отклоняет attrs, projection завершается typed media error.
+5. Канонические attrs `contentJson` используются и для `mediaReferences`: image reference получает тот же `nodeId` и нормализованный URL, что и итоговый `image.attrs`. Семантическое сравнение raw и итогового дерева сначала применяет к raw media attrs те же validators, затем выявляет любую иную утрату/изменение nodes, порядка, текста, attrs, marks или mark attrs. Допустимые frontend normalization (включая URL без схемы, width вне диапазона, trim и defaults), отсутствующий/пустой `content`, adjacent text segments с одинаковыми marks и порядок marks при совпадающем наборе и attrs не считаются потерей. Любое отличие сверх этих явно разрешённых преобразований возвращает typed schema error. Нормализация действует только на projection result и не изменяет captured bytes или Y.Doc.
+
+Полностью пустой fragment обрабатывается до `block+` validation и даёт frontend-compatible `{ "type": "doc" }`; это значение не является ProseMirror schema-valid doc, но представляет текущее пустое persisted состояние. Будущие publication и SSR consumers обязаны трактовать его как пустой документ. Для остальных документов конвертация не возвращает partial result и не мутирует Y.Doc или captured bytes.
+
+**Альтернатива — strict preflight плюс `yXmlFragmentToProseMirrorRootNode`.** Предварительная проверка всё равно должна пройти все элементы и marks, понять encoded mark names, проверить attrs и структуру против schema. Затем binding повторно обходит дерево и применяет собственное преобразование; его error paths фильтруют и могут удалять элементы из переданного Y.Doc. Для доказательства сохранности потребовались бы отдельная копия/проверка мутаций и semantic comparison результата с preflight. Такой двойной pipeline сложнее однопроходного adapter и сильнее зависит от поведения binding. Самостоятельное декодирование CRDT или приватных полей Yjs не рассматривается.
+
+### 4. Persisted media validation соответствует frontend, references остаются image-only
+
+Projection проверяет сохранённые attrs `image`, `video`, `youtube` теми же правилами, что `normalizePersistedPageDocumentImageAttributes`, `normalizePersistedPageDocumentVideoAttributes` и `normalizePersistedPageDocumentYoutubeAttributes` в текущем frontend. Backend держит локальные копии правил, не импортируя `apps/web`:
+
+- Для каждого media node `nodeId` должен соответствовать UUID pattern `^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$` без учёта регистра.
+- Общие attrs нормализуются одинаково и попадают в `contentJson`: alignment из `start|center|end`, иначе `center`; caption обрезается, пустое/нестроковое значение становится `null`; width преобразуется через `Number()`, non-finite значение становится 100, иначе округляется и ограничивается диапазоном 25–100 (поэтому, например, `140` становится `100`).
+- Image: `src` обрезается; если схема отсутствует, добавляется `https://`; принимается только HTTPS с hostname и без username/password. `alt` обрезается; `decorative` — true только при точном `true`; decorative image требует пустой alt, обычное — непустой.
+- Video: те же правила HTTPS URL, плюс pathname должен оканчиваться на `.mp4` или `.webm` без учёта регистра.
+- YouTube: persisted `videoId` должен соответствовать `^[A-Za-z0-9_-]{11}$`. Projection проверяет только это сохранённое значение; разбор исходных YouTube URLs и получение `videoId` остаются ответственностью frontend.
+
+Валидация возвращает те же нормализованные attrs, что frontend validators; они заменяют raw media attrs только в projection `contentJson`. Недопустимые media attrs приводят к typed media error без частичного результата. Только валидный `image` создаёт derived `MediaReference`; его `url` должен совпадать с каноническим `src` соответствующего image node в `contentJson`. Video и YouTube остаются в `contentJson`, их attrs проверяются, но references для этих типов пока не создаются. Уникальность `nodeId` проверяется среди всех трёх media node types, одинаковые URL при разных IDs допустимы.
+
+### 5. Image v1 и future asset source имеют стабильную границу
+
+Контракт domain media source:
 
 ```ts
-type MediaReference =
-  | { type: 'external'; nodeId: string; url: string }
-  | { type: 'asset'; nodeId: string; assetId: string };
-
 type ImageSource =
   | { type: 'external'; url: string }
   | { type: 'asset'; assetId: string };
+
+type MediaReference =
+  | { type: 'external'; nodeId: string; url: string }
+  | { type: 'asset'; nodeId: string; assetId: string };
 ```
 
-Для будущей schema единый TipTap JSON image contract хранит `source: ImageSource`; `nodeId` остаётся идентификатором вхождения. Для переходной совместимости version-specific mapping v1 читает `src` как external; следующая editor schema сможет читать новую `source` форму и старые документы через явно определённый version adapter. Не мигрировать и не изменять Y.Doc при projection. В рамках этого change не добавлять v2 schema и не менять editor UI.
+Schema v1 ProseMirror JSON остаётся совместимым с текущим editor: `image.attrs.src` вместе с `nodeId`. Projection проверяет attrs перечисленными persisted image rules, отражает допустимые canonical values в output JSON и строит external reference из того же нормализованного URL; Y.Doc не переписывается. Имя `ImageSource` задаёт source union для будущей версии, но текущая schema не принимает `assetId` и asset reference не считается реализованным до появления versioned persisted schema.
 
-У текущего media node `nodeId` должен быть валидным UUID; missing/invalid ID — явная ошибка, не случайная генерация. External source v1 принимает только абсолютный HTTPS URL без credentials согласно действующей editor validation. `http:`, `javascript:`, `data:`, `file:` и `blob:` отклоняются; projection не выполняет `fetch`. Для asset mapping требуется стабильный asset ID без URL; точный persistence/authorization contract остаётся у #47. Два node с одинаковым источником сохраняют две references, если у них разные nodeId.
+В schema v2 будущий editor сможет хранить `source` discriminated union. Version-specific projection mapping преобразует legacy v1 `src` в external и v2 `source` в соответствующий reference. Добавление такого mapper и schema v2 не должно менять сигнатуру projection или обработку v1. Asset URL, signed URL, доступ и resolution принадлежат отдельному asset layer. `video`/`youtube` остаются в JSON и не входят в image media references этого этапа.
 
-`image` — единственный тип узла, включаемый в image `mediaReferences` этого этапа: #47/#49 определяют node/asset relation для изображений. Текущие `video` и `youtube` остаются частью `contentJson`, но не становятся `PAGE_ASSETS` references и не получают image source mapping.
+External image URL проверяется локально по текущим persisted image rules: URL без схемы canonicalized добавлением `https://`, затем принимается только HTTPS без credentials с hostname. Явный HTTP, опасная схема (`javascript:`, `data:`, `file:`, `blob:`), credentials, пустой hostname или некорректный URL приводят к media error. Канонический URL записывается в image JSON и reference. Video URL нормализуется теми же правилами и дополнительно ограничен `.mp4`/`.webm`; canonical value записывается в JSON. YouTube URL parsing здесь отсутствует: persisted `videoId` проверяется напрямую. Projection не делает fetch, download или availability check. Отсутствующий `nodeId` не генерируется. Повтор `nodeId` между любыми image/video/youtube nodes завершает projection ошибкой. Одинаковые URL у разных nodes допустимы; каждое image occurrence остаётся отдельной reference.
 
-### 5. Интеграция отделена от consumers и persistence
+Переход #49 должен согласовать будущую форму `source` с `ImageSource`; это не требует добавлять frontend extensions в текущий change. #47 может использовать только asset references после появления persisted asset node/schema. #51 получает тот же `contentJson` для последующего извлечения plain text. #52 может связать projection и media refs с исходным capture/snapshot. Ни один consumer не включается в реализацию projection.
 
-- #47 может передать проекцию после собственного persisted-state trigger и использовать только `asset` references для `PAGE_ASSETS`; external URL не создаёт запись в `ASSETS` и не требует storage.
-- #51 может позднее получить JSON для plain-text extraction из общего projection boundary; индексирование и persistence search не входят сюда.
-- #52 может передать один capture в projection, а его JSON и references связать с тем же snapshot; transaction/publish/rendering persistence не входят сюда.
-- `DocumentCaptureClient` и snapshots из PR #93 остаются источниками captured bytes/provenance и не переписываются.
+### 6. Ошибки и безопасность остаются локальными
 
-Собственный storage добавит обработку `assetId` на consumer/resolution boundary. Существующие external URLs продолжат проецироваться как external; загрузка URL в assets, замена source и migration всех внешних изображений не требуются.
+Typed errors различают unsupported schema version, invalid Yjs state, unsupported/lossy ProseMirror schema content и invalid media attributes. Никакая ошибка не возвращает частичный projection. JSON остаётся данными, не HTML; projection не обращается к сети и не выдаёт URL с подписью.
 
 ## Risks / Trade-offs
 
-- **[Риск]** Общий package требует перемещения текущих schema/conversion exports и обновления двух consumers. → Переносить только browser-independent код и сохранить публичный web barrel/поведение editor; dependency direction остаётся web/API → page-document.
-- **[Риск]** #49 сейчас описывает image node с `node_id` и `asset_id`, но не discriminator и external source. → Согласовать `source` union и backward-compatible v1 mapping в design/tasks #49 до его реализации; этот change не меняет UI.
-- **[Ограничение]** External файл может исчезнуть или измениться после projection; URL не фиксирует байты ресурса. → Хранить URL как external reference и явно считать внешнее содержимое mutable; не заявлять его immutable snapshot content.
-- **[Риск]** Старые или вручную изменённые Yjs states могут содержать image без nodeId, unsafe URL или незнакомый node. → Fail closed с конкретной ошибкой; не генерировать ID, не удалять node и не публиковать partial JSON.
-- **[Trade-off]** HTTP внешние изображения отклоняются. → Schema v1 и текущая persisted-image validation поддерживают только HTTPS; расширение protocol policy требует изменения schema/security contract.
+- **Schema duplication can drift** → Общая frontend-generated v1 fixture проверяется web и API tests; изменение persisted schema требует согласованного обновления обеих деклараций, версии и fixture. Автоматической синхронизации нет.
+- **Правило hash suffix для marks может измениться вместе с y-prosemirror** → Schema-v1 compatibility fixtures и focused tests закрепляют текущий формат имени, а при несовместимом изменении persisted format потребуется отдельное versioned решение.
+- **Некорректный legacy документ может перестать проецироваться** → Явно вернуть typed error вместо публикации документа с потерянным содержимым. Отдельно human review должен подтвердить, что текущие persisted документы удовлетворяют существующим image rules.
+- **External resource может измениться или исчезнуть** → Projection фиксирует URL, но не содержимое стороннего файла; snapshot внешнего файла не считается immutable.
+- **Schema v2 и #49 могут выбрать другую форму media source** → Зафиксированный source union служит согласованным target contract; до внедрения #49 сравнить его с этим design и обновить change при несовпадении.
+- **Пустой frontend document не проходит ProseMirror `block+` validation** → Projection сохраняет совместимое `{ "type": "doc" }` представление; каждый будущий publication/SSR consumer обрабатывает его как пустой документ.
+- **HTTP URL будет rejected текущими persisted rules** → Сохранять действующую HTTPS policy; изменение protocol policy требует отдельного review и совместимого изменения frontend validation.
 
 ## Migration Plan
 
-Изменений БД, Yjs persisted bytes и capture transport нет. Реализация извлекает общий schema/conversion code, затем web и API используют общий package. До merge review проверяет неизменность schema v1 и web behavior; откат возвращает исходные модули web без data migration. `openspec validate add-document-projection --strict` и API/web/package checks выполняются после реализации.
+Persisted data, DB schema, capture transport, snapshots и frontend runtime не меняются. API использует Yjs и ProseMirror model напрямую; `y-prosemirror` conversion helper не входит в API dependencies. Перед merge выполняются fixture checks API/web и `openspec validate add-document-projection --strict`; implementation checks затем выполняются согласно tasks. Если adapter или media validation обнаружит ранее сохранённый несовместимый документ, результатом будет явная ошибка без исправления Y.Doc или миграции в рамках этого change.
 
 ## Open Questions
 
-Нет. Контракт для будущего image `source` должен быть согласован с #49 до реализации этой зависимости; текущая schema v1, поведение projection и границы change определены выше.
+Нет. До реализации необходимо включить текущие defaults полного TipTap v1 в минимальную backend schema, подтвердив их fixture и editor schema tests; это проверяемая задача, а не выбор между архитектурами.

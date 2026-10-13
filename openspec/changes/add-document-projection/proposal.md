@@ -1,27 +1,30 @@
 ## Why
 
-Публикация, asset projection и поиск должны получать представление одного и того же captured Y.Doc, интерпретированное по той же TipTap schema. Сейчас преобразование и schema находятся в web-приложении, поэтому backend-потребители рискуют реализовать отдельные несовместимые декодеры.
+Публикациям, будущему asset pipeline и поиску нужно одинаково интерпретировать один captured Y.Doc. Backend пока не имеет локальной schema и projection boundary, поэтому отдельные потребители могли бы по-разному декодировать одни и те же persisted bytes.
 
 ## What Changes
 
-- Добавить повторно используемый boundary, который из захваченных Yjs bytes и версии schema строит ProseMirror JSON и список media references.
-- Закрепить browser-independent schema и Yjs conversion в общем workspace package, используемом web и API.
-- Добавить в API чистую projection-операцию без capture, БД, Hocuspocus, HTTP controller или изменения исходного Y.Doc.
-- Определить безопасное представление external image URL и внутренних asset references, сохраняя совместимость с текущим image node.
-- Не включать публикации, сохранение renderings/assets, поиск, новые endpoints, загрузку файлов или editor UI.
+- Добавить в API независимую от NestJS projection-функцию, преобразующую captured Yjs bytes и `tiptapSchemaVersion` в ProseMirror JSON, media references и версию применённой schema.
+- Реализовать в API минимальную ProseMirror schema v1, точно соответствующую persisted schema текущего редактора. Её определения остаются backend-local и проверяются общими versioned Yjs fixtures.
+- Извлекать external image references из legacy v1 `attrs.src`; зафиксировать `ImageSource` union `external | asset` для последующего развития без реализации asset nodes в этом change.
+- Fail closed при ошибках decode, неизвестной версии, неподдерживаемом или теряемом содержимом и некорректных media attributes.
+- Добавить реальные versioned Yjs fixtures для совместных frontend/backend schema compatibility tests. Frontend runtime и его imports/re-exports остаются без изменений.
+- Не включать общий workspace package, перенос исходников, публикации, persistence renderings/assets, поиск, миграции, endpoints, storage, загрузку файлов или UI.
 
 ## Capabilities
 
 ### New Capabilities
+
 - `document-projection`: schema-aware преобразование captured Y.Doc в JSON и derived media references.
 
 ### Modified Capabilities
 
-Нет. Существующие требования к документу, editor schema и capture не меняются; добавляется backend read/projection capability.
+Нет. Change вводит отдельный read/projection boundary и не меняет существующие capture или editor requirements.
 
 ## Impact
 
-- Backend: новый `apps/api/src/document-projection/` module и unit tests.
-- Общая модель документа: новый browser-independent workspace package, извлекающий schema version, schema extensions и Yjs-to-ProseMirror conversion из web entity; web продолжает использовать тот же контракт.
-- Зависимости: разместить TipTap schema и Yjs conversion dependencies в общем package, не добавлять browser-only или NestJS runtime dependencies в него.
-- Persistence, capture contract, Prisma schema, OpenAPI, collaboration protocol и frontend UI не меняются.
+- Backend: новый `apps/api/src/document-projection/` с локальной schema v1, pure projection function, typed errors и unit tests.
+- Test data: versioned JSON fixtures в корневом `fixtures/page-document/`, читаемые тестами API и web без общего package.
+- Web: только compatibility test, сверяющий общую fixture с текущей schema; frontend runtime, editor composition, Collaboration и NodeIdDeconflict не меняются.
+- Dependencies: API объявляет прямые `yjs` и `@tiptap/pm` dependencies и использует публичные Yjs XML APIs для локального read-only adapter; существующая `y-prosemirror` dependency остаётся только в web. Повторяющиеся direct dependency versions используют pnpm catalog согласно repository policy. Других workspace/package изменений нет.
+- Capture contract, Y.Doc persistence, snapshots, Prisma schema и HTTP/OpenAPI контракты остаются без изменений.
