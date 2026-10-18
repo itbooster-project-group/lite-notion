@@ -118,7 +118,7 @@ describe('page document static rendering boundary', () => {
     expect(() =>
       renderPageDocumentToHTML({
         content: futureContent,
-        schemaVersion: 2,
+        schemaVersion: 3,
       }),
     ).toThrow(UnsupportedPageDocumentStaticRenderingSchemaError);
   });

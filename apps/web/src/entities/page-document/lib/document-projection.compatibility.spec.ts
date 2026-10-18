@@ -33,6 +33,17 @@ function schemaAttrs(schema: ReturnType<typeof getPageDocumentSchema>, name: str
   );
 }
 
+function stripDefaultAssetSource(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripDefaultAssetSource);
+  if (typeof value !== 'object' || value === null) return value;
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key, item]) => key !== 'source' || item !== null)
+      .map(([key, item]) => [key, stripDefaultAssetSource(item)]),
+  );
+}
+
 function compareSchemas(
   frontendSchema: ReturnType<typeof getPageDocumentSchema>,
   backendSchema: typeof documentProjectionSchema,
@@ -95,7 +106,9 @@ describe('document projection schema v1 fixture compatibility', () => {
     document = decodePageDocumentState(Uint8Array.from(Buffer.from(fixture.yjsUpdate, 'base64')));
 
     expect(fixture.schemaVersion).toBe(1);
-    expect(pageDocumentToJSON(document)).toEqual(fixture.expectedContentJson);
+    expect(stripDefaultAssetSource(pageDocumentToJSON(document))).toEqual(
+      fixture.expectedContentJson,
+    );
   });
 
   it('keeps backend nodes, marks, persisted attrs, defaults, and version aligned with frontend', () => {
