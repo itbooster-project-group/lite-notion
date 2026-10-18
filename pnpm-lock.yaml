@@ -12,6 +12,9 @@ catalogs:
     '@prisma/client':
       specifier: ^7.9.1
       version: 7.9.1
+    '@tiptap/pm':
+      specifier: ^3.30.5
+      version: 3.30.5
     '@types/node':
       specifier: ^22.0.0
       version: 22.20.1
@@ -89,6 +92,9 @@ importers:
       '@prisma/client':
         specifier: 'catalog:'
         version: 7.9.1(prisma@7.9.1(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@5.9.3))(typescript@5.9.3)
+      '@tiptap/pm':
+        specifier: 'catalog:'
+        version: 3.30.5
       bcrypt:
         specifier: ^6.0.0
         version: 6.0.0
@@ -110,6 +116,9 @@ importers:
       rxjs:
         specifier: ^7.8.0
         version: 7.8.2
+      yjs:
+        specifier: 'catalog:'
+        version: 13.6.32
     devDependencies:
       '@nestjs/cli':
         specifier: ^11.0.0
@@ -239,7 +248,7 @@ importers:
         specifier: ^3.30.5
         version: 3.30.5(@tiptap/extension-list@3.30.5(@tiptap/core@3.30.5(@tiptap/pm@3.30.5))(@tiptap/pm@3.30.5))
       '@tiptap/pm':
-        specifier: ^3.30.5
+        specifier: 'catalog:'
         version: 3.30.5
       '@tiptap/react':
         specifier: ^3.30.5
