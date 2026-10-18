@@ -107,6 +107,10 @@ export const PageDocumentImage = Node.create({
         parseHTML: (element: HTMLElement) => element.querySelector('img')?.getAttribute('src'),
         rendered: false,
       },
+      source: {
+        default: null,
+        rendered: false,
+      },
     };
   },
   parseHTML() {

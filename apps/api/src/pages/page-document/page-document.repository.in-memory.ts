@@ -1,11 +1,7 @@
 import type { TransactionScope } from '../../database/transaction';
 import type { Bytes } from '../pages.repository';
 import type { StoredDocument, StoredPage } from '../pages.repository.in-memory';
-import {
-  type PageDocumentRecord,
-  PageDocumentRepository,
-  type ReplaceDocumentInput,
-} from './page-document.repository';
+import { type PageDocumentRecord, PageDocumentRepository } from './page-document.repository';
 
 /**
  * Тестовая реализация. Хранилище то же, что у `InMemoryPagesRepository`: в базе
@@ -53,28 +49,24 @@ export class InMemoryPageDocumentRepository extends PageDocumentRepository {
     });
   }
 
-  async replace(input: ReplaceDocumentInput): Promise<PageDocumentRecord | null> {
-    const document = this.documents.get(input.pageId);
-
-    if (document === undefined || !this.isVisible(input.pageId)) {
-      return null;
-    }
-
-    document.storageRevision += 1;
-    document.tiptapSchemaVersion = input.tiptapSchemaVersion;
-    document.yjsState = input.yjsState;
-
-    return this.find(input.pageId);
-  }
-
-  async replaceYjsState(pageId: string, yjsState: Bytes): Promise<PageDocumentRecord | null> {
+  async replaceYjsState(
+    pageId: string,
+    yjsState: Bytes,
+    expectedStorageRevision: bigint,
+    tiptapSchemaVersion: number,
+  ): Promise<PageDocumentRecord | null> {
     const document = this.documents.get(pageId);
 
-    if (document === undefined || !this.isVisible(pageId)) {
+    if (
+      document === undefined ||
+      !this.isVisible(pageId) ||
+      BigInt(document.storageRevision) !== expectedStorageRevision
+    ) {
       return null;
     }
 
     document.storageRevision += 1;
+    document.tiptapSchemaVersion = tiptapSchemaVersion;
     document.yjsState = yjsState;
 
     return this.find(pageId);

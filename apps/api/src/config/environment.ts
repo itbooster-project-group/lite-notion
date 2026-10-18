@@ -1,7 +1,9 @@
 import { plainToInstance, Transform } from 'class-transformer';
 import {
+  IsBoolean,
   IsEnum,
   IsInt,
+  IsOptional,
   IsString,
   Max,
   Min,
@@ -39,6 +41,11 @@ function isHttpOrigin(value: unknown): boolean {
   } catch {
     return false;
   }
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  return Number(value);
 }
 
 function IsHttpOrigin(validationOptions?: ValidationOptions): PropertyDecorator {
@@ -154,6 +161,110 @@ export class EnvironmentConfig {
   @Min(4)
   @Max(15)
   BCRYPT_ROUNDS!: number;
+
+  @IsOptional()
+  @IsString()
+  ASSETS_S3_ENDPOINT?: string;
+
+  @IsOptional()
+  @IsString()
+  ASSETS_S3_REGION?: string;
+
+  @IsOptional()
+  @IsString()
+  ASSETS_S3_BUCKET?: string;
+
+  @IsOptional()
+  @IsString()
+  ASSETS_S3_ACCESS_KEY_ID?: string;
+
+  @IsOptional()
+  @IsString()
+  ASSETS_S3_SECRET_ACCESS_KEY?: string;
+
+  @Transform(({ value }) => optionalNumber(value), { toClassOnly: true })
+  @IsOptional()
+  @IsInt()
+  @Min(1_000)
+  @Max(120_000)
+  ASSETS_S3_REQUEST_TIMEOUT_MS?: number;
+
+  @Transform(({ value }) => optionalNumber(value), { toClassOnly: true })
+  @IsOptional()
+  @IsInt()
+  @Min(1_000)
+  @Max(600_000)
+  ASSETS_UPLOAD_TIMEOUT_MS?: number;
+
+  @Transform(({ value }) => (value === 'true' ? true : value === 'false' ? false : value), {
+    toClassOnly: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  ASSETS_S3_FORCE_PATH_STYLE?: boolean;
+
+  @Transform(({ value }) => optionalNumber(value), { toClassOnly: true })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(3_600)
+  ASSETS_READ_URL_TTL_SECONDS?: number;
+
+  @Transform(({ value }) => optionalNumber(value), { toClassOnly: true })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(10_485_760)
+  ASSETS_MAX_UPLOAD_BYTES?: number;
+
+  @Transform(({ value }) => optionalNumber(value), { toClassOnly: true })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  ASSETS_MAX_CONCURRENT_UPLOADS?: number;
+
+  @Transform(({ value }) => optionalNumber(value), { toClassOnly: true })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(8_760)
+  ASSETS_PENDING_TTL_HOURS?: number;
+
+  @Transform(({ value }) => optionalNumber(value), { toClassOnly: true })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(8_760)
+  ASSETS_ORPHAN_GRACE_HOURS?: number;
+
+  @Transform(({ value }) => optionalNumber(value), { toClassOnly: true })
+  @IsOptional()
+  @IsInt()
+  @Min(10)
+  @Max(86_400)
+  ASSETS_GC_INTERVAL_SECONDS?: number;
+
+  @Transform(({ value }) => optionalNumber(value), { toClassOnly: true })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(500)
+  ASSETS_GC_BATCH_SIZE?: number;
+
+  @Transform(({ value }) => optionalNumber(value), { toClassOnly: true })
+  @IsOptional()
+  @IsInt()
+  @Min(10)
+  @Max(86_400)
+  ASSETS_PROJECTION_STALE_WARNING_SECONDS?: number;
+
+  @Transform(({ value }) => (value === 'true' ? true : value === 'false' ? false : value), {
+    toClassOnly: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  ASSETS_GC_ENABLED?: boolean;
 }
 
 export function validateEnvironment(
@@ -163,6 +274,23 @@ export function validateEnvironment(
     ACCESS_TOKEN_TTL_S: environment.ACCESS_TOKEN_TTL_S,
     BCRYPT_ROUNDS: environment.BCRYPT_ROUNDS,
     CORS_ORIGIN: environment.CORS_ORIGIN,
+    ASSETS_GC_BATCH_SIZE: environment.ASSETS_GC_BATCH_SIZE,
+    ASSETS_GC_ENABLED: environment.ASSETS_GC_ENABLED,
+    ASSETS_GC_INTERVAL_SECONDS: environment.ASSETS_GC_INTERVAL_SECONDS,
+    ASSETS_MAX_CONCURRENT_UPLOADS: environment.ASSETS_MAX_CONCURRENT_UPLOADS,
+    ASSETS_MAX_UPLOAD_BYTES: environment.ASSETS_MAX_UPLOAD_BYTES,
+    ASSETS_ORPHAN_GRACE_HOURS: environment.ASSETS_ORPHAN_GRACE_HOURS,
+    ASSETS_PENDING_TTL_HOURS: environment.ASSETS_PENDING_TTL_HOURS,
+    ASSETS_PROJECTION_STALE_WARNING_SECONDS: environment.ASSETS_PROJECTION_STALE_WARNING_SECONDS,
+    ASSETS_READ_URL_TTL_SECONDS: environment.ASSETS_READ_URL_TTL_SECONDS,
+    ASSETS_S3_ACCESS_KEY_ID: environment.ASSETS_S3_ACCESS_KEY_ID,
+    ASSETS_S3_BUCKET: environment.ASSETS_S3_BUCKET,
+    ASSETS_S3_ENDPOINT: environment.ASSETS_S3_ENDPOINT,
+    ASSETS_S3_FORCE_PATH_STYLE: environment.ASSETS_S3_FORCE_PATH_STYLE,
+    ASSETS_S3_REGION: environment.ASSETS_S3_REGION,
+    ASSETS_S3_REQUEST_TIMEOUT_MS: environment.ASSETS_S3_REQUEST_TIMEOUT_MS,
+    ASSETS_S3_SECRET_ACCESS_KEY: environment.ASSETS_S3_SECRET_ACCESS_KEY,
+    ASSETS_UPLOAD_TIMEOUT_MS: environment.ASSETS_UPLOAD_TIMEOUT_MS,
     COLLABORATION_BASE_URL: environment.COLLABORATION_BASE_URL,
     COLLABORATION_TIMEOUT_MS: environment.COLLABORATION_TIMEOUT_MS,
     DATABASE_CONNECTION_TIMEOUT_MS: environment.DATABASE_CONNECTION_TIMEOUT_MS,
@@ -186,6 +314,25 @@ export function validateEnvironment(
     );
 
     throw new Error(`Environment validation failed: ${messages.join('; ')}`);
+  }
+
+  const storageKeys = [
+    'ASSETS_S3_ENDPOINT',
+    'ASSETS_S3_REGION',
+    'ASSETS_S3_BUCKET',
+    'ASSETS_S3_ACCESS_KEY_ID',
+    'ASSETS_S3_SECRET_ACCESS_KEY',
+  ] as const;
+  const configuredStorageKeys = storageKeys.filter((key) => {
+    const value = environment[key];
+    return typeof value === 'string' && value.length > 0;
+  });
+  if (
+    (validatedEnvironment.NODE_ENV === NodeEnvironment.Production &&
+      configuredStorageKeys.length !== storageKeys.length) ||
+    (configuredStorageKeys.length > 0 && configuredStorageKeys.length !== storageKeys.length)
+  ) {
+    throw new Error(`Environment validation failed: ${storageKeys.join(', ')}`);
   }
 
   return {

@@ -1,0 +1,28 @@
+name: Selectel S3 smoke
+
+on:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    name: Selectel S3 smoke
+    runs-on: ubuntu-latest
+    env:
+      ASSETS_S3_ENDPOINT: ${{ secrets.SELECTEL_S3_ENDPOINT }}
+      ASSETS_S3_REGION: ${{ secrets.SELECTEL_S3_REGION }}
+      ASSETS_S3_BUCKET: ${{ secrets.SELECTEL_S3_SMOKE_BUCKET }}
+      ASSETS_S3_ACCESS_KEY_ID: ${{ secrets.SELECTEL_S3_ACCESS_KEY_ID }}
+      ASSETS_S3_SECRET_ACCESS_KEY: ${{ secrets.SELECTEL_S3_SECRET_ACCESS_KEY }}
+      ASSETS_S3_FORCE_PATH_STYLE: ${{ vars.SELECTEL_S3_FORCE_PATH_STYLE }}
+      ASSETS_S3_SMOKE_PREFIX: assets-smoke/${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.21.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @lite-notion/api exec tsx scripts/selectel-s3-smoke.ts

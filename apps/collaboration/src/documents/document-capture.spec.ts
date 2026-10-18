@@ -4,6 +4,7 @@ import * as Y from 'yjs';
 
 import type { InternalApiClient, PersistedDocumentRecord } from '../api/internal-api-client.js';
 import { DocumentCapture, DocumentCaptureEncodingError } from './document-capture.js';
+import { setDocumentStorageRevision, setDocumentTiptapSchemaVersion } from './persistence.js';
 
 const pageId = '550e8400-e29b-41d4-a716-446655440000';
 const documentName = `page:${pageId}`;
@@ -13,6 +14,8 @@ function record(yjsState: Uint8Array, storageRevision = 1n): PersistedDocumentRe
 }
 
 function activeInstance(document: HocusDocument): Hocuspocus {
+  setDocumentStorageRevision(document, 0n);
+  setDocumentTiptapSchemaVersion(document, 1);
   const instance = new Hocuspocus();
   instance.documents.set(documentName, document);
   return instance;
@@ -26,9 +29,9 @@ describe('DocumentCapture', () => {
     const api = {
       replaceDocument: vi.fn(async (_id: string, state: Uint8Array) => {
         persistedBytes = state.slice();
-        return record(state, 12n);
+        return { accepted: true, document: record(state, 12n) };
       }),
-      readDocumentRecord: vi.fn(),
+      readDocumentRecord: vi.fn(async () => record(new Uint8Array(), 11n)),
     } as unknown as InternalApiClient;
     const encodeState = vi.fn((current: Y.Doc) => Y.encodeStateAsUpdate(current));
 
@@ -66,10 +69,15 @@ describe('DocumentCapture', () => {
 
   it('waits for a document that is already loading instead of reading persisted fallback', async () => {
     const document = new HocusDocument(documentName);
+    setDocumentStorageRevision(document, 14n);
+    setDocumentTiptapSchemaVersion(document, 3);
     document.getText('body').insert(0, 'loading state');
     const api = {
       readDocumentRecord: vi.fn(),
-      replaceDocument: vi.fn(async (_id: string, state: Uint8Array) => record(state, 15n)),
+      replaceDocument: vi.fn(async (_id: string, state: Uint8Array) => ({
+        accepted: true,
+        document: record(state, 15n),
+      })),
     } as unknown as InternalApiClient;
     const instance = new Hocuspocus();
     instance.loadingDocuments.set(documentName, Promise.resolve(document));
@@ -93,7 +101,10 @@ describe('DocumentCapture', () => {
       readDocumentRecord: vi.fn(
         () => new Promise<PersistedDocumentRecord>((resolve) => (finishRead = resolve)),
       ),
-      replaceDocument: vi.fn(async (_id: string, state: Uint8Array) => record(state, 16n)),
+      replaceDocument: vi.fn(async (_id: string, state: Uint8Array) => ({
+        accepted: true,
+        document: record(state, 16n),
+      })),
     } as unknown as InternalApiClient;
     const capture = new DocumentCapture(api).capture(pageId, instance);
 
@@ -112,6 +123,8 @@ describe('DocumentCapture', () => {
   it('keeps capture A while an edit B and its store happen during persistence', async () => {
     const document = new HocusDocument(documentName);
     document.getText('body').insert(0, 'A');
+    setDocumentStorageRevision(document, 6n);
+    setDocumentTiptapSchemaVersion(document, 3);
     let finishPersist!: () => void;
     let revision = 6n;
     const api = {
@@ -122,7 +135,7 @@ describe('DocumentCapture', () => {
           });
         }
         revision += 1n;
-        return record(state, revision);
+        return { accepted: true, document: record(state, revision) };
       }),
       readDocumentRecord: vi.fn(),
     } as unknown as InternalApiClient;
@@ -131,7 +144,7 @@ describe('DocumentCapture', () => {
     await vi.waitFor(() => expect(api.replaceDocument).toHaveBeenCalledOnce());
     document.getText('body').insert(1, 'B');
     const store = document.saveMutex.runExclusive(async () =>
-      api.replaceDocument(pageId, Y.encodeStateAsUpdate(document)),
+      api.replaceDocument(pageId, Y.encodeStateAsUpdate(document), 7n, 3),
     );
     await Promise.resolve();
     expect(api.replaceDocument).toHaveBeenCalledOnce();
@@ -144,8 +157,8 @@ describe('DocumentCapture', () => {
     expect(restored.getText('body').toString()).toBe('A');
     expect(document.getText('body').toString()).toBe('AB');
     expect(captured.storageRevision).toBe(7n);
-    expect(stored.storageRevision).toBe(8n);
-    expect(stored.yjsState).toEqual(Y.encodeStateAsUpdate(document));
+    expect(stored.document.storageRevision).toBe(8n);
+    expect(stored.document.yjsState).toEqual(Y.encodeStateAsUpdate(document));
   });
 
   it('serializes concurrent active captures and allocates a write revision per capture', async () => {
@@ -153,7 +166,10 @@ describe('DocumentCapture', () => {
     document.getText('body').insert(0, 'same state');
     let revision = 20n;
     const api = {
-      replaceDocument: vi.fn(async (_id: string, state: Uint8Array) => record(state, ++revision)),
+      replaceDocument: vi.fn(async (_id: string, state: Uint8Array) => ({
+        accepted: true,
+        document: record(state, ++revision),
+      })),
       readDocumentRecord: vi.fn(),
     } as unknown as InternalApiClient;
     const capture = new DocumentCapture(api);

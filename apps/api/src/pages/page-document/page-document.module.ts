@@ -4,7 +4,9 @@ import { DatabaseModule } from '../../database/database.module';
 import { PagePermissionsModule } from '../../page-permissions/page-permissions.module';
 import { PageDocumentRepository, PrismaPageDocumentRepository } from './page-document.repository';
 import { PageDocumentService } from './page-document.service';
+import { ProjectionRetryScheduler } from './projection-retry.scheduler';
 import { PersistPageDocumentStateUseCase } from './use-cases/persist-page-document-state.use-case';
+import { ProjectPageAssetsUseCase } from './use-cases/project-page-assets.use-case';
 
 /**
  * Публичных маршрутов у документа нет: содержимое меняет только collaboration
@@ -17,6 +19,8 @@ import { PersistPageDocumentStateUseCase } from './use-cases/persist-page-docume
   providers: [
     PageDocumentService,
     PersistPageDocumentStateUseCase,
+    ProjectPageAssetsUseCase,
+    ProjectionRetryScheduler,
     { provide: PageDocumentRepository, useClass: PrismaPageDocumentRepository },
   ],
 })

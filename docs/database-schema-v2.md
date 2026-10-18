@@ -647,8 +647,8 @@ status         enum(pending, ready, failed, deleted)
 storage_key    varchar, unique
 original_name  varchar
 mime_type      varchar
-checksum       varchar
-size_bytes     bigint
+checksum       varchar, nullable until ready
+size_bytes     bigint, nullable until ready
 width          int, nullable
 height         int, nullable
 created_at     timestamptz
@@ -671,6 +671,25 @@ failed  → deleted
 Недопустимые переходы отклоняются application layer.
 
 `storage_key` — внутреннее поле и никогда не должно попадать в public publication API.
+
+Initiate заранее сохраняет непереиспользуемый уникальный `storage_key`, в том числе
+для `pending` assets. Перед каждой попыткой PutObject ключ ротируется отдельным
+условным update. Ready требует непустые `mime_type`, `checksum` и положительный
+`size_bytes`; у pending readiness metadata остаётся NULL.
+
+## PAGE_ASSET_GRANTS
+
+Grant связывает page с asset, который uploader разрешил использовать в её Y.Doc:
+
+```text
+page_id     uuid, PK part, FK → PAGES.id
+asset_id    uuid, PK part, FK → ASSETS.id
+created_at  timestamptz
+```
+
+`PAGE_ASSETS(page_id, asset_id)` ссылается на composite key grant. Поэтому
+projection не может записать ссылку на asset без grant. Grant сам по себе не
+удерживает файл при удалении.
 
 ## Avatar и cover
 
@@ -695,7 +714,11 @@ Watermark проекции:
 
 ```text
 page_id                  uuid, PK, FK → PAGES.id
-source_storage_revision  bigint, NOT NULL
+source_storage_revision  bigint, nullable until first successful projection
+attempted_storage_revision bigint, nullable
+attempt_count            int, between 0 and 8
+retry_after              timestamptz, nullable
+last_error_code          varchar, nullable
 updated_at               timestamptz
 ```
 

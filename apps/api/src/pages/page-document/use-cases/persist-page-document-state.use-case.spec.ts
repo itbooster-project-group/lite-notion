@@ -12,21 +12,31 @@ describe('PersistPageDocumentStateUseCase', () => {
       yjsState: new Uint8Array([1, 2, 3]),
     };
     const replaceYjsState = vi.fn(async () => record);
-    const useCase = new PersistPageDocumentStateUseCase({
-      replaceYjsState,
-    } as unknown as PageDocumentRepository);
+    const useCase = new PersistPageDocumentStateUseCase(
+      {
+        replaceYjsState,
+      } as unknown as PageDocumentRepository,
+      { execute: vi.fn(async () => undefined) } as never,
+    );
     const state = new Uint8Array([1, 2, 3]);
 
-    await expect(useCase.execute(record.pageId, state)).resolves.toBe(record);
-    expect(replaceYjsState).toHaveBeenCalledWith(record.pageId, state);
+    await expect(useCase.execute(record.pageId, state, 11n, 1)).resolves.toEqual({
+      accepted: true,
+      document: record,
+    });
+    expect(replaceYjsState).toHaveBeenCalledWith(record.pageId, state, 11n, 1);
   });
 
   it('preserves not-found behavior when no live page document can be updated', async () => {
-    const useCase = new PersistPageDocumentStateUseCase({
-      replaceYjsState: vi.fn(async () => null),
-    } as unknown as PageDocumentRepository);
+    const useCase = new PersistPageDocumentStateUseCase(
+      {
+        replaceYjsState: vi.fn(async () => null),
+        find: vi.fn(async () => null),
+      } as unknown as PageDocumentRepository,
+      { execute: vi.fn() } as never,
+    );
 
-    await expect(useCase.execute('missing-page', new Uint8Array())).rejects.toBeInstanceOf(
+    await expect(useCase.execute('missing-page', new Uint8Array(), 0n, 1)).rejects.toBeInstanceOf(
       PageNotFoundError,
     );
   });

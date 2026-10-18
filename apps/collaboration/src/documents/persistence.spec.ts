@@ -23,7 +23,12 @@ describe('PageDocumentPersistence', () => {
     const source = new Y.Doc();
     source.getText('body').insert(0, 'hello');
     const service = persistenceWith({
-      readDocument: vi.fn(async () => Y.encodeStateAsUpdate(source)),
+      readDocumentRecord: vi.fn(async () => ({
+        pageId,
+        storageRevision: 4n,
+        tiptapSchemaVersion: 1,
+        yjsState: Y.encodeStateAsUpdate(source),
+      })),
     });
 
     const loaded = await service.load(documentName);
@@ -32,7 +37,14 @@ describe('PageDocumentPersistence', () => {
   });
 
   it('пустое состояние даёт валидный пустой документ', async () => {
-    const service = persistenceWith({ readDocument: vi.fn(async () => new Uint8Array()) });
+    const service = persistenceWith({
+      readDocumentRecord: vi.fn(async () => ({
+        pageId,
+        storageRevision: 0n,
+        tiptapSchemaVersion: 1,
+        yjsState: new Uint8Array(),
+      })),
+    });
 
     const loaded = await service.load(documentName);
 
@@ -41,7 +53,7 @@ describe('PageDocumentPersistence', () => {
 
   it('отказ API при загрузке даёт DocumentLoadError', async () => {
     const service = persistenceWith({
-      readDocument: vi.fn(async () => {
+      readDocumentRecord: vi.fn(async () => {
         throw new ApiDeniedError(404);
       }),
     });
@@ -51,7 +63,7 @@ describe('PageDocumentPersistence', () => {
 
   it('недоступность API при загрузке не выдаётся за отсутствие документа', async () => {
     const service = persistenceWith({
-      readDocument: vi.fn(async () => {
+      readDocumentRecord: vi.fn(async () => {
         throw new ApiUnavailableError('timeout');
       }),
     });
@@ -60,19 +72,50 @@ describe('PageDocumentPersistence', () => {
   });
 
   it('сохраняет закодированное состояние по идентификатору страницы', async () => {
-    const replaceDocument = vi.fn(async () => undefined);
+    const replaceDocument = vi.fn(async (_pageId: string, yjsState: Uint8Array) => ({
+      accepted: true,
+      document: { pageId, storageRevision: 1n, tiptapSchemaVersion: 1, yjsState },
+    }));
     const document = new Y.Doc();
     document.getText('body').insert(0, 'stored');
 
-    await persistenceWith({ replaceDocument }).store(documentName, document);
+    const loaded = await persistenceWith({
+      readDocumentRecord: vi.fn(async () => ({
+        pageId,
+        storageRevision: 0n,
+        tiptapSchemaVersion: 1,
+        yjsState: new Uint8Array(),
+      })),
+      replaceDocument,
+    }).load(documentName);
+    loaded.getText('body').insert(0, 'stored');
+    await persistenceWith({
+      readDocumentRecord: vi.fn(async () => ({
+        pageId,
+        storageRevision: 0n,
+        tiptapSchemaVersion: 1,
+        yjsState: new Uint8Array(),
+      })),
+      replaceDocument,
+    }).store(documentName, loaded);
 
-    const [calledPageId, state] = replaceDocument.mock.calls[0] as unknown as [string, Uint8Array];
+    const [calledPageId, state] = replaceDocument.mock.calls[0] as unknown as [
+      string,
+      Uint8Array,
+      bigint,
+    ];
     expect(calledPageId).toBe(pageId);
     expect(state.byteLength).toBeGreaterThan(0);
   });
 
   it('отказ API при сохранении даёт DocumentStoreSkippedError', async () => {
     const service = persistenceWith({
+      readDocumentRecord: vi.fn(async () => ({
+        pageId,
+        storageRevision: 0n,
+        tiptapSchemaVersion: 1,
+        yjsState: new Uint8Array(),
+      })),
       replaceDocument: vi.fn(async () => {
         throw new ApiDeniedError(404);
       }),

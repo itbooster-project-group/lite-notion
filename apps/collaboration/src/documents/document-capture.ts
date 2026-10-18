@@ -2,7 +2,14 @@ import type { Document as HocusDocument, Hocuspocus } from '@hocuspocus/server';
 import * as Y from 'yjs';
 import type { InternalApiClient, PersistedDocumentRecord } from '../api/internal-api-client.js';
 import { parsePageDocumentName } from './document-name.js';
-import { DOCUMENT_MAX_BYTES, DocumentSizeLimitExceededError } from './persistence.js';
+import {
+  DOCUMENT_MAX_BYTES,
+  DocumentSizeLimitExceededError,
+  documentStorageRevision,
+  documentTiptapSchemaVersion,
+  setDocumentStorageRevision,
+  setDocumentTiptapSchemaVersion,
+} from './persistence.js';
 
 export class DocumentCaptureEncodingError extends Error {
   constructor() {
@@ -29,7 +36,12 @@ export class DocumentCapture {
     const activeDocument = this.findActiveDocument(documentName, instance);
 
     if (activeDocument !== undefined) {
-      return this.persistLiveState(pageId, await activeDocument);
+      const live = await activeDocument;
+      if (documentStorageRevision(live) === undefined) {
+        setDocumentStorageRevision(live, persisted.storageRevision);
+        setDocumentTiptapSchemaVersion(live, persisted.tiptapSchemaVersion);
+      }
+      return this.persistLiveState(pageId, live);
     }
 
     return persisted;
@@ -66,12 +78,33 @@ export class DocumentCapture {
         throw new DocumentSizeLimitExceededError();
       }
 
-      const persisted = await this.api.replaceDocument(pageId, yjsState);
-
-      return {
-        ...persisted,
-        yjsState,
-      };
+      let expectedRevision = documentStorageRevision(document);
+      let schemaVersion = documentTiptapSchemaVersion(document);
+      if (expectedRevision === undefined) {
+        const latest = await this.api.readDocumentRecord(pageId);
+        expectedRevision = latest.storageRevision;
+        schemaVersion = latest.tiptapSchemaVersion;
+      }
+      schemaVersion ??= 1;
+      let state = yjsState;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const result = await this.api.replaceDocument(
+          pageId,
+          state,
+          expectedRevision,
+          schemaVersion,
+        );
+        if (result.accepted) {
+          setDocumentStorageRevision(document, result.document.storageRevision);
+          setDocumentTiptapSchemaVersion(document, result.document.tiptapSchemaVersion);
+          return { ...result.document, yjsState: state };
+        }
+        Y.applyUpdate(document, result.document.yjsState);
+        state = this.encodeState(document);
+        expectedRevision = result.document.storageRevision;
+        schemaVersion = result.document.tiptapSchemaVersion;
+      }
+      throw new Error('Document changed concurrently too many times');
     });
   }
 }

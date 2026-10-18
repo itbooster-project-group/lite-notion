@@ -6,11 +6,17 @@
  * OpenAPI spec version: 1.0
  */
 
+export * from './assetReadUrlDto';
+export * from './assetResponseDto';
+export * from './assetResponseDtoStatus';
+export * from './assetUploadInitiatedDto';
 export * from './authResponseDto';
+export * from './createAssetReadUrlParams';
 export * from './createPageDto';
 export * from './createProjectDto';
 export * from './deletedPageTreeNodeDto';
 export * from './deletedProjectDto';
+export * from './getAssetMetadataParams';
 export * from './grantPagePermissionDto';
 export * from './grantPagePermissionDtoRole';
 export * from './healthResponseDto';

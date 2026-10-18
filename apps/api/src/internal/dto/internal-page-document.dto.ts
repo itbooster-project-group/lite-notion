@@ -1,4 +1,4 @@
-import { IsBase64, IsString, MaxLength } from 'class-validator';
+import { IsBase64, IsInt, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
 
 import { DOCUMENT_MAX_BYTES } from '../../pages/constants';
 import type { PageDocumentRecord } from '../../pages/page-document/page-document.repository';
@@ -12,9 +12,19 @@ export class ReplaceInternalDocumentDto {
   @IsBase64()
   @MaxLength(BASE64_MAX_LENGTH)
   yjsState!: string;
+
+  @IsString()
+  @Matches(/^\d+$/)
+  expectedStorageRevision!: string;
+
+  @IsInt()
+  @Min(1)
+  @Max(2_147_483_647)
+  tiptapSchemaVersion!: number;
 }
 
 export class InternalDocumentDto {
+  accepted?: boolean;
   pageId!: string;
   storageRevision!: string;
   tiptapSchemaVersion!: number;
@@ -27,5 +37,12 @@ export class InternalDocumentDto {
       tiptapSchemaVersion: record.tiptapSchemaVersion,
       yjsState: Buffer.from(record.yjsState).toString('base64'),
     };
+  }
+
+  static fromWriteResult(result: {
+    accepted: boolean;
+    document: PageDocumentRecord;
+  }): InternalDocumentDto {
+    return { ...InternalDocumentDto.fromRecord(result.document), accepted: result.accepted };
   }
 }

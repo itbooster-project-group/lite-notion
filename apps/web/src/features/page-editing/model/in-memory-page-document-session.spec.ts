@@ -32,7 +32,7 @@ describe('page document session admission', () => {
   it('блокирует неподдерживаемую schema version до декодирования state', () => {
     const session = createPageDocumentSessionFromState({
       state: new Uint8Array([255]),
-      schemaVersion: 2,
+      schemaVersion: 3,
     });
 
     expect(session).toMatchObject({
@@ -103,7 +103,7 @@ describe('page document session admission', () => {
     const onDestroy = vi.fn();
     doc.on('destroy', onDestroy);
 
-    const session = createInMemoryPageDocumentSession({ doc, schemaVersion: 2 });
+    const session = createInMemoryPageDocumentSession({ doc, schemaVersion: 3 });
 
     expect(session.status).toBe('error');
     expect(onDestroy).toHaveBeenCalledTimes(1);

@@ -33,7 +33,7 @@ function createEditor() {
   return { document, editor };
 }
 
-describe('page document schema version 1', () => {
+describe('page document schema version 2', () => {
   it('подключает CollaborationCaret к тому же provider и user contract', () => {
     const document = new Y.Doc();
     const provider: CollaborationProvider = {
@@ -70,7 +70,7 @@ describe('page document schema version 1', () => {
   });
 
   it('экспортирует стабильные schema version и collaboration field', () => {
-    expect(PAGE_DOCUMENT_SCHEMA_VERSION).toBe(1);
+    expect(PAGE_DOCUMENT_SCHEMA_VERSION).toBe(2);
     expect(PAGE_CONTENT_YJS_FIELD).toBe('default');
   });
 

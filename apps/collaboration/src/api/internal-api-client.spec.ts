@@ -29,23 +29,26 @@ describe('InternalApiClient', () => {
       yjsState: 'AQIDBA==',
     };
 
-    function requestDocument(
-      client: InternalApiClient,
-    ): ReturnType<typeof client.readDocumentRecord> {
+    function requestDocument(client: InternalApiClient): Promise<unknown> {
       return operation === 'readDocumentRecord'
         ? client.readDocumentRecord('page')
-        : client.replaceDocument('page', new Uint8Array([1, 2, 3, 4]));
+        : client.replaceDocument('page', new Uint8Array([1, 2, 3, 4]), 7n, 2);
     }
 
     it('возвращает bytes и точные persisted metadata', async () => {
       const client = clientWith(vi.fn(async () => jsonResponse(200, validRecord)));
 
-      await expect(requestDocument(client)).resolves.toEqual({
+      const expectedDocument = {
         pageId: 'page',
         storageRevision: 9007199254740993n,
         tiptapSchemaVersion: 2,
         yjsState: new Uint8Array([1, 2, 3, 4]),
-      });
+      };
+      await expect(requestDocument(client)).resolves.toEqual(
+        operation === 'replaceDocument'
+          ? { accepted: true, document: expectedDocument }
+          : expectedDocument,
+      );
     });
 
     it('принимает пустое состояние и начальную revision', async () => {
@@ -60,12 +63,17 @@ describe('InternalApiClient', () => {
         ),
       );
 
-      await expect(requestDocument(client)).resolves.toEqual({
+      const expectedDocument = {
         pageId: 'page',
         storageRevision: 0n,
         tiptapSchemaVersion: 1,
         yjsState: new Uint8Array(),
-      });
+      };
+      await expect(requestDocument(client)).resolves.toEqual(
+        operation === 'replaceDocument'
+          ? { accepted: true, document: expectedDocument }
+          : expectedDocument,
+      );
     });
 
     it.each([
@@ -259,10 +267,14 @@ describe('InternalApiClient', () => {
     );
     const client = clientWith(fetchImpl as unknown as typeof fetch);
 
-    await client.replaceDocument('page', new Uint8Array([1, 2, 3]));
+    await client.replaceDocument('page', new Uint8Array([1, 2, 3]), 8n, 1);
 
     const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
-    expect(JSON.parse(init.body as string)).toEqual({ yjsState: 'AQID' });
+    expect(JSON.parse(init.body as string)).toEqual({
+      expectedStorageRevision: '8',
+      tiptapSchemaVersion: 1,
+      yjsState: 'AQID',
+    });
   });
 
   it('сохраняет точность storageRevision при чтении metadata', async () => {

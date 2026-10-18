@@ -202,6 +202,556 @@
         "tags": ["auth"]
       }
     },
+    "/api/v1/assets/uploads": {
+      "post": {
+        "operationId": "initiateAssetUpload",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetUploadInitiatedDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Start an image upload",
+        "tags": ["assets"]
+      }
+    },
+    "/api/v1/assets/{assetId}/content": {
+      "put": {
+        "operationId": "uploadAssetContent",
+        "parameters": [
+          {
+            "name": "assetId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Stream image bytes to private storage",
+        "tags": ["assets"]
+      }
+    },
+    "/api/v1/assets/{assetId}": {
+      "get": {
+        "operationId": "getAssetMetadata",
+        "parameters": [
+          {
+            "name": "pageId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "assetId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Read asset metadata in an authorized context",
+        "tags": ["assets"]
+      },
+      "delete": {
+        "operationId": "deleteAsset",
+        "parameters": [
+          {
+            "name": "assetId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete an unused asset",
+        "tags": ["assets"]
+      }
+    },
+    "/api/v1/assets/{assetId}/read-url": {
+      "post": {
+        "operationId": "createAssetReadUrl",
+        "parameters": [
+          {
+            "name": "pageId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "assetId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetReadUrlDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a short-lived private read URL",
+        "tags": ["assets"]
+      }
+    },
+    "/api/v1/pages/{pageId}/assets/{assetId}/grant": {
+      "post": {
+        "operationId": "grantAssetToPage",
+        "parameters": [
+          {
+            "name": "assetId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Allow an uploaded asset on another page",
+        "tags": ["assets"]
+      }
+    },
+    "/api/v1/pages/{pageId}/assets/cover": {
+      "put": {
+        "operationId": "setPageCover",
+        "parameters": [
+          {
+            "name": "pageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set or remove a page cover image",
+        "tags": ["assets"]
+      }
+    },
+    "/api/v1/users/me/avatar": {
+      "put": {
+        "operationId": "setCurrentUserAvatar",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Set or remove the current user avatar",
+        "tags": ["assets"]
+      }
+    },
+    "/api/v1/users/{userId}/avatar/{assetId}/read-url": {
+      "get": {
+        "operationId": "createAvatarReadUrl",
+        "parameters": [
+          {
+            "name": "assetId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetReadUrlDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a read URL for a current avatar",
+        "tags": ["assets"]
+      }
+    },
+    "/api/v1/pages/{pageId}/permissions": {
+      "get": {
+        "operationId": "getPagePermissions",
+        "parameters": [
+          {
+            "name": "pageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Direct permissions of the page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PagePermissionDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The page is visible to the current user, but managing access needs ownership",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Page or permission does not exist, or the page is not accessible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List direct permissions of a page",
+        "tags": ["page-permissions"]
+      },
+      "put": {
+        "operationId": "grantPagePermission",
+        "parameters": [
+          {
+            "name": "pageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantPagePermissionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Permission granted or changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagePermissionDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The page is visible to the current user, but managing access needs ownership",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Page or permission does not exist, or the page is not accessible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Grant or change a direct permission on a page",
+        "tags": ["page-permissions"]
+      }
+    },
+    "/api/v1/pages/{pageId}/permissions/{userId}": {
+      "delete": {
+        "operationId": "revokePagePermission",
+        "parameters": [
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Permission revoked"
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The page is visible to the current user, but managing access needs ownership",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Page or permission does not exist, or the page is not accessible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Revoke a direct permission on a page",
+        "tags": ["page-permissions"]
+      }
+    },
     "/api/v1/health": {
       "get": {
         "operationId": "getHealth",
@@ -1485,244 +2035,6 @@
         "summary": "Restore a project from the trash",
         "tags": ["projects"]
       }
-    },
-    "/api/v1/pages/{pageId}/permissions": {
-      "get": {
-        "operationId": "getPagePermissions",
-        "parameters": [
-          {
-            "name": "pageId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Direct permissions of the page",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/PagePermissionDto"
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation failed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HttpErrorResponseDto"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid access token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HttpErrorResponseDto"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "The page is visible to the current user, but managing access needs ownership",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HttpErrorResponseDto"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Page or permission does not exist, or the page is not accessible",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HttpErrorResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "List direct permissions of a page",
-        "tags": ["page-permissions"]
-      },
-      "put": {
-        "operationId": "grantPagePermission",
-        "parameters": [
-          {
-            "name": "pageId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/GrantPagePermissionDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Permission granted or changed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PagePermissionDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation failed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HttpErrorResponseDto"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid access token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HttpErrorResponseDto"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "The page is visible to the current user, but managing access needs ownership",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HttpErrorResponseDto"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Page or permission does not exist, or the page is not accessible",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HttpErrorResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Grant or change a direct permission on a page",
-        "tags": ["page-permissions"]
-      }
-    },
-    "/api/v1/pages/{pageId}/permissions/{userId}": {
-      "delete": {
-        "operationId": "revokePagePermission",
-        "parameters": [
-          {
-            "name": "userId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          },
-          {
-            "name": "pageId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Permission revoked"
-          },
-          "400": {
-            "description": "Validation failed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HttpErrorResponseDto"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid access token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HttpErrorResponseDto"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "The page is visible to the current user, but managing access needs ownership",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HttpErrorResponseDto"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Page or permission does not exist, or the page is not accessible",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HttpErrorResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Revoke a direct permission on a page",
-        "tags": ["page-permissions"]
-      }
     }
   },
   "info": {
@@ -1869,6 +2181,109 @@
           }
         },
         "required": ["accessToken", "expiresIn"]
+      },
+      "AssetUploadInitiatedDto": {
+        "type": "object",
+        "properties": {
+          "assetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "contentPath": {
+            "type": "string"
+          }
+        },
+        "required": ["assetId", "contentPath"]
+      },
+      "AssetResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "ready", "failed", "deleted"]
+          },
+          "mimeType": {
+            "type": "string",
+            "nullable": true
+          },
+          "sizeBytes": {
+            "type": "number",
+            "nullable": true
+          },
+          "originalName": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "status", "mimeType", "sizeBytes", "originalName"]
+      },
+      "AssetReadUrlDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "expiresInSeconds": {
+            "type": "number"
+          }
+        },
+        "required": ["url", "expiresInSeconds"]
+      },
+      "PagePermissionDto": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "example": "9f6d4a5e-0f6d-4a5e-9f6d-0f6d4a5e9f6d",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string",
+            "example": "teammate@example.com",
+            "format": "email"
+          },
+          "name": {
+            "type": "string",
+            "example": "Alex Teammate"
+          },
+          "role": {
+            "type": "string",
+            "enum": ["viewer", "editor"],
+            "example": "viewer"
+          },
+          "createdAt": {
+            "type": "string",
+            "example": "2026-09-10T12:00:00.000Z",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "example": "2026-09-10T12:00:00.000Z",
+            "format": "date-time"
+          }
+        },
+        "required": ["userId", "email", "name", "role", "createdAt", "updatedAt"]
+      },
+      "GrantPagePermissionDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "teammate@example.com",
+            "format": "email"
+          },
+          "role": {
+            "type": "string",
+            "description": "Role to grant. `owner` is not accepted: ownership is not transferable here.",
+            "enum": ["viewer", "editor"],
+            "example": "viewer"
+          }
+        },
+        "required": ["email", "role"]
       },
       "HealthResponseDto": {
         "type": "object",
@@ -2283,58 +2698,6 @@
           }
         },
         "required": ["id", "ownerId", "name", "deletedAt"]
-      },
-      "PagePermissionDto": {
-        "type": "object",
-        "properties": {
-          "userId": {
-            "type": "string",
-            "example": "9f6d4a5e-0f6d-4a5e-9f6d-0f6d4a5e9f6d",
-            "format": "uuid"
-          },
-          "email": {
-            "type": "string",
-            "example": "teammate@example.com",
-            "format": "email"
-          },
-          "name": {
-            "type": "string",
-            "example": "Alex Teammate"
-          },
-          "role": {
-            "type": "string",
-            "enum": ["viewer", "editor"],
-            "example": "viewer"
-          },
-          "createdAt": {
-            "type": "string",
-            "example": "2026-09-10T12:00:00.000Z",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "example": "2026-09-10T12:00:00.000Z",
-            "format": "date-time"
-          }
-        },
-        "required": ["userId", "email", "name", "role", "createdAt", "updatedAt"]
-      },
-      "GrantPagePermissionDto": {
-        "type": "object",
-        "properties": {
-          "email": {
-            "type": "string",
-            "example": "teammate@example.com",
-            "format": "email"
-          },
-          "role": {
-            "type": "string",
-            "description": "Role to grant. `owner` is not accepted: ownership is not transferable here.",
-            "enum": ["viewer", "editor"],
-            "example": "viewer"
-          }
-        },
-        "required": ["email", "role"]
       }
     }
   }

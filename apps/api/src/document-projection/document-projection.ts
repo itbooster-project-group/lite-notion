@@ -228,6 +228,7 @@ function normalizedPresentationAttrs(attrs: Readonly<Record<string, unknown>>) {
 function normalizeMediaAttrs(
   type: string,
   attrs: Readonly<Record<string, JsonValue>>,
+  schemaVersion: number,
 ): Record<string, JsonValue> {
   if (typeof attrs.nodeId !== 'string' || !UUID_PATTERN.test(attrs.nodeId)) {
     throw invalidMedia(`${type} node has a missing or invalid nodeId.`);
@@ -240,6 +241,28 @@ function normalizeMediaAttrs(
   };
 
   if (type === 'image') {
+    if (schemaVersion >= 2 && attrs.source !== undefined && attrs.source !== null) {
+      const source = attrs.source;
+      if (
+        !isRecord(source) ||
+        source.type !== 'asset' ||
+        typeof source.assetId !== 'string' ||
+        !UUID_PATTERN.test(source.assetId)
+      ) {
+        throw invalidMedia('image node has an invalid asset source.');
+      }
+      const decorative = attrs.decorative === true;
+      const alt = typeof attrs.alt === 'string' ? attrs.alt.trim() : '';
+      if (decorative ? alt.length > 0 : alt.length === 0) {
+        throw invalidMedia('image node has incompatible alt and decorative attrs.');
+      }
+      return {
+        ...normalized,
+        alt,
+        decorative,
+        source: toJsonObject({ type: 'asset', assetId: source.assetId }, 'image source'),
+      };
+    }
     if (typeof attrs.src !== 'string') {
       throw invalidMedia('image node has a missing or invalid src.');
     }
@@ -344,6 +367,7 @@ function serializeXmlElement(
   element: Y.XmlElement,
   mediaNodeIds: Set<string>,
   mediaReferences: MediaReference[],
+  schemaVersion: number,
 ): ProseMirrorJSONContent {
   const type = element.nodeName;
   if (type === 'text') {
@@ -357,16 +381,14 @@ function serializeXmlElement(
     throw invalidContent(`Node "${type}" contains unsupported key "__proto__".`);
   }
   const rawAttrs = toJsonObject(element.getAttributes(), `Node "${type}" attrs`);
-  assertKnownKeys(
-    rawAttrs,
-    new Set(Object.keys(nodeType.spec.attrs ?? {})),
-    `Node "${type}" attrs`,
-  );
+  const allowedAttrs = new Set(Object.keys(nodeType.spec.attrs ?? {}));
+  if (schemaVersion < 2 && type === 'image') allowedAttrs.delete('source');
+  assertKnownKeys(rawAttrs, allowedAttrs, `Node "${type}" attrs`);
   validatePersistedNodeAttrs(type, rawAttrs);
 
   let attrs = rawAttrs;
   if (MEDIA_NODE_TYPES.has(type)) {
-    attrs = normalizeMediaAttrs(type, rawAttrs);
+    attrs = normalizeMediaAttrs(type, rawAttrs, schemaVersion);
     const nodeId = attrs.nodeId as string;
     if (mediaNodeIds.has(nodeId)) {
       throw invalidMedia(`Media nodes contain a duplicate nodeId "${nodeId}".`);
@@ -374,18 +396,19 @@ function serializeXmlElement(
     mediaNodeIds.add(nodeId);
 
     if (type === 'image') {
-      mediaReferences.push({
-        type: 'external',
-        nodeId,
-        url: attrs.src as string,
-      });
+      const source = attrs.source;
+      if (isRecord(source) && source.type === 'asset' && typeof source.assetId === 'string') {
+        mediaReferences.push({ type: 'asset', nodeId, assetId: source.assetId });
+      } else {
+        mediaReferences.push({ type: 'external', nodeId, url: attrs.src as string });
+      }
     }
   }
 
   const content: ProseMirrorJSONContent[] = [];
   for (const child of element.toArray()) {
     if (child instanceof Y.XmlElement) {
-      content.push(serializeXmlElement(child, mediaNodeIds, mediaReferences));
+      content.push(serializeXmlElement(child, mediaNodeIds, mediaReferences, schemaVersion));
     } else if (child instanceof Y.XmlText) {
       content.push(...serializeXmlText(child));
     } else {
@@ -448,7 +471,24 @@ function normalizeJsonForComparison(node: ProseMirrorJSONContent): ProseMirrorJS
   };
 }
 
-function projectDecodedDocument(fragment: Y.XmlFragment): DocumentProjection {
+function stripV2Defaults(node: ProseMirrorJSONContent): ProseMirrorJSONContent {
+  return {
+    ...node,
+    ...(node.attrs === undefined
+      ? {}
+      : {
+          attrs: Object.fromEntries(
+            Object.entries(node.attrs).filter(([key, value]) => key !== 'source' || value !== null),
+          ),
+        }),
+    ...(node.content === undefined ? {} : { content: node.content.map(stripV2Defaults) }),
+  };
+}
+
+function projectDecodedDocument(
+  fragment: Y.XmlFragment,
+  schemaVersion: number,
+): DocumentProjection {
   const mediaReferences: MediaReference[] = [];
   const mediaNodeIds = new Set<string>();
   const content: ProseMirrorJSONContent[] = [];
@@ -456,7 +496,7 @@ function projectDecodedDocument(fragment: Y.XmlFragment): DocumentProjection {
     if (!(child instanceof Y.XmlElement)) {
       throw invalidContent('Document fragment contains a non-element root child.');
     }
-    content.push(serializeXmlElement(child, mediaNodeIds, mediaReferences));
+    content.push(serializeXmlElement(child, mediaNodeIds, mediaReferences, schemaVersion));
   }
 
   const rawJson: ProseMirrorJSONContent = {
@@ -467,7 +507,7 @@ function projectDecodedDocument(fragment: Y.XmlFragment): DocumentProjection {
     return {
       contentJson: rawJson,
       mediaReferences,
-      schemaVersion: DOCUMENT_PROJECTION_SCHEMA_VERSION,
+      schemaVersion,
     };
   }
 
@@ -475,8 +515,10 @@ function projectDecodedDocument(fragment: Y.XmlFragment): DocumentProjection {
     const document = documentProjectionSchema.nodeFromJSON(rawJson);
     document.check();
 
-    const contentJson = document.toJSON() as ProseMirrorJSONContent;
-    const expected = normalizeJsonForComparison(rawJson);
+    const rawContentJson = document.toJSON() as ProseMirrorJSONContent;
+    const contentJson = schemaVersion < 2 ? stripV2Defaults(rawContentJson) : rawContentJson;
+    const normalized = normalizeJsonForComparison(rawJson);
+    const expected = schemaVersion < 2 ? stripV2Defaults(normalized) : normalized;
     if (!isDeepStrictEqual(expected, contentJson)) {
       throw invalidContent('ProseMirror normalization would lose document content.');
     }
@@ -484,7 +526,7 @@ function projectDecodedDocument(fragment: Y.XmlFragment): DocumentProjection {
     return {
       contentJson,
       mediaReferences,
-      schemaVersion: DOCUMENT_PROJECTION_SCHEMA_VERSION,
+      schemaVersion,
     };
   } catch (error) {
     if (error instanceof DocumentProjectionError) throw error;
@@ -493,7 +535,7 @@ function projectDecodedDocument(fragment: Y.XmlFragment): DocumentProjection {
 }
 
 export function projectDocument(input: ProjectDocumentInput): DocumentProjection {
-  if (input.tiptapSchemaVersion !== DOCUMENT_PROJECTION_SCHEMA_VERSION) {
+  if (![1, DOCUMENT_PROJECTION_SCHEMA_VERSION].includes(input.tiptapSchemaVersion)) {
     throw new DocumentProjectionError(
       'unsupported_schema_version',
       `Unsupported TipTap schema version "${input.tiptapSchemaVersion}".`,
@@ -505,7 +547,10 @@ export function projectDocument(input: ProjectDocumentInput): DocumentProjection
     if (input.yjsState.byteLength > 0) {
       Y.applyUpdate(document, input.yjsState);
     }
-    return projectDecodedDocument(document.getXmlFragment(DOCUMENT_PROJECTION_YJS_FIELD));
+    return projectDecodedDocument(
+      document.getXmlFragment(DOCUMENT_PROJECTION_YJS_FIELD),
+      input.tiptapSchemaVersion,
+    );
   } catch (error) {
     if (error instanceof DocumentProjectionError) throw error;
     throw new DocumentProjectionError('invalid_yjs_state', 'Captured Yjs state is invalid.', {
