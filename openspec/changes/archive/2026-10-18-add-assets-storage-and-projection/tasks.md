@@ -67,4 +67,4 @@
 - [x] 8.3 Документировать ручную S3 provider migration: pause uploads/deletes, copy preserving keys, count/key/size/SHA-256 checks, compatibility smoke, config switch, verify reads/uploads, rollback window; не реализовывать dual-provider/hot migration.
 - [x] 8.4 Сверить migration/API/OpenAPI с `docs/database-schema-v2.md`, отдельно проверить pending storageKey intent, readiness metadata и `PageAssetGrant` diff.
 - [x] 8.5 Проверить совместимость #49 (обычный backend upload, assetId в Y.Doc), #51 (общая projection), #52 (snapshot retention), #53 (private signed read context) и provider switch без реализации будущих задач.
-- [ ] 8.6 Подготовить все изменения единым PR по #47; оставить implementation tasks незакрытыми до реализации и проверок.
+- [x] 8.6 Подготовить все изменения единым PR по #47; оставить implementation tasks незакрытыми до реализации и проверок.
