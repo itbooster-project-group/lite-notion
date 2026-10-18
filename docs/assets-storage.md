@@ -30,7 +30,22 @@ Document persistence использует expected `storageRevision` CAS. Hocusp
 
 После commit API вызывает общий Document Projection #97 на точные persisted bytes. Asset refs с отсутствующим grant или не-ready Asset не отклоняют уже live-synced документ и не попадают в `PAGE_ASSETS`. Marker не продвигается, metadata/read fail closed, а scheduler повторяет временные ошибки с bounded backoff. Постоянная validation ошибка подавляется для той же revision до нового document write или ручного rebuild.
 
-Новый пустой документ получает current empty `PageAssetProjection` в транзакции создания страницы. Существующие страницы после migration сохраняют NULL watermark до rebuild. GC включается после диагностики initial rebuild.
+Новый пустой документ получает current empty `PageAssetProjection` в транзакции создания страницы. Для существующих страниц после migration выполните resumable rebuild перед включением GC:
+
+```sh
+pnpm --filter @lite-notion/api assets:rebuild-projection
+```
+
+Команда использует persisted bytes и общий projection #97, читает не более 25 страниц за запрос и возвращает ненулевой код, если после прохода остались stale страницы. Её можно безопасно запускать повторно; revision guard не позволит записать marker для уже устаревшего capture. При ошибках изучите `pageId`, revision и typed diagnostics приложения, устраните причину и повторите команду. `ASSETS_GC_ENABLED` по умолчанию `false`; включайте его только после успешного прохода и проверки, что запрос ниже возвращает 0:
+
+```sql
+SELECT COUNT(*) AS stale_pages
+FROM "PageDocument" AS document
+JOIN "PageAssetProjection" AS projection ON projection."pageId" = document."pageId"
+WHERE projection."sourceStorageRevision" IS DISTINCT FROM document."storageRevision";
+```
+
+Page upload/grant остаётся закрытым для каждой страницы с отсутствующим или stale marker независимо от общего статуса rebuild.
 
 GC запускается обычным Nest interval и ограничивает размер прохода. Он координирует операции row locks: grant pages сначала по `pageId`, затем Asset; проверяет marker каждой page и `PAGE_ASSETS`, cover и avatar references; `PageAssetGrant` сам по себе не удерживает объект. Pending/failed uploads удаляются после TTL, а rotated orphan keys — после grace period. Ready assets удаляются только по явному запросу uploader-а, чтобы незакреплённая загрузка не исчезла до того, как клиент прикрепит её. Физическое удаление следует за committed tombstone; повторный проход завершает S3 delete после временного сбоя. Будущий #52 добавляет publication snapshot reference к retention check перед tombstone.
 

@@ -1,4 +1,5 @@
 import { Readable } from 'node:stream';
+import { UnauthorizedException } from '@nestjs/common';
 import type { Request } from 'express';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ApplicationConfig } from '../config/application-config';
@@ -279,6 +280,159 @@ describe('AssetsUseCases', () => {
     expect(current.status).toBe('failed');
   });
 
+  it('rejects a declared oversized upload before writing to storage', async () => {
+    const putObject = vi.spyOn(storage, 'putObject');
+    const request = Object.assign(Readable.from([]), {
+      headers: {
+        'content-length': String(10 * 1024 * 1024 + 1),
+        'content-type': 'image/png',
+      },
+    }) as Request;
+
+    await expect(uploadUseCases.upload(actorId, assetId, request)).rejects.toMatchObject({
+      status: 413,
+    });
+    expect(putObject).not.toHaveBeenCalled();
+  });
+
+  it('enforces the byte limit when a request omits Content-Length', async () => {
+    const bytes = Buffer.alloc(10 * 1024 * 1024 + 1, 1);
+    const request = Object.assign(Readable.from([bytes]), {
+      headers: { 'content-type': 'application/octet-stream' },
+    }) as Request;
+
+    await expect(uploadUseCases.upload(actorId, assetId, request)).rejects.toMatchObject({
+      status: 413,
+    });
+  });
+
+  it('leaves a retryable pending upload after a storage failure', async () => {
+    const current = {
+      id: assetId,
+      uploadedById: actorId,
+      originalName: 'image.png',
+      storageKey: originalKey,
+      status: 'pending',
+      mimeType: null as string | null,
+      sizeBytes: null as bigint | null,
+      checksum: null as string | null,
+    };
+    prisma.asset.findUnique.mockImplementation(async () => current);
+    prisma.asset.findUniqueOrThrow.mockImplementation(async () => current);
+    prisma.asset.updateMany.mockImplementation(
+      async ({
+        where,
+        data,
+      }: {
+        where: { storageKey: string; status: string };
+        data: Partial<typeof current>;
+      }) => {
+        if (current.status !== where.status || current.storageKey !== where.storageKey) {
+          return { count: 0 };
+        }
+        Object.assign(current, data);
+        return { count: 1 };
+      },
+    );
+    const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const createRequest = () =>
+      Object.assign(Readable.from([bytes]), {
+        headers: { 'content-length': String(bytes.length), 'content-type': 'image/png' },
+      }) as Request;
+    storage.failNext.add('put');
+
+    await expect(uploadUseCases.upload(actorId, assetId, createRequest())).rejects.toThrow(
+      'Injected put failure',
+    );
+    expect(current.status).toBe('pending');
+    expect(current.storageKey).toContain('/attempt-');
+
+    vi.spyOn(storage, 'headObject').mockResolvedValueOnce(null);
+    await expect(uploadUseCases.upload(actorId, assetId, createRequest())).rejects.toMatchObject({
+      status: 503,
+    });
+    expect(current.status).toBe('pending');
+    expect(storage.objects.has(current.storageKey)).toBe(true);
+
+    await expect(uploadUseCases.upload(actorId, assetId, createRequest())).resolves.toMatchObject({
+      id: assetId,
+      status: 'ready',
+    });
+  });
+
+  it('keeps a PutObject after the ready-state database update fails', async () => {
+    const current = {
+      id: assetId,
+      uploadedById: actorId,
+      originalName: 'image.png',
+      storageKey: originalKey,
+      status: 'pending',
+      mimeType: null as string | null,
+      sizeBytes: null as bigint | null,
+      checksum: null as string | null,
+    };
+    prisma.asset.findUnique.mockImplementation(
+      async ({ where }: { where: { storageKey?: string } }) =>
+        where.storageKey === undefined || where.storageKey === current.storageKey ? current : null,
+    );
+    prisma.asset.updateMany.mockImplementation(
+      async ({
+        where,
+        data,
+      }: {
+        where: { storageKey: string; status: string };
+        data: Partial<typeof current>;
+      }) => {
+        if (current.status !== where.status || current.storageKey !== where.storageKey) {
+          return { count: 0 };
+        }
+        if (data.status === 'ready') throw new Error('database transaction rolled back');
+        Object.assign(current, data);
+        return { count: 1 };
+      },
+    );
+    const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const request = Object.assign(Readable.from([bytes]), {
+      headers: { 'content-length': String(bytes.length), 'content-type': 'image/png' },
+    }) as Request;
+
+    await expect(uploadUseCases.upload(actorId, assetId, request)).rejects.toThrow(
+      'database transaction rolled back',
+    );
+    expect(current.status).toBe('pending');
+    const attemptedKey = current.storageKey;
+    expect(attemptedKey).toContain('/attempt-');
+    expect(storage.objects.has(attemptedKey)).toBe(true);
+    const stored = storage.objects.get(attemptedKey);
+    if (stored) stored.lastModified = new Date(0);
+    gcUseCases = new AssetGcUseCases(prisma as never, storage, {
+      assets: { gcBatchSize: 10, orphanGraceHours: 0 },
+    } as ApplicationConfig);
+
+    await gcUseCases.cleanupOrphanedObjects();
+
+    expect(storage.objects.has(attemptedKey)).toBe(true);
+  });
+
+  it('does not overwrite an already ready asset', async () => {
+    prisma.asset.findUnique.mockResolvedValue({
+      id: assetId,
+      uploadedById: actorId,
+      originalName: 'image.png',
+      storageKey: originalKey,
+      status: 'ready',
+    } as never);
+    const putObject = vi.spyOn(storage, 'putObject');
+    const request = Object.assign(Readable.from([Buffer.from('ignored')]), {
+      headers: { 'content-type': 'image/png' },
+    }) as Request;
+
+    await expect(uploadUseCases.upload(actorId, assetId, request)).rejects.toMatchObject({
+      status: 409,
+    });
+    expect(putObject).not.toHaveBeenCalled();
+  });
+
   it('fails closed when a page asset reference is ahead of the projection', async () => {
     vi.spyOn(permissions, 'requireRole').mockResolvedValue('viewer' as never);
     prisma.asset.findUnique.mockResolvedValue({
@@ -298,6 +452,33 @@ describe('AssetsUseCases', () => {
     await expect(useCases.metadataForPage(actorId, assetId, pageId)).rejects.toMatchObject({
       status: 401,
     });
+  });
+
+  it('does not let a viewer read an asset by ID without a reference on that page', async () => {
+    vi.spyOn(permissions, 'requireRole').mockResolvedValue('viewer' as never);
+    prisma.asset.findUnique.mockResolvedValue({
+      id: assetId,
+      status: 'ready',
+      mimeType: 'image/png',
+      sizeBytes: 8n,
+      originalName: 'image.png',
+    } as never);
+    prisma.pageAssetGrant.findUnique = vi.fn(async () => ({ pageId, assetId }));
+    prisma.pageAsset = { findFirst: vi.fn(async () => null) };
+    prisma.page = { findFirst: vi.fn(async () => null) };
+
+    await expect(useCases.metadataForPage(actorId, assetId, pageId)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('does not let asset ownership bypass target-page permission', async () => {
+    vi.spyOn(permissions, 'requireRole').mockRejectedValue(new UnauthorizedException());
+
+    await expect(useCases.metadataForPage(actorId, assetId, pageId)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(prisma.asset.findUnique).not.toHaveBeenCalled();
   });
 
   it('limits orphan scanning to one configured storage page per cleanup pass', async () => {

@@ -26,4 +26,26 @@ describe('ProjectionRetryScheduler', () => {
     expect(query.mock.calls[0]).toContain(5);
     expect(projection.execute).toHaveBeenCalledWith(record);
   });
+
+  it('keeps automatic retries bounded and suppresses permanent or not-yet-due failures', async () => {
+    const query = vi.fn(async (..._args: unknown[]) => []);
+    const prisma = { $queryRaw: query };
+    const projection = { execute: vi.fn(async () => undefined) };
+    const scheduler = new ProjectionRetryScheduler(
+      prisma as unknown as PrismaService,
+      projection as unknown as ProjectPageAssetsUseCase,
+    );
+
+    await scheduler.retryStaleProjections();
+
+    const [statement, maxAttempts, batchSize] = query.mock.calls[0] ?? [];
+    const sql = Array.isArray(statement) ? statement.join(' ') : '';
+    expect(sql).toContain('projection."attemptCount" <');
+    expect(sql).toContain('projection."retryAfter" <= NOW()');
+    expect(sql).toContain("'permanent_validation'");
+    expect(sql).toContain("'retry_exhausted'");
+    expect(sql).toContain('LIMIT');
+    expect(maxAttempts).toBe(5);
+    expect(batchSize).toBe(25);
+  });
 });

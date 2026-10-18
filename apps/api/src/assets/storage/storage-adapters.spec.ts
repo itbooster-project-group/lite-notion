@@ -5,6 +5,7 @@ import { Readable } from 'node:stream';
 import { describe, expect, it } from 'vitest';
 import { FilesystemObjectStorage } from './filesystem-object-storage';
 import { InMemoryObjectStorage } from './in-memory-object-storage';
+import { S3ObjectStorage } from './s3-object-storage';
 
 const key = 'assets/550e8400-e29b-41d4-a716-446655440000/650e8400-e29b-41d4-a716-446655440000';
 
@@ -74,6 +75,48 @@ describe('asset storage test adapters', () => {
     const storage = new InMemoryObjectStorage();
     await expect(storage.headObject('../secret')).rejects.toThrow(
       'Invalid server-generated storage key',
+    );
+  });
+
+  it('changes only S3 URL configuration while preserving the provider-independent key', async () => {
+    const first = new S3ObjectStorage({
+      assets: {
+        s3RequestTimeoutMs: 5_000,
+        s3: {
+          accessKeyId: 'test-access',
+          bucket: 'first-bucket',
+          endpoint: 'https://objects.first.example',
+          forcePathStyle: true,
+          region: 'region-a',
+          secretAccessKey: 'test-secret',
+        },
+      },
+    } as never);
+    const second = new S3ObjectStorage({
+      assets: {
+        s3RequestTimeoutMs: 5_000,
+        s3: {
+          accessKeyId: 'test-access',
+          bucket: 'second-bucket',
+          endpoint: 'https://objects.second.example',
+          forcePathStyle: false,
+          region: 'region-b',
+          secretAccessKey: 'test-secret',
+        },
+      },
+    } as never);
+
+    const firstUrl = new URL(await first.signedReadUrl(key, 60));
+    const secondUrl = new URL(await second.signedReadUrl(key, 60));
+
+    expect(firstUrl.host).toBe('objects.first.example');
+    expect(firstUrl.pathname).toBe(`/${'first-bucket'}/${key}`);
+    expect(firstUrl.searchParams.get('X-Amz-Credential')).toContain('/region-a/s3/');
+    expect(secondUrl.host).toBe('second-bucket.objects.second.example');
+    expect(secondUrl.pathname).toBe(`/${key}`);
+    expect(secondUrl.searchParams.get('X-Amz-Credential')).toContain('/region-b/s3/');
+    expect(key).toBe(
+      'assets/550e8400-e29b-41d4-a716-446655440000/650e8400-e29b-41d4-a716-446655440000',
     );
   });
 });

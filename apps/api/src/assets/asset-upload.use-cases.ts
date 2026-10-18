@@ -193,7 +193,7 @@ export class AssetUploadUseCases {
       }),
     ]);
     if (!document || !projection || document.storageRevision !== projection.sourceStorageRevision) {
-      throw new UnauthorizedException();
+      throw new ServiceUnavailableException('Page asset projection is not current yet');
     }
   }
 }

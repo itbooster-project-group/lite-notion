@@ -11,6 +11,8 @@ import { assertStorageKey, OBJECT_STORAGE, type ObjectStorage } from './storage/
 
 class GrantSetChangedError extends Error {}
 
+class StalePageProjectionError extends Error {}
+
 @Injectable()
 export class AssetGcUseCases {
   private readonly logger = new Logger(AssetGcUseCases.name);
@@ -52,9 +54,11 @@ export class AssetGcUseCases {
       try {
         await this.markDeleted(asset.uploadedById, asset.id, false, cutoff);
       } catch (error) {
-        this.logger.warn(
-          `Expired asset cleanup deferred for ${asset.id}: ${error instanceof Error ? error.message : 'unknown'}`,
-        );
+        if (!(error instanceof StalePageProjectionError)) {
+          this.logger.warn(
+            `Expired asset cleanup deferred for ${asset.id}: ${error instanceof Error ? error.message : 'unknown'}`,
+          );
+        }
       }
     }
   }
@@ -130,6 +134,7 @@ export class AssetGcUseCases {
             tx.page.count({ where: { coverAssetId: assetId } }),
             tx.userProfile.count({ where: { avatarAssetId: assetId } }),
           ]);
+          // #52 adds its active snapshot reference to this retention check.
           if (references + covers + avatars > 0)
             throw new ConflictException('Asset is still in use');
           if (current.status === 'ready') {
@@ -137,7 +142,7 @@ export class AssetGcUseCases {
               const [document, projection] = await Promise.all([
                 tx.pageDocument.findUnique({
                   where: { pageId },
-                  select: { storageRevision: true },
+                  select: { storageRevision: true, updatedAt: true },
                 }),
                 tx.pageAssetProjection.findUnique({
                   where: { pageId },
@@ -149,7 +154,18 @@ export class AssetGcUseCases {
                 !projection ||
                 document.storageRevision !== projection.sourceStorageRevision
               ) {
-                throw new Error(`Asset page projection is stale for page ${pageId}`);
+                if (
+                  document &&
+                  Date.now() - document.updatedAt.getTime() >=
+                    this.config.assets.projectionStaleWarningSeconds * 1_000
+                ) {
+                  this.logger.warn(
+                    `Asset GC deferred for stale page projection ${pageId} at revision ${document.storageRevision}`,
+                  );
+                }
+                throw new StalePageProjectionError(
+                  `Asset page projection is stale for page ${pageId}`,
+                );
               }
             }
           }

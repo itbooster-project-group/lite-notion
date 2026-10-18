@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
+import { Logger } from '@nestjs/common';
 import type { Request } from 'express';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { AssetGcUseCases } from '../../assets/asset-gc.use-cases';
@@ -114,6 +115,25 @@ describe('PageDocument provenance on PostgreSQL', () => {
     expect(record?.yjsState).toEqual(latest.yjsState);
   });
 
+  it('rejects a pending-to-ready transition without required storage metadata', async () => {
+    const asset = await prisma.asset.create({
+      data: {
+        id: randomUUID(),
+        originalName: 'incomplete.png',
+        storageKey: `assets/${randomUUID()}/${randomUUID()}`,
+        uploadedById: ownerId,
+      },
+    });
+    assetIds.push(asset.id);
+
+    await expect(
+      prisma.asset.update({ where: { id: asset.id }, data: { status: 'ready' } }),
+    ).rejects.toMatchObject({ code: 'P2039' });
+    expect((await prisma.asset.findUniqueOrThrow({ where: { id: asset.id } })).status).toBe(
+      'pending',
+    );
+  });
+
   it('starts a newly created empty page with a current asset projection watermark', async () => {
     const pageId = await createPage();
     const [document, projection] = await Promise.all([
@@ -125,6 +145,83 @@ describe('PageDocument provenance on PostgreSQL', () => {
     ]);
     expect(projection.sourceStorageRevision).toBe(document.storageRevision);
     expect(projection.sourceStorageRevision).toBe(0n);
+  });
+
+  it('rebuilds a migration-style missing watermark and keeps page upload closed until then', async () => {
+    const pageId = await createPage();
+    await prisma.pageAssetProjection.update({
+      where: { pageId },
+      data: { sourceStorageRevision: null },
+    });
+    const config = {
+      assets: {
+        gcBatchSize: 25,
+        gcEnabled: false,
+        gcIntervalSeconds: 60,
+        maxConcurrentUploads: 2,
+        maxUploadBytes: 10 * 1024 * 1024,
+        orphanGraceHours: 24,
+        pendingTtlHours: 24,
+        projectionStaleWarningSeconds: 300,
+        readUrlTtlSeconds: 60,
+        s3RequestTimeoutMs: 15_000,
+        uploadTimeoutMs: 120_000,
+        s3: null,
+      },
+    } as unknown as ApplicationConfig;
+    const uploads = new AssetUploadUseCases(
+      prisma as unknown as PrismaService,
+      { requireRole: vi.fn(async () => 'owner') } as never,
+      storage,
+      config,
+    );
+    await expect(uploads.initiate(ownerId, pageId, 'before-rebuild.png')).rejects.toMatchObject({
+      status: 503,
+    });
+
+    const scheduler = new ProjectionRetryScheduler(
+      prisma as unknown as PrismaService,
+      new ProjectPageAssetsUseCase(prisma as unknown as PrismaService),
+    );
+    await scheduler.retryStaleProjections();
+
+    const [document, projection] = await Promise.all([
+      prisma.pageDocument.findUniqueOrThrow({
+        where: { pageId },
+        select: { storageRevision: true },
+      }),
+      prisma.pageAssetProjection.findUniqueOrThrow({ where: { pageId } }),
+    ]);
+    expect(projection.sourceStorageRevision).toBe(document.storageRevision);
+    const initiated = await uploads.initiate(ownerId, pageId, 'after-rebuild.png');
+    assetIds.push(initiated.assetId);
+  });
+
+  it('recovers a transient projection failure without another document write', async () => {
+    const pageId = await createPage();
+    const repository = new PrismaPageDocumentRepository(prisma as unknown as DatabaseClient);
+    const committed = await repository.replaceYjsState(pageId, new Uint8Array(), 0n, 1);
+    if (!committed) throw new Error('Expected the document write to commit');
+    const projection = new ProjectPageAssetsUseCase(prisma as unknown as PrismaService);
+    const transaction = vi.spyOn(prisma, '$transaction');
+    transaction.mockRejectedValueOnce(new Error('temporary projection transaction failure'));
+    await projection.execute(committed);
+    transaction.mockRestore();
+
+    await prisma.pageAssetProjection.update({
+      where: { pageId },
+      data: { retryAfter: new Date(0) },
+    });
+    const scheduler = new ProjectionRetryScheduler(prisma as unknown as PrismaService, projection);
+    await scheduler.retryStaleProjections();
+
+    const [document, watermark] = await Promise.all([
+      prisma.pageDocument.findUniqueOrThrow({ where: { pageId } }),
+      prisma.pageAssetProjection.findUniqueOrThrow({ where: { pageId } }),
+    ]);
+    expect(document.storageRevision).toBe(committed?.storageRevision);
+    expect(watermark.sourceStorageRevision).toBe(document.storageRevision);
+    expect(watermark.lastErrorCode).toBeNull();
   });
 
   it('allows an editor to upload immediately on a new page before any rebuild', async () => {
@@ -335,6 +432,54 @@ describe('PageDocument provenance on PostgreSQL', () => {
     candidateQuery.mockRestore();
   });
 
+  it('cleans an expired pending asset only after committing its tombstone', async () => {
+    const storageKey = `assets/${randomUUID()}/${randomUUID()}`;
+    const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const asset = await prisma.asset.create({
+      data: {
+        createdAt: new Date(Date.now() - 48 * 60 * 60 * 1000),
+        id: randomUUID(),
+        originalName: 'expired.png',
+        storageKey,
+        uploadedById: ownerId,
+      },
+    });
+    assetIds.push(asset.id);
+    await storage.putObject(storageKey, {
+      body: Readable.from([bytes]),
+      checksum: 'expired-checksum',
+      contentLength: bytes.length,
+      contentType: 'image/png',
+    });
+    const config = {
+      assets: {
+        gcBatchSize: 25,
+        gcEnabled: false,
+        gcIntervalSeconds: 60,
+        maxConcurrentUploads: 2,
+        maxUploadBytes: 10 * 1024 * 1024,
+        orphanGraceHours: 24,
+        pendingTtlHours: 24,
+        projectionStaleWarningSeconds: 300,
+        readUrlTtlSeconds: 60,
+        s3RequestTimeoutMs: 15_000,
+        uploadTimeoutMs: 120_000,
+        s3: null,
+      },
+    } as unknown as ApplicationConfig;
+
+    await new AssetGcUseCases(
+      prisma as unknown as PrismaService,
+      storage,
+      config,
+    ).cleanupExpiredPendingAssets();
+
+    expect((await prisma.asset.findUniqueOrThrow({ where: { id: asset.id } })).status).toBe(
+      'deleted',
+    );
+    expect(await storage.headObject(storageKey)).toBeNull();
+  });
+
   it('retains referenced assets and deletes them only after an explicit request', async () => {
     const pageId = await createPage();
     const config = {
@@ -403,6 +548,7 @@ describe('PageDocument provenance on PostgreSQL', () => {
     await references.setAvatar(ownerId, avatarAssetId);
     await expect(assets.delete(ownerId, avatarAssetId)).rejects.toThrow('Asset is still in use');
     await references.setAvatar(ownerId, null);
+    await assets.delete(ownerId, avatarAssetId);
     await assets.delete(ownerId, avatarAssetId);
     expect((await prisma.asset.findUniqueOrThrow({ where: { id: avatarAssetId } })).status).toBe(
       'deleted',
@@ -522,6 +668,70 @@ describe('PageDocument provenance on PostgreSQL', () => {
     expect(await storage.headObject(storageKey)).toBeNull();
     expect(transactions).toHaveBeenCalledTimes(3);
     transactions.mockRestore();
+  });
+
+  it('defers a stale granted asset and warns only after the configured age', async () => {
+    const pageId = await createPage();
+    const staleAssetId = randomUUID();
+    const staleKey = `assets/${staleAssetId}/${randomUUID()}`;
+    const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const staleAsset = await prisma.asset.create({
+      data: {
+        checksum: 'stale-gc-checksum',
+        id: staleAssetId,
+        mimeType: 'image/png',
+        originalName: 'stale.png',
+        sizeBytes: BigInt(bytes.length),
+        status: 'ready',
+        storageKey: staleKey,
+        uploadedById: ownerId,
+      },
+    });
+    assetIds.push(staleAsset.id);
+    await prisma.pageAssetGrant.create({ data: { pageId, assetId: staleAssetId } });
+    await new PrismaPageDocumentRepository(prisma as unknown as DatabaseClient).replaceYjsState(
+      pageId,
+      new Uint8Array(),
+      0n,
+      1,
+    );
+    await storage.putObject(staleKey, {
+      body: Readable.from([bytes]),
+      checksum: 'stale-gc-checksum',
+      contentLength: bytes.length,
+      contentType: 'image/png',
+    });
+
+    const warning = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const config = {
+      assets: {
+        gcBatchSize: 25,
+        gcEnabled: false,
+        gcIntervalSeconds: 60,
+        maxConcurrentUploads: 2,
+        maxUploadBytes: 10 * 1024 * 1024,
+        orphanGraceHours: 24,
+        pendingTtlHours: 24,
+        projectionStaleWarningSeconds: 60,
+        readUrlTtlSeconds: 60,
+        s3RequestTimeoutMs: 15_000,
+        uploadTimeoutMs: 120_000,
+        s3: null,
+      },
+    } as unknown as ApplicationConfig;
+    const gc = new AssetGcUseCases(prisma as unknown as PrismaService, storage, config);
+
+    await expect(gc.delete(ownerId, staleAssetId)).rejects.toThrow('projection is stale');
+    expect(warning).not.toHaveBeenCalled();
+    await prisma.$executeRaw`UPDATE "PageDocument" SET "updatedAt" = NOW() - INTERVAL '10 minutes' WHERE "pageId" = ${pageId}::uuid`;
+    await expect(gc.delete(ownerId, staleAssetId)).rejects.toThrow('projection is stale');
+
+    expect((await prisma.asset.findUniqueOrThrow({ where: { id: staleAssetId } })).status).toBe(
+      'ready',
+    );
+    expect(await storage.headObject(staleKey)).not.toBeNull();
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining(pageId));
+    warning.mockRestore();
   });
 
   it('reads persisted bytes and provenance from one document record', async () => {
