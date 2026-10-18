@@ -49,6 +49,7 @@ export class InMemoryInternalApiClient {
   asClient(): InternalApiClient {
     const documents = new Map<string, Uint8Array>();
     const documentRevisions = new Map<string, bigint>();
+    const documentSchemaVersions = new Map<string, number>();
 
     const guard = (): void => {
       if (this.unavailable) {
@@ -67,24 +68,46 @@ export class InMemoryInternalApiClient {
       return {
         pageId,
         storageRevision: documentRevisions.get(pageId) ?? 0n,
-        tiptapSchemaVersion: 1,
+        tiptapSchemaVersion: documentSchemaVersions.get(pageId) ?? 1,
         yjsState: state?.slice() ?? new Uint8Array(),
       };
     };
 
-    const replaceDocument = async (pageId: string, yjsState: Uint8Array) => {
+    const replaceDocument = async (
+      pageId: string,
+      yjsState: Uint8Array,
+      expectedStorageRevision: bigint,
+      tiptapSchemaVersion: number,
+    ) => {
       guard();
 
       if (this.isDeleted(pageId)) {
         throw new ApiDeniedError(404);
       }
 
+      const currentRevision = documentRevisions.get(pageId) ?? 0n;
+      const currentState = documents.get(pageId) ?? new Uint8Array();
+      if (currentRevision !== expectedStorageRevision) {
+        return {
+          accepted: false,
+          document: {
+            pageId,
+            storageRevision: currentRevision,
+            tiptapSchemaVersion: documentSchemaVersions.get(pageId) ?? 1,
+            yjsState: currentState.slice(),
+          },
+        };
+      }
       const state = yjsState.slice();
-      const storageRevision = (documentRevisions.get(pageId) ?? 0n) + 1n;
+      const storageRevision = currentRevision + 1n;
       documents.set(pageId, state);
       documentRevisions.set(pageId, storageRevision);
+      documentSchemaVersions.set(pageId, tiptapSchemaVersion);
 
-      return { pageId, storageRevision, tiptapSchemaVersion: 1, yjsState: state.slice() };
+      return {
+        accepted: true,
+        document: { pageId, storageRevision, tiptapSchemaVersion, yjsState: state.slice() },
+      };
     };
 
     return {

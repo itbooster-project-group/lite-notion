@@ -324,11 +324,7 @@ describe('гонки вокруг мягкого удаления', () => {
     const page = await createPage(null, 'page');
 
     await expect(
-      documents.replace({
-        pageId: page.id,
-        tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
-        yjsState: new Uint8Array([1, 2, 3]),
-      }),
+      documents.replaceYjsState(page.id, new Uint8Array([1, 2, 3]), 0n, TIPTAP_SCHEMA_VERSION),
     ).resolves.toMatchObject({ pageId: page.id });
   });
 
@@ -336,22 +332,13 @@ describe('гонки вокруг мягкого удаления', () => {
     const page = await createPage(null, 'page');
     const state = new Uint8Array([1, 2, 3]);
 
-    await documents.replace({
-      pageId: page.id,
-      tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION,
-      yjsState: state,
-    });
+    await documents.replaceYjsState(page.id, state, 0n, TIPTAP_SCHEMA_VERSION);
     await softDeletePageUseCase.execute(page.id, ownerId);
 
-    // Живость проверяет `PageDocumentService` до записи, поэтому к моменту UPDATE
-    // проверка может устареть, а мягкое удаление строку документа не трогает —
-    // без условия в самом UPDATE содержимое ушло бы в уже удалённую страницу.
+    // Soft delete leaves the document row in place, so the persistence CAS must
+    // also require that the page remains live.
     await expect(
-      documents.replace({
-        pageId: page.id,
-        tiptapSchemaVersion: TIPTAP_SCHEMA_VERSION + 1,
-        yjsState: new Uint8Array([9, 9]),
-      }),
+      documents.replaceYjsState(page.id, new Uint8Array([9, 9]), 1n, TIPTAP_SCHEMA_VERSION + 1),
     ).resolves.toBeNull();
 
     const stored = await prisma.pageDocument.findUniqueOrThrow({ where: { pageId: page.id } });

@@ -1,5 +1,4 @@
 import { Inject, Injectable } from '@nestjs/common';
-
 import { PrismaService } from '../../database/prisma.service';
 import {
   type DatabaseClient,
@@ -11,12 +10,6 @@ import type { Bytes } from '../pages.repository';
 export interface PageDocumentRecord {
   pageId: string;
   storageRevision: bigint;
-  tiptapSchemaVersion: number;
-  yjsState: Bytes;
-}
-
-export interface ReplaceDocumentInput {
-  pageId: string;
   tiptapSchemaVersion: number;
   yjsState: Bytes;
 }
@@ -47,11 +40,13 @@ export abstract class PageDocumentRepository {
    */
   abstract insertEmpty(pageId: string, tiptapSchemaVersion: number): Promise<void>;
 
-  /** `null`, когда страницы нет либо она лежит в корзине. */
-  abstract replace(input: ReplaceDocumentInput): Promise<PageDocumentRecord | null>;
-
-  /** В отличие от `replace`, не трогает `tiptapSchemaVersion`. */
-  abstract replaceYjsState(pageId: string, yjsState: Bytes): Promise<PageDocumentRecord | null>;
+  /** Persisted collaboration writes supply the schema version captured at load. */
+  abstract replaceYjsState(
+    pageId: string,
+    yjsState: Bytes,
+    expectedStorageRevision: bigint,
+    tiptapSchemaVersion: number,
+  ): Promise<PageDocumentRecord | null>;
 }
 
 @Injectable()
@@ -73,41 +68,33 @@ export class PrismaPageDocumentRepository extends PageDocumentRepository {
 
   async insertEmpty(pageId: string, tiptapSchemaVersion: number): Promise<void> {
     await this.client.pageDocument.create({
-      data: { pageId, tiptapSchemaVersion, yjsState: new Uint8Array() },
+      data: {
+        pageId,
+        tiptapSchemaVersion,
+        yjsState: new Uint8Array(),
+      },
+    });
+    await this.client.pageAssetProjection.create({
+      data: { pageId, sourceStorageRevision: 0n },
     });
   }
 
-  async replace(input: ReplaceDocumentInput): Promise<PageDocumentRecord | null> {
+  async replaceYjsState(
+    pageId: string,
+    yjsState: Bytes,
+    expectedStorageRevision: bigint,
+    tiptapSchemaVersion: number,
+  ): Promise<PageDocumentRecord | null> {
     // Raw SQL keeps the live-page check, state write, storageRevision increment and
     // RETURNING in one statement, so concurrent writes cannot mix bytes and metadata.
     const records = await this.client.$queryRaw<PageDocumentRecord[]>`
       UPDATE "PageDocument" AS document
       SET "storageRevision" = document."storageRevision" + 1,
-          "tiptapSchemaVersion" = ${input.tiptapSchemaVersion},
-          "yjsState" = ${input.yjsState},
-          "updatedAt" = NOW()
-      WHERE document."pageId" = ${input.pageId}::uuid
-        AND EXISTS (
-          SELECT 1
-          FROM "Page" AS page
-          WHERE page.id = document."pageId"
-            AND page."deletedAt" IS NULL
-        )
-      RETURNING document."pageId", document."storageRevision", document."tiptapSchemaVersion", document."yjsState"
-    `;
-
-    return records[0] ?? null;
-  }
-
-  async replaceYjsState(pageId: string, yjsState: Bytes): Promise<PageDocumentRecord | null> {
-    // Raw SQL keeps the live-page check, state write, storageRevision increment and
-    // RETURNING in one statement, so concurrent writes cannot mix bytes and metadata.
-    const records = await this.client.$queryRaw<PageDocumentRecord[]>`
-      UPDATE "PageDocument" AS document
-      SET "storageRevision" = document."storageRevision" + 1,
+          "tiptapSchemaVersion" = ${tiptapSchemaVersion},
           "yjsState" = ${yjsState},
           "updatedAt" = NOW()
       WHERE document."pageId" = ${pageId}::uuid
+        AND document."storageRevision" = ${expectedStorageRevision}
         AND EXISTS (
           SELECT 1
           FROM "Page" AS page

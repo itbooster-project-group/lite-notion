@@ -1,3 +1,4 @@
+export { getAssetsMock } from './assets/assets.msw';
 export { getAuthMock } from './auth/auth.msw';
 export { getHealthMock } from './health/health.msw';
 export { getPagePermissionsMock } from './page-permissions/page-permissions.msw';

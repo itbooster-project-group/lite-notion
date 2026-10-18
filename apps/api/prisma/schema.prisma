@@ -9,17 +9,19 @@ datasource db {
 }
 
 model User {
-  id           String    @id @default(uuid()) @db.Uuid
-  email        String    @unique
-  name         String
-  passwordHash String
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  sessions     Session[]
-  projects     Project[]
-  ownedPages   Page[]    @relation("PageOwner")
-  createdPages Page[]    @relation("PageCreatedBy")
+  id               String             @id @default(uuid()) @db.Uuid
+  email            String             @unique
+  name             String
+  passwordHash     String
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  sessions         Session[]
+  projects         Project[]
+  ownedPages       Page[]             @relation("PageOwner")
+  createdPages     Page[]             @relation("PageCreatedBy")
   createdSnapshots DocumentSnapshot[] @relation("DocumentSnapshotCreatedBy")
+  uploadedAssets   Asset[]            @relation("AssetUploader")
+  profile          UserProfile?
 
   pagePermissions        PagePermission[] @relation("PagePermissionUser")
   grantedPagePermissions PagePermission[] @relation("PagePermissionGrantedBy")
@@ -81,6 +83,13 @@ enum SnapshotReason {
   restore
 }
 
+enum AssetStatus {
+  pending
+  ready
+  failed
+  deleted
+}
+
 /// Контейнер верхнего уровня для дерева страниц. Пара (id, ownerId) — составной
 /// ключ-кандидат: он существует только затем, чтобы на него мог сослаться composite
 /// FK со стороны Page и база сама держала «проект страницы принадлежит её владельцу».
@@ -124,20 +133,26 @@ model Page {
   deletedAt     DateTime?
   deletedOrigin PageDeletionOrigin?
 
-  owner       User             @relation("PageOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  createdBy   User             @relation("PageCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  project     Project          @relation(fields: [projectId, ownerId], references: [id, ownerId], onDelete: Cascade)
-  parent      Page?            @relation("PageTree", fields: [parentPageId, ownerId, projectId], references: [id, ownerId, projectId], onDelete: Cascade, onUpdate: NoAction)
-  children    Page[]           @relation("PageTree")
-  document    PageDocument?
-  snapshots   DocumentSnapshot[]
-  permissions PagePermission[]
+  owner           User                 @relation("PageOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdBy       User                 @relation("PageCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  project         Project              @relation(fields: [projectId, ownerId], references: [id, ownerId], onDelete: Cascade)
+  parent          Page?                @relation("PageTree", fields: [parentPageId, ownerId, projectId], references: [id, ownerId, projectId], onDelete: Cascade, onUpdate: NoAction)
+  children        Page[]               @relation("PageTree")
+  document        PageDocument?
+  snapshots       DocumentSnapshot[]
+  permissions     PagePermission[]
+  coverAssetId    String?              @db.Uuid
+  coverAsset      Asset?               @relation("PageCover", fields: [coverAssetId], references: [id], onDelete: Restrict)
+  assetGrants     PageAssetGrant[]
+  assets          PageAsset[]
+  assetProjection PageAssetProjection?
 
   @@unique([id, ownerId, projectId])
   @@index([ownerId, parentPageId, position])
   @@index([ownerId, deletedAt])
   // Очистка по сроку хранения идёт без владельца: WHERE "deletedAt" < cutoff.
   @@index([deletedAt])
+  @@index([coverAssetId])
 }
 
 /// Прямое разрешение пользователя на конкретную страницу. Составной PK держит
@@ -179,6 +194,83 @@ model PageDocument {
   updatedAt           DateTime @updatedAt
 
   page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+}
+
+model Asset {
+  id           String      @id @default(uuid()) @db.Uuid
+  uploadedById String      @db.Uuid
+  status       AssetStatus @default(pending)
+  storageKey   String      @unique
+  originalName String      @db.VarChar(255)
+  mimeType     String?
+  checksum     String?     @db.VarChar(64)
+  sizeBytes    BigInt?
+  width        Int?
+  height       Int?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  deletedAt    DateTime?
+
+  uploadedBy User             @relation("AssetUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+  grants     PageAssetGrant[]
+  pageAssets PageAsset[]
+  pageCovers Page[]           @relation("PageCover")
+  avatars    UserProfile[]    @relation("ProfileAvatar")
+
+  @@index([uploadedById, deletedAt])
+  @@index([status, createdAt])
+}
+
+model PageAssetGrant {
+  pageId    String   @db.Uuid
+  assetId   String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  page        Page        @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  asset       Asset       @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  occurrences PageAsset[]
+
+  @@id([pageId, assetId])
+  @@index([assetId])
+}
+
+model PageAsset {
+  pageId    String   @db.Uuid
+  assetId   String   @db.Uuid
+  nodeId    String   @db.VarChar(255)
+  createdAt DateTime @default(now())
+
+  page  Page           @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  grant PageAssetGrant @relation(fields: [pageId, assetId], references: [pageId, assetId], onDelete: Cascade)
+  asset Asset          @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@id([pageId, assetId, nodeId])
+  @@index([assetId])
+}
+
+model PageAssetProjection {
+  pageId                   String    @id @db.Uuid
+  sourceStorageRevision    BigInt?
+  attemptedStorageRevision BigInt?
+  attemptCount             Int       @default(0)
+  retryAfter               DateTime?
+  lastErrorCode            String?
+  updatedAt                DateTime  @updatedAt
+
+  page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@index([sourceStorageRevision])
+  @@index([retryAfter])
+}
+
+model UserProfile {
+  userId        String  @id @db.Uuid
+  avatarAssetId String? @db.Uuid
+
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  avatarAsset Asset? @relation("ProfileAvatar", fields: [avatarAssetId], references: [id], onDelete: Restrict)
+
+  @@index([avatarAssetId])
 }
 
 model DocumentSnapshot {

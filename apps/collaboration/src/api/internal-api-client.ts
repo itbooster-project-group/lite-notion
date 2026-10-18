@@ -24,6 +24,11 @@ export interface PersistedDocumentRecord {
   yjsState: Uint8Array;
 }
 
+export interface DocumentWriteResult {
+  accepted: boolean;
+  document: PersistedDocumentRecord;
+}
+
 export interface InternalApiClientOptions {
   baseUrl: string;
   serviceToken: string;
@@ -81,15 +86,31 @@ export class InternalApiClient {
     return this.decodeDocumentRecord(body);
   }
 
-  async replaceDocument(pageId: string, yjsState: Uint8Array): Promise<PersistedDocumentRecord> {
+  async replaceDocument(
+    pageId: string,
+    yjsState: Uint8Array,
+    expectedStorageRevision: bigint,
+    tiptapSchemaVersion: number,
+  ): Promise<DocumentWriteResult> {
     const body = await this.request<unknown>(
       'PUT',
       `/internal/pages/${encodeURIComponent(pageId)}/document`,
       { ...this.serviceHeaders(), 'content-type': 'application/json' },
-      JSON.stringify({ yjsState: Buffer.from(yjsState).toString('base64') }),
+      JSON.stringify({
+        expectedStorageRevision: expectedStorageRevision.toString(),
+        tiptapSchemaVersion,
+        yjsState: Buffer.from(yjsState).toString('base64'),
+      }),
     );
 
-    return this.decodeDocumentRecord(body);
+    if (typeof body !== 'object' || body === null) {
+      throw new ApiUnavailableError('MalformedDocumentResponse');
+    }
+    const accepted = (body as { accepted?: unknown }).accepted;
+    return {
+      accepted: accepted === undefined ? true : accepted === true,
+      document: await this.decodeDocumentRecord(body),
+    };
   }
 
   private async decodeDocumentRecord(value: unknown): Promise<PersistedDocumentRecord> {

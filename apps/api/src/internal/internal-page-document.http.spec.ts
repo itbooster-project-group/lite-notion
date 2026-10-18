@@ -42,11 +42,17 @@ describe('internal page document HTTP contract', () => {
       .get(path(id))
       .set(INTERNAL_SERVICE_TOKEN_HEADER, serviceToken);
 
-  const write = (yjsState: string, id = pageId) =>
-    request(context.app.getHttpServer())
+  const write = (yjsState: string, id = pageId, expectedStorageRevision?: number) => {
+    const document = context.documents.documents.get(id);
+    return request(context.app.getHttpServer())
       .put(path(id))
       .set(INTERNAL_SERVICE_TOKEN_HEADER, serviceToken)
-      .send({ yjsState });
+      .send({
+        expectedStorageRevision: String(expectedStorageRevision ?? document?.storageRevision ?? 0),
+        tiptapSchemaVersion: document?.tiptapSchemaVersion ?? TIPTAP_SCHEMA_VERSION,
+        yjsState,
+      });
+  };
 
   it('читает пустой документ только что созданной страницы', async () => {
     const response = await read().expect(200);
@@ -81,6 +87,16 @@ describe('internal page document HTTP contract', () => {
 
     expect(after?.storageRevision).toBe(revisionBefore + 1);
     expect(after?.tiptapSchemaVersion).toBe(TIPTAP_SCHEMA_VERSION);
+  });
+
+  it('не перезаписывает документ при устаревшей expected revision', async () => {
+    const current = randomBytes(16).toString('base64');
+    await write(current).expect(200);
+    const response = await write(randomBytes(16).toString('base64'), pageId, 0).expect(200);
+
+    expect(response.body.accepted).toBe(false);
+    expect(response.body.storageRevision).toBe('1');
+    expect((await read().expect(200)).body.yjsState).toBe(current);
   });
 
   it('принимает содержимое предельного размера', async () => {

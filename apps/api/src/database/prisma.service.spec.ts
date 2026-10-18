@@ -6,6 +6,20 @@ import { NodeEnvironment } from '../config/environment';
 import { PrismaService } from './prisma.service';
 
 const config: ApplicationConfig = {
+  assets: {
+    gcBatchSize: 50,
+    gcEnabled: false,
+    gcIntervalSeconds: 60,
+    maxConcurrentUploads: 4,
+    maxUploadBytes: 10 * 1024 * 1024,
+    orphanGraceHours: 24,
+    pendingTtlHours: 24,
+    projectionStaleWarningSeconds: 300,
+    readUrlTtlSeconds: 60,
+    s3RequestTimeoutMs: 15_000,
+    uploadTimeoutMs: 120_000,
+    s3: null,
+  },
   accessTokenTtlS: 900,
   bcryptRounds: 4,
   collaborationBaseUrl: 'http://localhost:3002',

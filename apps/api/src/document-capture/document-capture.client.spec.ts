@@ -7,6 +7,20 @@ import { DocumentCaptureClient } from './document-capture.client';
 import { DocumentCaptureUnavailableError } from './errors/document-capture-unavailable.error';
 
 const config: ApplicationConfig = {
+  assets: {
+    gcBatchSize: 50,
+    gcEnabled: false,
+    gcIntervalSeconds: 60,
+    maxConcurrentUploads: 4,
+    maxUploadBytes: 10 * 1024 * 1024,
+    orphanGraceHours: 24,
+    pendingTtlHours: 24,
+    projectionStaleWarningSeconds: 300,
+    readUrlTtlSeconds: 60,
+    s3RequestTimeoutMs: 15_000,
+    uploadTimeoutMs: 120_000,
+    s3: null,
+  },
   accessTokenTtlS: 900,
   bcryptRounds: 12,
   collaborationBaseUrl: 'http://collaboration.test',

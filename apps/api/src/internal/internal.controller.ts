@@ -111,8 +111,15 @@ export class InternalController {
   ): Promise<InternalDocumentDto> {
     const yjsState = new Uint8Array(Buffer.from(body.yjsState, 'base64'));
 
-    return InternalDocumentDto.fromRecord(
-      await toHttpException(() => this.persistDocument.execute(pageId, yjsState)),
+    return InternalDocumentDto.fromWriteResult(
+      await toHttpException(() =>
+        this.persistDocument.execute(
+          pageId,
+          yjsState,
+          BigInt(body.expectedStorageRevision),
+          body.tiptapSchemaVersion,
+        ),
+      ),
     );
   }
 }

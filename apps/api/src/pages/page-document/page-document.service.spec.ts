@@ -13,6 +13,7 @@ import { ProjectsService } from '../../projects/projects.service';
 import { UsersService } from '../../users/users.service';
 import { TIPTAP_SCHEMA_VERSION } from '../constants';
 import { PageNotFoundError } from '../errors';
+import type { Bytes } from '../pages.repository';
 import { PagesRepository } from '../pages.repository';
 import { InMemoryPagesRepository, type StoredDocument } from '../pages.repository.in-memory';
 import { PagesService } from '../pages.service';
@@ -21,6 +22,7 @@ import { SoftDeletePageUseCase } from '../use-cases/soft-delete-page.use-case';
 import { PageDocumentRepository } from './page-document.repository';
 import { InMemoryPageDocumentRepository } from './page-document.repository.in-memory';
 import { PageDocumentService } from './page-document.service';
+import { PersistPageDocumentStateUseCase } from './use-cases/persist-page-document-state.use-case';
 
 const owner = '11111111-1111-1111-1111-111111111111';
 const stranger = '22222222-2222-2222-2222-222222222222';
@@ -62,6 +64,30 @@ describe('PageDocumentService', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         PageDocumentService,
+        {
+          provide: PersistPageDocumentStateUseCase,
+          useValue: {
+            execute: async (
+              pageId: string,
+              yjsState: Bytes,
+              expectedRevision: bigint,
+              schemaVersion: number,
+            ) => {
+              const document = await documents.replaceYjsState(
+                pageId,
+                yjsState,
+                expectedRevision,
+                schemaVersion,
+              );
+              const resultDocument = document ?? (await documents.find(pageId));
+              if (!resultDocument) throw new Error('Document disappeared during replacement');
+              return {
+                accepted: document !== null,
+                document: resultDocument,
+              };
+            },
+          },
+        },
         PagesService,
         ProjectsService,
         CreatePageUseCase,
@@ -256,11 +282,7 @@ describe('PageDocumentService', () => {
     // Репозиторий напрямую: сервис отсеял бы запрос своей проверкой, а гонка
     // происходит как раз после неё — проверка живости обязана быть в самой записи.
     await expect(
-      documents.replace({
-        pageId: page.id,
-        tiptapSchemaVersion: 9,
-        yjsState: new Uint8Array([9, 9]),
-      }),
+      documents.replaceYjsState(page.id, new Uint8Array([9, 9]), 1n, 9),
     ).resolves.toBeNull();
     expect(documents.documents.get(page.id)).toMatchObject({
       tiptapSchemaVersion: 2,

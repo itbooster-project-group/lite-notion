@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
-
+import { AssetsModule } from './assets/assets.module';
 import { AuthModule } from './auth/auth.module';
 import { applicationConfig } from './config/application-config';
 import { HealthModule } from './health/health.module';
@@ -24,6 +24,7 @@ import { TrashCleanupModule } from './trash/trash-cleanup.module';
     }),
     ScheduleModule.forRoot(),
     AuthModule,
+    AssetsModule,
     HealthModule,
     PagesModule,
     PageDocumentModule,

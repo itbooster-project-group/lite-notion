@@ -69,6 +69,26 @@ describe('projectDocument', () => {
     });
   });
 
+  it('projects v2 asset image references without decoding a second document format', () => {
+    const assetId = '44444444-4444-4444-8444-444444444444';
+    const yjsState = createState((fragment) => {
+      appendElement(fragment, 'image', {
+        nodeId: IMAGE_ID,
+        source: { type: 'asset', assetId },
+        alt: 'Cover image',
+        decorative: false,
+      });
+    });
+
+    expect(projectDocument({ yjsState, tiptapSchemaVersion: 2 })).toMatchObject({
+      schemaVersion: 2,
+      mediaReferences: [{ type: 'asset', nodeId: IMAGE_ID, assetId }],
+      contentJson: {
+        content: [{ attrs: { source: { type: 'asset', assetId } } }],
+      },
+    });
+  });
+
   it('converts paragraphs, text, and adjacent text segments without losing content', () => {
     const yjsState = createState((fragment) => {
       const first = appendElement(fragment, 'paragraph');
@@ -507,7 +527,7 @@ describe('projectDocument', () => {
       'invalid_yjs_state',
     );
     expectProjectionError(
-      () => projectDocument({ yjsState: new Uint8Array(), tiptapSchemaVersion: 2 }),
+      () => projectDocument({ yjsState: new Uint8Array(), tiptapSchemaVersion: 3 }),
       'unsupported_schema_version',
     );
   });

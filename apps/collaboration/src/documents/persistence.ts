@@ -6,6 +6,24 @@ import { parsePageDocumentName } from './document-name.js';
 
 /** Предел итогового Yjs state. WebSocket payload ограничивается отдельно. */
 export const DOCUMENT_MAX_BYTES = 1024 * 1024;
+const documentRevisions = new WeakMap<Y.Doc, bigint>();
+const documentSchemaVersions = new WeakMap<Y.Doc, number>();
+
+export function documentStorageRevision(document: Y.Doc): bigint | undefined {
+  return documentRevisions.get(document);
+}
+
+export function setDocumentStorageRevision(document: Y.Doc, revision: bigint): void {
+  documentRevisions.set(document, revision);
+}
+
+export function documentTiptapSchemaVersion(document: Y.Doc): number | undefined {
+  return documentSchemaVersions.get(document);
+}
+
+export function setDocumentTiptapSchemaVersion(document: Y.Doc, version: number): void {
+  documentSchemaVersions.set(document, version);
+}
 
 export class DocumentLoadError extends Error {
   constructor() {
@@ -36,7 +54,11 @@ export class PageDocumentPersistence {
     const { pageId } = parsePageDocumentName(documentName);
 
     try {
-      return this.createDocumentFromState(await this.api.readDocument(pageId));
+      const record = await this.api.readDocumentRecord(pageId);
+      const document = this.createDocumentFromState(record.yjsState);
+      setDocumentStorageRevision(document, record.storageRevision);
+      setDocumentTiptapSchemaVersion(document, record.tiptapSchemaVersion);
+      return document;
     } catch (error) {
       if (error instanceof ApiDeniedError) {
         throw new DocumentLoadError();
@@ -55,7 +77,31 @@ export class PageDocumentPersistence {
     }
 
     try {
-      await this.api.replaceDocument(pageId, state);
+      let expectedRevision = documentStorageRevision(document);
+      let schemaVersion = documentTiptapSchemaVersion(document);
+      if (expectedRevision === undefined) {
+        const latest = await this.api.readDocumentRecord(pageId);
+        expectedRevision = latest.storageRevision;
+        schemaVersion = latest.tiptapSchemaVersion;
+      }
+      schemaVersion ??= 1;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const result = await this.api.replaceDocument(
+          pageId,
+          Y.encodeStateAsUpdate(document),
+          expectedRevision,
+          schemaVersion,
+        );
+        if (result.accepted) {
+          setDocumentStorageRevision(document, result.document.storageRevision);
+          setDocumentTiptapSchemaVersion(document, result.document.tiptapSchemaVersion);
+          return;
+        }
+        Y.applyUpdate(document, result.document.yjsState);
+        expectedRevision = result.document.storageRevision;
+        schemaVersion = result.document.tiptapSchemaVersion;
+      }
+      throw new Error('Document changed concurrently too many times');
     } catch (error) {
       // Отказ по инварианту живости страницы: комнату надо завершить, а не повторять.
       if (error instanceof ApiDeniedError) {

@@ -1,9 +1,10 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { ConflictException, Inject, Injectable } from '@nestjs/common';
 import { PageRole } from '../../page-permissions/constants';
 import { PagePermissionsService } from '../../page-permissions/page-permissions.service';
 import { PageNotFoundError } from '../errors';
 import type { Bytes } from '../pages.repository';
 import { type PageDocumentRecord, PageDocumentRepository } from './page-document.repository';
+import { PersistPageDocumentStateUseCase } from './use-cases/persist-page-document-state.use-case';
 
 export interface ReplaceDocumentCommand {
   actorId: string;
@@ -22,6 +23,8 @@ export class PageDocumentService {
   constructor(
     @Inject(PageDocumentRepository) private readonly documents: PageDocumentRepository,
     @Inject(PagePermissionsService) private readonly permissions: PagePermissionsService,
+    @Inject(PersistPageDocumentStateUseCase)
+    private readonly persistDocument: PersistPageDocumentStateUseCase,
   ) {}
 
   /** Чтение содержимого — то же, что чтение страницы, поэтому `viewer`. */
@@ -35,13 +38,15 @@ export class PageDocumentService {
   async replace(command: ReplaceDocumentCommand): Promise<PageDocumentRecord> {
     await this.permissions.requireRole(command.actorId, command.pageId, PageRole.EDITOR);
 
-    return this.require(
-      await this.documents.replace({
-        pageId: command.pageId,
-        tiptapSchemaVersion: command.tiptapSchemaVersion,
-        yjsState: command.yjsState,
-      }),
+    const current = this.require(await this.documents.find(command.pageId));
+    const result = await this.persistDocument.execute(
+      command.pageId,
+      command.yjsState,
+      current.storageRevision,
+      command.tiptapSchemaVersion,
     );
+    if (!result.accepted) throw new ConflictException('Document changed during replacement');
+    return result.document;
   }
 
   /**

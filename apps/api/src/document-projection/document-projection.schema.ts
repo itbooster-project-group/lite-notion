@@ -7,7 +7,7 @@ const mediaPresentationAttrs = {
   widthPercent: { default: 100 },
 };
 
-export const DOCUMENT_PROJECTION_SCHEMA_VERSION = 1;
+export const DOCUMENT_PROJECTION_SCHEMA_VERSION = 2;
 export const DOCUMENT_PROJECTION_YJS_FIELD = 'default';
 
 export const documentProjectionSchema = new Schema({
@@ -49,6 +49,7 @@ export const documentProjectionSchema = new Schema({
         alt: { default: '' },
         decorative: { default: false },
         src: { default: null },
+        source: { default: null },
       },
     },
     video: {

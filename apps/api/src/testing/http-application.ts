@@ -18,6 +18,7 @@ import { PagePermissionsRepository } from '../page-permissions/page-permissions.
 import { InMemoryPagePermissionsRepository } from '../page-permissions/page-permissions.repository.in-memory';
 import { PageDocumentRepository } from '../pages/page-document/page-document.repository';
 import { InMemoryPageDocumentRepository } from '../pages/page-document/page-document.repository.in-memory';
+import { ProjectPageAssetsUseCase } from '../pages/page-document/use-cases/project-page-assets.use-case';
 import { PagesRepository } from '../pages/pages.repository';
 import {
   InMemoryPagesRepository,
@@ -77,6 +78,8 @@ export async function createHttpTestContext(): Promise<HttpTestContext> {
     .useValue(pages)
     .overrideProvider(PageDocumentRepository)
     .useValue(documents)
+    .overrideProvider(ProjectPageAssetsUseCase)
+    .useValue({ execute: vi.fn(async () => undefined) })
     .overrideProvider(ProjectsRepository)
     .useValue(projects)
     .overrideProvider(PagePermissionsRepository)
