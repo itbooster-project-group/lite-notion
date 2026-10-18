@@ -29,7 +29,7 @@ Document Projection MUST принимать captured Yjs bytes и соответ
 
 ### Requirement: Projection fail closed при несовместимой схеме или риске потери содержимого
 
-Projection MUST поддерживать только явно объявленные версии persisted schema. Она MUST явно отклонять неизвестные версии, повреждённые bytes и nodes, marks, attrs или структуры, которые текущая schema не поддерживает либо не может сохранить. Projection MUST NOT терять семантическое содержимое и MUST NOT возвращать частичный JSON. Representation-only нормализация без семантических изменений разрешена.
+Projection MUST поддерживать только явно объявленные версии persisted schema. Она MUST явно отклонять неизвестные версии, повреждённые bytes и nodes, marks, attrs или структуры, которые текущая schema не поддерживает либо не может сохранить. Projection MUST NOT терять семантическое содержимое и MUST NOT возвращать частичный JSON. Representation-only нормализация без семантических изменений разрешена. Единственные разрешённые canonical transformations attrs — frontend-equivalent normalization persisted media attrs и нормализация `link.href` через `normalizePageDocumentLink()`.
 
 #### Scenario: Неизвестная schema version
 - **WHEN** projection получает версию, для которой нет поддерживаемой persisted schema
@@ -48,20 +48,24 @@ Projection MUST поддерживать только явно объявлен�
 - **THEN** projection возвращает явную ошибку schema validation вместо пропуска проблемного фрагмента
 
 #### Scenario: Потеря содержимого при нормализации
-- **WHEN** conversion теряет или изменяет node, текст, attr либо mark сверх явно заданной canonicalization persisted media attrs и representation-only нормализаций
+- **WHEN** conversion теряет или изменяет node, текст, attr либо mark сверх явно заданной canonicalization persisted media attrs, `link.href` и representation-only нормализаций
 - **THEN** projection возвращает явную ошибку schema validation и не выдаёт нормализованный JSON
 
 #### Scenario: Семантически эквивалентная нормализация
-- **WHEN** projection canonicalizes media attrs по действующим frontend validators, а ProseMirror нормализация добавляет schema-default attrs, опускает пустой `content` или меняет только порядок marks при сохранении их набора и attrs
+- **WHEN** projection canonicalizes media attrs по действующим frontend validators и `link.href` через `normalizePageDocumentLink()`, а ProseMirror нормализация добавляет schema-default attrs, опускает пустой `content` или меняет только порядок marks при сохранении их набора и attrs
 - **THEN** projection принимает результат как эквивалентный и возвращает полный нормализованный JSON
 
 ### Requirement: Schema v1 соответствует текущему persisted editor document
 
-Schema version 1 MUST декодировать persisted nodes, marks, attrs и defaults текущей editor schema, включая текстовые документы, форматирование, списки, task nodes и текущие media nodes. Проверка совместимости MUST использовать один и тот же реальный versioned Yjs fixture в frontend и backend tests и проверять JSON representation, а также сохранность типов nodes, marks и attrs.
+Schema version 1 MUST декодировать persisted nodes, marks, attrs и defaults текущей editor schema, включая текстовые документы, форматирование, списки, task nodes и текущие media nodes. Проверка совместимости MUST использовать один и тот же реальный versioned Yjs fixture в frontend и backend tests и проверять JSON representation, а также сохранность типов nodes, marks и attrs. Отдельная контрактная проверка MUST сравнивать реальную frontend ProseMirror schema с backend schema по nodes, marks, persisted attr names, attr defaults и schema version. UI-only extensions, не добавляющие nodes или marks в ProseMirror schema, MUST NOT считаться schema drift.
 
 #### Scenario: Fixture текущей frontend schema
 - **WHEN** одна versioned Yjs fixture schema v1 проверяется web и API test suites
 - **THEN** текущая editor schema и backend projection дают эквивалентный ProseMirror JSON с теми же nodes, marks, mark attrs и node attrs, включая несколько simultaneous marks, link attrs, соседние text segments, вложенные task/list nodes и комбинацию image/video/youtube
+
+#### Scenario: Изменение frontend schema обнаруживается без изменения fixture
+- **WHEN** frontend добавляет или удаляет node/mark либо меняет имя/default persisted attr без согласованного изменения backend schema
+- **THEN** контрактный compatibility test завершается ошибкой с указанием расхождения
 
 #### Scenario: Yjs mark name с y-prosemirror hash suffix
 - **WHEN** `Y.XmlText.toDelta()` содержит mark attribute key, совпадающий с `/(.*)(--[a-zA-Z0-9+/=]{8})$/`, для поддерживаемого mark
@@ -74,6 +78,40 @@ Schema version 1 MUST декодировать persisted nodes, marks, attrs и 
 #### Scenario: Изменение persisted schema
 - **WHEN** frontend меняет persisted nodes, marks, attrs или defaults
 - **THEN** projection совместима только после согласованного обновления backend schema, версии и fixture, подтверждённого compatibility tests
+
+### Requirement: Persisted attrs проверяются по ограничениям schema v1
+
+Projection MUST валидировать persisted attrs, ограничения которых не обеспечивает одна ProseMirror schema: `heading.level` MUST быть одним из `1`, `2`, `3`; `taskItem.checked` MUST быть boolean; `orderedList.type` MUST быть string или `null`; `link.href` MUST быть строкой, принимаемой frontend normalizer. Отсутствующий `orderedList.start` MUST использовать schema default `1`; заданный `start` MUST быть safe integer, включая отрицательные значения и ноль. Дробный, non-finite или выходящий за пределы safe integer `start` MUST завершаться typed schema error без частичного projection и MUST NOT заменяться default-ом.
+
+`heading.level` MUST оставаться ограничен уровнями frontend `[1, 2, 3]`. Media `widthPercent` MUST нормализоваться существующим frontend правилом: `Number()` conversion, non-finite -> `100`, round, clamp `25..100`. В schema v1 нет других числовых persisted attrs. Эти проверки остаются конкретными, без универсального validation framework.
+
+#### Scenario: Допустимый orderedList.start
+- **WHEN** ordered list не содержит `start` либо содержит safe integer, включая `1`, `0`, `-2`, `Number.MIN_SAFE_INTEGER` или `Number.MAX_SAFE_INTEGER`
+- **THEN** projection использует default `1` для отсутствующего attr и сохраняет заданное целое значение без ограничения знака
+
+#### Scenario: Некорректный orderedList.start
+- **WHEN** ordered list содержит строковый, дробный, другой нечисловой, non-finite или unsafe integer `start`
+- **THEN** projection возвращает typed schema error и не возвращает частичный JSON или media references
+
+#### Scenario: Некорректные прочие persisted attrs
+- **WHEN** heading имеет level вне `1|2|3`, task item имеет неboolean `checked`, или link href имеет нестроковое/недопустимое значение
+- **THEN** projection возвращает typed schema error без частичного результата
+
+#### Scenario: Media widthPercent следует frontend normalization
+- **WHEN** текущий frontend media validator принимает width после `Number()` conversion, non-finite fallback, округления и clamp
+- **THEN** projection записывает то же нормализованное число в `contentJson`, а остальные media refs строятся согласованно с canonical attrs
+
+### Requirement: Link href canonicalization повторяет текущий frontend normalizer
+
+Projection MUST использовать правила `normalizePageDocumentLink()`: trim внешних whitespace; добавить `https://`, если scheme отсутствует; принять только `http:`, `https:` или `mailto:`; для HTTP(S) требовать hostname и отсутствие username/password; для mailto требовать непустой pathname. При успехе `contentJson` MUST содержать canonical `URL.href`, а не исходную строку. Другие transformations не допускаются. Недопустимая ссылка MUST приводить к typed schema error без частичного projection. Эта normalization явно разрешена semantic comparison для `link.href`. Canonicalization MUST NOT изменять captured Yjs bytes или исходный Y.Doc.
+
+#### Scenario: Допустимая ссылка нормализуется в JSON
+- **WHEN** link mark содержит ссылку, принимаемую `normalizePageDocumentLink()`, включая URL без scheme или внешние whitespace
+- **THEN** `contentJson` содержит нормализованный `href`, эквивалентный frontend `URL.href`, а captured bytes остаются неизменными
+
+#### Scenario: Недопустимая ссылка закрывает projection
+- **WHEN** link mark имеет отсутствующий/нестроковый href, запрещённый scheme, HTTP(S) без hostname или URL с credentials
+- **THEN** projection возвращает typed schema error и не возвращает частичный результат
 
 ### Requirement: Media references извлекаются из той же версии документа
 

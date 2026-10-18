@@ -1,4 +1,5 @@
-import { type Mark as ProseMirrorMark, Node as ProseMirrorNode } from '@tiptap/pm/model';
+import { isDeepStrictEqual } from 'node:util';
+import { type Mark as ProseMirrorMark } from '@tiptap/pm/model';
 import * as Y from 'yjs';
 
 import { DocumentProjectionError } from './document-projection.errors';
@@ -148,7 +149,7 @@ function validatePersistedNodeAttrs(
   }
 
   if (type === 'orderedList') {
-    if (attrs.start !== undefined && typeof attrs.start !== 'number') {
+    if (attrs.start !== undefined && !Number.isSafeInteger(attrs.start)) {
       throw invalidContent('orderedList node has an invalid start attr.');
     }
     if (attrs.type !== undefined && attrs.type !== null && typeof attrs.type !== 'string') {
@@ -400,35 +401,6 @@ function serializeXmlElement(
   return result;
 }
 
-function serializeProseMirrorNode(node: ProseMirrorNode): ProseMirrorJSONContent {
-  const attrs = toJsonObject(node.attrs, `Node "${node.type.name}" attrs`);
-  const marks = node.marks.map((mark) => {
-    const markAttrs = toJsonObject(mark.attrs, `Mark "${mark.type.name}" attrs`);
-    return Object.keys(markAttrs).length
-      ? { type: mark.type.name, attrs: markAttrs }
-      : { type: mark.type.name };
-  });
-
-  const content: ProseMirrorJSONContent[] = [];
-  node.content.forEach((child) => {
-    content.push(serializeProseMirrorNode(child));
-  });
-
-  if (node.isText) {
-    return {
-      type: 'text',
-      text: node.text ?? '',
-      ...(marks.length ? { marks } : {}),
-    };
-  }
-
-  return {
-    type: node.type.name,
-    ...(Object.keys(attrs).length ? { attrs } : {}),
-    ...(content.length ? { content } : {}),
-  };
-}
-
 function normalizeJsonForComparison(node: ProseMirrorJSONContent): ProseMirrorJSONContent {
   if (node.type === 'text') {
     const text = node.text;
@@ -503,10 +475,9 @@ function projectDecodedDocument(fragment: Y.XmlFragment): DocumentProjection {
     const document = documentProjectionSchema.nodeFromJSON(rawJson);
     document.check();
 
-    const contentJson = serializeProseMirrorNode(document);
+    const contentJson = document.toJSON() as ProseMirrorJSONContent;
     const expected = normalizeJsonForComparison(rawJson);
-    const actual = normalizeJsonForComparison(contentJson);
-    if (JSON.stringify(expected) !== JSON.stringify(actual)) {
+    if (!isDeepStrictEqual(expected, contentJson)) {
       throw invalidContent('ProseMirror normalization would lose document content.');
     }
 

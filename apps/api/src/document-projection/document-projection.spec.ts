@@ -127,7 +127,7 @@ describe('projectDocument', () => {
       appendText(heading, 'Heading');
 
       const orderedList = appendElement(fragment, 'orderedList', {
-        start: -2.5,
+        start: -2,
         type: 'custom',
       });
       const listItem = appendElement(orderedList, 'listItem');
@@ -146,7 +146,7 @@ describe('projectDocument', () => {
     const projection = projectDocument({ yjsState, tiptapSchemaVersion: 1 });
     const [heading, orderedList, taskList, paragraph] = projection.contentJson.content ?? [];
     expect(heading?.attrs).toMatchObject({ level: 3 });
-    expect(orderedList?.attrs).toMatchObject({ start: -2.5, type: 'custom' });
+    expect(orderedList?.attrs).toMatchObject({ start: -2, type: 'custom' });
     expect(taskList?.content?.[0]?.attrs).toMatchObject({ checked: true });
     expect(paragraph?.content?.map((node) => node.marks?.[0]?.attrs?.href)).toEqual([
       'http://example.com/path',
@@ -188,6 +188,54 @@ describe('projectDocument', () => {
         'unsupported_content',
       );
     }
+  });
+
+  it('accepts orderedList.start safe integer boundaries without imposing a positive range', () => {
+    for (const start of [Number.MIN_SAFE_INTEGER, -1, 0, Number.MAX_SAFE_INTEGER]) {
+      const yjsState = createState((fragment) => {
+        const orderedList = appendElement(fragment, 'orderedList', { start });
+        appendText(appendElement(appendElement(orderedList, 'listItem'), 'paragraph'), 'Item');
+      });
+
+      const projection = projectDocument({ yjsState, tiptapSchemaVersion: 1 });
+      expect(projection.contentJson.content?.[0]?.attrs?.start).toBe(start);
+    }
+  });
+
+  it('rejects non-integer and unsafe orderedList.start values', () => {
+    for (const start of [
+      -2.5,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+      Number.NaN,
+      Number.MAX_SAFE_INTEGER + 1,
+      Number.MIN_SAFE_INTEGER - 1,
+    ]) {
+      const yjsState = createState((fragment) => {
+        const orderedList = appendElement(fragment, 'orderedList', { start });
+        appendText(appendElement(appendElement(orderedList, 'listItem'), 'paragraph'), 'Item');
+      });
+
+      expectProjectionError(
+        () => projectDocument({ yjsState, tiptapSchemaVersion: 1 }),
+        'unsupported_content',
+      );
+    }
+  });
+
+  it('canonicalizes link href without mutating captured bytes', () => {
+    const yjsState = createState((fragment) => {
+      const paragraph = appendElement(fragment, 'paragraph');
+      appendText(paragraph, 'Canonical link', { link: { href: '  example.com/path  ' } });
+    });
+    const capturedBytes = Uint8Array.from(yjsState);
+
+    const projection = projectDocument({ yjsState, tiptapSchemaVersion: 1 });
+
+    expect(projection.contentJson.content?.[0]?.content?.[0]?.marks?.[0]?.attrs?.href).toBe(
+      'https://example.com/path',
+    );
+    expect(yjsState).toEqual(capturedBytes);
   });
 
   it('keeps one external reference per image occurrence and only references images', () => {
