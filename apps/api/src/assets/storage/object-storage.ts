@@ -24,6 +24,7 @@ export interface ObjectStorage {
   listObjects(
     prefix: string,
     continuationToken?: string,
+    maxKeys?: number,
   ): Promise<{
     continuationToken: string | null;
     objects: ListedObject[];

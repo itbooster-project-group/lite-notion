@@ -27,6 +27,8 @@ import {
 } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { type AuthenticatedUser, CurrentUser } from '../common/decorators/current-user.decorator';
+import { AssetGcUseCases } from './asset-gc.use-cases';
+import { AssetUploadUseCases } from './asset-upload.use-cases';
 import { AssetsUseCases } from './assets.use-cases';
 import {
   AssetReadUrlDto,
@@ -40,7 +42,11 @@ import { SetAssetReferenceDto } from './dto/set-asset-reference.dto';
 @ApiTags('assets')
 @Controller('assets')
 export class AssetsController {
-  constructor(@Inject(AssetsUseCases) private readonly assets: AssetsUseCases) {}
+  constructor(
+    @Inject(AssetsUseCases) private readonly assets: AssetsUseCases,
+    @Inject(AssetUploadUseCases) private readonly uploads: AssetUploadUseCases,
+    @Inject(AssetGcUseCases) private readonly assetGc: AssetGcUseCases,
+  ) {}
 
   @Post('uploads')
   @ApiOperation({ operationId: 'initiateAssetUpload', summary: 'Start an image upload' })
@@ -49,7 +55,7 @@ export class AssetsController {
     @CurrentUser() user: AuthenticatedUser,
     @Body() body: InitiateAssetUploadDto,
   ): Promise<AssetUploadInitiatedDto> {
-    return this.assets.initiate(user.id, body.pageId, body.fileName);
+    return this.uploads.initiate(user.id, body.pageId, body.fileName);
   }
 
   @Put(':assetId/content')
@@ -67,7 +73,7 @@ export class AssetsController {
     @Param('assetId', ParseUUIDPipe) assetId: string,
     @Req() request: Request,
   ): Promise<AssetResponseDto> {
-    return this.assets.upload(user.id, assetId, request);
+    return this.uploads.upload(user.id, assetId, request);
   }
 
   @Get(':assetId')
@@ -112,7 +118,7 @@ export class AssetsController {
     @CurrentUser() user: AuthenticatedUser,
     @Param('assetId', ParseUUIDPipe) assetId: string,
   ): Promise<void> {
-    await this.assets.delete(user.id, assetId);
+    await this.assetGc.delete(user.id, assetId);
   }
 }
 

@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { type ApplicationConfig, applicationConfig } from '../config/application-config';
-import { AssetsUseCases } from './assets.use-cases';
+import { AssetGcUseCases } from './asset-gc.use-cases';
 
 @Injectable()
 export class AssetGcScheduler {
@@ -9,7 +9,7 @@ export class AssetGcScheduler {
   private running = false;
 
   constructor(
-    @Inject(AssetsUseCases) private readonly assets: AssetsUseCases,
+    @Inject(AssetGcUseCases) private readonly assets: AssetGcUseCases,
     @Inject(applicationConfig.KEY) private readonly config: ApplicationConfig,
   ) {}
 

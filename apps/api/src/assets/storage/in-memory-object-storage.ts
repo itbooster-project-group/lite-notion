@@ -66,13 +66,22 @@ export class InMemoryObjectStorage implements ObjectStorage {
 
   async listObjects(
     prefix: string,
+    continuationToken?: string,
+    maxKeys = 1000,
   ): Promise<{ continuationToken: string | null; objects: ListedObject[] }> {
     this.fail('list');
+    const objects = [...this.objects.entries()]
+      .filter(([key]) => key.startsWith(prefix))
+      .sort(([left], [right]) => left.localeCompare(right))
+      .filter(([key]) => continuationToken === undefined || key > continuationToken)
+      .slice(0, Math.max(1, Math.min(maxKeys, 1000)));
+    const lastKey = objects.at(-1)?.[0];
+    const hasMore =
+      lastKey !== undefined &&
+      [...this.objects.keys()].some((key) => key.startsWith(prefix) && key > lastKey);
     return {
-      continuationToken: null,
-      objects: [...this.objects.entries()]
-        .filter(([key]) => key.startsWith(prefix))
-        .map(([key, value]) => ({ key, lastModified: value.lastModified })),
+      continuationToken: hasMore ? (lastKey ?? null) : null,
+      objects: objects.map(([key, value]) => ({ key, lastModified: value.lastModified })),
     };
   }
 

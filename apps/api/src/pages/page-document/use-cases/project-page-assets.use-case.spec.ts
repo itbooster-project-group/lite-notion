@@ -10,7 +10,9 @@ const record: PageDocumentRecord = {
   yjsState: new Uint8Array(),
 };
 
-function testPrisma(options: { currentRevision?: bigint; transactionError?: Error } = {}) {
+function testPrisma(
+  options: { currentRevision?: bigint; transactionError?: Error; attemptCount?: number } = {},
+) {
   let failTransaction = options.transactionError !== undefined;
   const tx = {
     $queryRaw: vi.fn(async () => {
@@ -27,7 +29,11 @@ function testPrisma(options: { currentRevision?: bigint; transactionError?: Erro
     },
     pageAssetGrant: { findMany: vi.fn(async () => []) },
     pageAssetProjection: {
-      findUnique: vi.fn(async () => ({ attemptCount: 0, attemptedStorageRevision: null })),
+      findUnique: vi.fn(async () => ({
+        attemptCount: options.attemptCount ?? 0,
+        attemptedStorageRevision:
+          options.attemptCount === undefined ? null : record.storageRevision,
+      })),
       update: vi.fn(async () => ({})),
       updateMany: vi.fn(async () => ({ count: 1 })),
     },
@@ -75,6 +81,22 @@ describe('ProjectPageAssetsUseCase', () => {
         attemptCount: 1,
         lastErrorCode: 'transient_projection',
         retryAfter: expect.any(Date),
+      }),
+    });
+  });
+
+  it('stops after the fifth automatic attempt for one revision', async () => {
+    const { prisma, tx } = testPrisma({
+      attemptCount: 4,
+      transactionError: new Error('database timeout'),
+    });
+    await new ProjectPageAssetsUseCase(prisma as unknown as PrismaService).execute(record);
+    expect(tx.pageAssetProjection.updateMany).toHaveBeenCalledWith({
+      where: { pageId: record.pageId },
+      data: expect.objectContaining({
+        attemptCount: 5,
+        lastErrorCode: 'retry_exhausted',
+        retryAfter: null,
       }),
     });
   });

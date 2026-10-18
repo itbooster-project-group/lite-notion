@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import type { Request } from 'express';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-
+import { AssetGcUseCases } from '../../assets/asset-gc.use-cases';
+import { AssetUploadUseCases } from '../../assets/asset-upload.use-cases';
 import { AssetsUseCases } from '../../assets/assets.use-cases';
 import { FilesystemObjectStorage } from '../../assets/storage/filesystem-object-storage';
 import type { ApplicationConfig } from '../../config/application-config';
@@ -13,6 +14,7 @@ import { createPrismaClient, type PrismaClient } from '../../database/client';
 import type { PrismaService } from '../../database/prisma.service';
 import { type DatabaseClient, PrismaTransactionRunner } from '../../database/transaction';
 import type { DocumentCaptureClient } from '../../document-capture/document-capture.client';
+import { Prisma } from '../../generated/prisma/client';
 import { SnapshotReason } from '../../generated/prisma/enums';
 import { PrismaPagePermissionsRepository } from '../../page-permissions/page-permissions.repository';
 import { PagePermissionsService } from '../../page-permissions/page-permissions.service';
@@ -141,13 +143,13 @@ describe('PageDocument provenance on PostgreSQL', () => {
         s3: null,
       },
     } as unknown as ApplicationConfig;
-    const assets = new AssetsUseCases(
+    const uploads = new AssetUploadUseCases(
       prisma as unknown as PrismaService,
       { requireRole: vi.fn(async () => 'owner') } as never,
       storage,
       config,
     );
-    const initiated = await assets.initiate(ownerId, pageId, 'cover.png');
+    const initiated = await uploads.initiate(ownerId, pageId, 'cover.png');
     assetIds.push(initiated.assetId);
     const bytes = Buffer.from(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p6sAAAAASUVORK5CYII=',
@@ -156,7 +158,7 @@ describe('PageDocument provenance on PostgreSQL', () => {
     const request = Readable.from([bytes]) as Readable & Request;
     request.headers = { 'content-length': String(bytes.length), 'content-type': 'image/png' };
 
-    const uploaded = await assets.upload(ownerId, initiated.assetId, request);
+    const uploaded = await uploads.upload(ownerId, initiated.assetId, request);
     const storedAsset = await prisma.asset.findUniqueOrThrow({ where: { id: initiated.assetId } });
     const projection = await prisma.pageAssetProjection.findUniqueOrThrow({ where: { pageId } });
     const document = await prisma.pageDocument.findUniqueOrThrow({ where: { pageId } });
@@ -190,13 +192,13 @@ describe('PageDocument provenance on PostgreSQL', () => {
         s3: null,
       },
     } as unknown as ApplicationConfig;
-    const assets = new AssetsUseCases(
+    const uploads = new AssetUploadUseCases(
       prisma as unknown as PrismaService,
       { requireRole: vi.fn(async () => 'owner') } as never,
       storage,
       config,
     );
-    const initiated = await assets.initiate(ownerId, undefined, 'ambiguous.png');
+    const initiated = await uploads.initiate(ownerId, undefined, 'ambiguous.png');
     assetIds.push(initiated.assetId);
     const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
     const request = Readable.from([bytes]) as Readable & Request;
@@ -213,7 +215,7 @@ describe('PageDocument provenance on PostgreSQL', () => {
     }) as never);
     const deleteObject = vi.spyOn(storage, 'deleteObject');
 
-    await expect(assets.upload(ownerId, initiated.assetId, request)).rejects.toThrow(
+    await expect(uploads.upload(ownerId, initiated.assetId, request)).rejects.toThrow(
       'simulated lost PostgreSQL response after commit',
     );
 
@@ -222,6 +224,81 @@ describe('PageDocument provenance on PostgreSQL', () => {
     expect(await storage.headObject(stored.storageKey)).not.toBeNull();
     expect(deleteObject).not.toHaveBeenCalled();
     updateMany.mockRestore();
+  });
+
+  it('does not expire an asset that becomes ready while cleanup waits for its row lock', async () => {
+    const storageKey = `assets/${randomUUID()}/${randomUUID()}`;
+    const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const asset = await prisma.asset.create({
+      data: {
+        createdAt: new Date(Date.now() - 48 * 60 * 60 * 1000),
+        id: randomUUID(),
+        originalName: 'pending.png',
+        storageKey,
+        uploadedById: ownerId,
+      },
+    });
+    assetIds.push(asset.id);
+    await storage.putObject(storageKey, {
+      body: Readable.from([bytes]),
+      checksum: 'pending-checksum',
+      contentLength: bytes.length,
+      contentType: 'image/png',
+    });
+    const config = {
+      assets: {
+        gcBatchSize: 25,
+        gcEnabled: false,
+        gcIntervalSeconds: 60,
+        maxConcurrentUploads: 2,
+        maxUploadBytes: 10 * 1024 * 1024,
+        orphanGraceHours: 24,
+        pendingTtlHours: 24,
+        projectionStaleWarningSeconds: 300,
+        readUrlTtlSeconds: 60,
+        s3RequestTimeoutMs: 15_000,
+        uploadTimeoutMs: 120_000,
+        s3: null,
+      },
+    } as unknown as ApplicationConfig;
+    const assets = new AssetGcUseCases(prisma as unknown as PrismaService, storage, config);
+    const candidateRead = deferred();
+    const originalFindMany = prisma.asset.findMany.bind(prisma.asset);
+    const candidateQuery = vi.spyOn(prisma.asset, 'findMany').mockImplementation((async (
+      args: Parameters<typeof prisma.asset.findMany>[0],
+    ) => {
+      const result = await originalFindMany(args);
+      if (args?.where?.createdAt !== undefined) candidateRead.resolve();
+      return result;
+    }) as never);
+
+    const lockHeld = deferred();
+    const releaseLock = deferred();
+    const blocker = prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Asset" WHERE id = ${asset.id}::uuid FOR UPDATE`;
+      lockHeld.resolve();
+      await releaseLock.promise;
+      await tx.asset.update({
+        where: { id: asset.id },
+        data: {
+          checksum: 'ready-checksum',
+          mimeType: 'image/png',
+          sizeBytes: BigInt(bytes.length),
+          status: 'ready',
+        },
+      });
+    });
+    await lockHeld.promise;
+    const cleanup = assets.cleanupExpiredPendingAssets();
+    await candidateRead.promise;
+    releaseLock.resolve();
+    await Promise.all([blocker, cleanup]);
+
+    expect((await prisma.asset.findUniqueOrThrow({ where: { id: asset.id } })).status).toBe(
+      'ready',
+    );
+    expect(await storage.headObject(storageKey)).not.toBeNull();
+    candidateQuery.mockRestore();
   });
 
   it('retains referenced assets and deletes them only after an explicit request', async () => {
@@ -242,26 +319,33 @@ describe('PageDocument provenance on PostgreSQL', () => {
         s3: null,
       },
     } as unknown as ApplicationConfig;
-    const assets = new AssetsUseCases(
+    const references = new AssetsUseCases(
+      prisma as unknown as PrismaService,
+      { requireRole: vi.fn(async () => 'owner') } as never,
+      storage,
+      config,
+    );
+    const assets = new AssetGcUseCases(prisma as unknown as PrismaService, storage, config);
+    const uploads = new AssetUploadUseCases(
       prisma as unknown as PrismaService,
       { requireRole: vi.fn(async () => 'owner') } as never,
       storage,
       config,
     );
     const upload = async (contextPageId?: string) => {
-      const initiated = await assets.initiate(ownerId, contextPageId, 'retained.png');
+      const initiated = await uploads.initiate(ownerId, contextPageId, 'retained.png');
       assetIds.push(initiated.assetId);
       const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
       const request = Readable.from([bytes]) as Readable & Request;
       request.headers = { 'content-length': String(bytes.length), 'content-type': 'image/png' };
-      await assets.upload(ownerId, initiated.assetId, request);
+      await uploads.upload(ownerId, initiated.assetId, request);
       return initiated.assetId;
     };
 
     const pageAssetId = await upload(pageId);
-    await assets.setCover(ownerId, pageId, pageAssetId);
+    await references.setCover(ownerId, pageId, pageAssetId);
     await expect(assets.delete(ownerId, pageAssetId)).rejects.toThrow('Asset is still in use');
-    await assets.setCover(ownerId, pageId, null);
+    await references.setCover(ownerId, pageId, null);
     await prisma.pageAsset.create({ data: { pageId, assetId: pageAssetId, nodeId: 'node-1' } });
     await expect(assets.delete(ownerId, pageAssetId)).rejects.toThrow('Asset is still in use');
     await prisma.pageAsset.delete({
@@ -282,9 +366,9 @@ describe('PageDocument provenance on PostgreSQL', () => {
     ).toBeNull();
 
     const avatarAssetId = await upload();
-    await assets.setAvatar(ownerId, avatarAssetId);
+    await references.setAvatar(ownerId, avatarAssetId);
     await expect(assets.delete(ownerId, avatarAssetId)).rejects.toThrow('Asset is still in use');
-    await assets.setAvatar(ownerId, null);
+    await references.setAvatar(ownerId, null);
     await assets.delete(ownerId, avatarAssetId);
     expect((await prisma.asset.findUniqueOrThrow({ where: { id: avatarAssetId } })).status).toBe(
       'deleted',
@@ -292,7 +376,7 @@ describe('PageDocument provenance on PostgreSQL', () => {
 
     const racingAssetId = await upload(pageId);
     const [coverResult] = await Promise.allSettled([
-      assets.setCover(ownerId, pageId, racingAssetId),
+      references.setCover(ownerId, pageId, racingAssetId),
       assets.delete(ownerId, racingAssetId),
     ]);
     const [racingPage, racingAsset] = await Promise.all([
@@ -308,6 +392,102 @@ describe('PageDocument provenance on PostgreSQL', () => {
       expect(racingAsset.status).toBe('deleted');
       expect(await storage.headObject(racingAsset.storageKey)).toBeNull();
     }
+  });
+
+  it('restarts asset GC in a new transaction when its page grant set changes', async () => {
+    const firstPageId = await createPage();
+    const secondPageId = await createPage();
+    const assetId = randomUUID();
+    const storageKey = `assets/${assetId}/${randomUUID()}`;
+    const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const asset = await prisma.asset.create({
+      data: {
+        checksum: 'gc-checksum',
+        id: assetId,
+        mimeType: 'image/png',
+        originalName: 'gc.png',
+        sizeBytes: BigInt(bytes.length),
+        status: 'ready',
+        storageKey,
+        uploadedById: ownerId,
+      },
+    });
+    assetIds.push(asset.id);
+    await prisma.pageAssetGrant.create({ data: { pageId: firstPageId, assetId } });
+    await storage.putObject(storageKey, {
+      body: Readable.from([bytes]),
+      checksum: 'gc-checksum',
+      contentLength: bytes.length,
+      contentType: 'image/png',
+    });
+    const config = {
+      assets: {
+        gcBatchSize: 25,
+        gcEnabled: false,
+        gcIntervalSeconds: 60,
+        maxConcurrentUploads: 2,
+        maxUploadBytes: 10 * 1024 * 1024,
+        orphanGraceHours: 24,
+        pendingTtlHours: 24,
+        projectionStaleWarningSeconds: 300,
+        readUrlTtlSeconds: 60,
+        s3RequestTimeoutMs: 15_000,
+        uploadTimeoutMs: 120_000,
+        s3: null,
+      },
+    } as unknown as ApplicationConfig;
+    const assets = new AssetGcUseCases(prisma as unknown as PrismaService, storage, config);
+    const references = new AssetsUseCases(
+      prisma as unknown as PrismaService,
+      { requireRole: vi.fn(async () => 'owner') } as never,
+      storage,
+      config,
+    );
+    const reachedAssetLock = deferred();
+    const resumeDeletion = deferred();
+    let interceptDeletion = true;
+    const originalTransaction = prisma.$transaction.bind(prisma);
+    const transactions = vi.spyOn(prisma, '$transaction');
+    transactions.mockImplementation(((
+      operation: (tx: Prisma.TransactionClient) => Promise<unknown>,
+    ) =>
+      originalTransaction(async (tx) => {
+        if (!interceptDeletion) return operation(tx);
+        interceptDeletion = false;
+        const pausedTransaction = new Proxy(tx, {
+          get(target, property, receiver) {
+            if (property === '$queryRaw') {
+              return async <T>(query: TemplateStringsArray, ...values: unknown[]) => {
+                if (!reachedAssetLockResolved && query.join('').includes('FROM "Asset"')) {
+                  reachedAssetLockResolved = true;
+                  reachedAssetLock.resolve();
+                  await resumeDeletion.promise;
+                }
+                return Reflect.apply(Reflect.get(target, property, target), target, [
+                  query,
+                  ...values,
+                ]) as Promise<T>;
+              };
+            }
+            return Reflect.get(target, property, receiver);
+          },
+        });
+        return operation(pausedTransaction);
+      })) as never);
+
+    let reachedAssetLockResolved = false;
+    const deletion = assets.delete(ownerId, assetId);
+    await reachedAssetLock.promise;
+    await references.grant(ownerId, secondPageId, assetId);
+    resumeDeletion.resolve();
+    await deletion;
+
+    const storedAsset = await prisma.asset.findUniqueOrThrow({ where: { id: assetId } });
+    expect(storedAsset.status).toBe('deleted');
+    expect(await prisma.pageAssetGrant.count({ where: { assetId } })).toBe(0);
+    expect(await storage.headObject(storageKey)).toBeNull();
+    expect(transactions).toHaveBeenCalledTimes(3);
+    transactions.mockRestore();
   });
 
   it('reads persisted bytes and provenance from one document record', async () => {
@@ -400,3 +580,11 @@ describe('PageDocument provenance on PostgreSQL', () => {
     expect(createdSnapshots).toEqual([]);
   });
 });
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}

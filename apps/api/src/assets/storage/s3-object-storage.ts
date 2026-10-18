@@ -95,12 +95,14 @@ export class S3ObjectStorage implements ObjectStorage {
   async listObjects(
     prefix: string,
     continuationToken?: string,
+    maxKeys = 1000,
   ): Promise<{ continuationToken: string | null; objects: ListedObject[] }> {
     const { bucket, client } = this.requireConfigured();
     const result = await client.send(
       new ListObjectsV2Command({
         Bucket: bucket,
         ContinuationToken: continuationToken,
+        MaxKeys: Math.max(1, Math.min(maxKeys, 1000)),
         Prefix: prefix,
       }),
       { abortSignal: AbortSignal.timeout(this.requestTimeoutMs) },

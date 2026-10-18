@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '../../database/prisma.service';
 import type { PageDocumentRecord } from './page-document.repository';
+import { PAGE_ASSET_PROJECTION_MAX_ATTEMPTS } from './projection-retry.constants';
 import { ProjectPageAssetsUseCase } from './use-cases/project-page-assets.use-case';
 
 const RETRY_BATCH_SIZE = 25;
@@ -26,7 +27,7 @@ export class ProjectionRetryScheduler {
         FROM "PageDocument" AS document
         INNER JOIN "PageAssetProjection" AS projection ON projection."pageId" = document."pageId"
         WHERE projection."sourceStorageRevision" IS DISTINCT FROM document."storageRevision"
-          AND projection."attemptCount" < 8
+          AND projection."attemptCount" < ${PAGE_ASSET_PROJECTION_MAX_ATTEMPTS}
           AND (
             projection."attemptedStorageRevision" IS NULL
             OR projection."attemptedStorageRevision" <> document."storageRevision"

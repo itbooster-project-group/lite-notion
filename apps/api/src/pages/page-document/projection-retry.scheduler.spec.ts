@@ -23,6 +23,7 @@ describe('ProjectionRetryScheduler', () => {
     await scheduler.retryStaleProjections();
 
     expect(query).toHaveBeenCalledOnce();
+    expect(query.mock.calls[0]).toContain(5);
     expect(projection.execute).toHaveBeenCalledWith(record);
   });
 });

@@ -64,13 +64,14 @@ export class FilesystemObjectStorage implements ObjectStorage {
   async listObjects(
     prefix: string,
     continuationToken?: string,
+    maxKeys = 1000,
   ): Promise<{ continuationToken: string | null; objects: ListedObject[] }> {
     const all = await this.walk(this.rootDirectory);
     const filtered = all
       .filter((entry) => entry.key.startsWith(prefix))
       .filter((entry) => continuationToken === undefined || entry.key > continuationToken)
       .sort((a, b) => a.key.localeCompare(b.key));
-    const page = filtered.slice(0, 1000);
+    const page = filtered.slice(0, Math.max(1, Math.min(maxKeys, 1000)));
     return {
       continuationToken: filtered.length > page.length ? (page.at(-1)?.key ?? null) : null,
       objects: page,

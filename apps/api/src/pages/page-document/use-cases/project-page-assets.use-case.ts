@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
 import { projectDocument } from '../../../document-projection/document-projection';
 import type { PageDocumentRecord } from '../page-document.repository';
+import { PAGE_ASSET_PROJECTION_MAX_ATTEMPTS } from '../projection-retry.constants';
 
 @Injectable()
 export class ProjectPageAssetsUseCase {
@@ -92,7 +93,7 @@ export class ProjectPageAssetsUseCase {
           });
           const attempts =
             current?.attemptedStorageRevision === record.storageRevision ? current.attemptCount : 0;
-          const exhausted = !permanent && attempts >= 7;
+          const exhausted = !permanent && attempts >= PAGE_ASSET_PROJECTION_MAX_ATTEMPTS - 1;
           const reason = permanent
             ? 'permanent_validation'
             : exhausted
