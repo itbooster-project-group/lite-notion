@@ -9,6 +9,7 @@ import { PagePermissionsService } from '../page-permissions/page-permissions.ser
 import { PageDocumentRepository } from '../pages/page-document/page-document.repository';
 import { InMemoryPageDocumentRepository } from '../pages/page-document/page-document.repository.in-memory';
 import { PageDocumentService } from '../pages/page-document/page-document.service';
+import { PersistPageDocumentStateUseCase } from '../pages/page-document/use-cases/persist-page-document-state.use-case';
 import { PagesRepository } from '../pages/pages.repository';
 import { InMemoryPagesRepository, type StoredPage } from '../pages/pages.repository.in-memory';
 import { PagesService } from '../pages/pages.service';
@@ -64,6 +65,14 @@ describe('ProjectsService: корзина', () => {
         RestoreProjectUseCase,
         CreatePageUseCase,
         PageDocumentService,
+        {
+          provide: PersistPageDocumentStateUseCase,
+          useValue: {
+            execute: async () => {
+              throw new Error('Unexpected document persistence');
+            },
+          },
+        },
         SoftDeletePageUseCase,
         SoftDeleteProjectUseCase,
         { provide: PagesRepository, useValue: pages },

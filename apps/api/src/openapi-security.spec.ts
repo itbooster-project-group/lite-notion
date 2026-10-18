@@ -14,11 +14,15 @@ import { PrismaService } from './database/prisma.service';
 const PUBLIC_OPERATION_IDS = ['getHealth', 'login', 'refreshTokens', 'register'];
 
 const SECURED_OPERATION_IDS = [
+  'createAssetReadUrl',
+  'createAvatarReadUrl',
   'createPage',
   'createProject',
+  'deleteAsset',
   'deletePage',
   'deleteProject',
   'getCurrentUser',
+  'getAssetMetadata',
   'getPage',
   'getPagePermissions',
   'getPageTrash',
@@ -26,6 +30,8 @@ const SECURED_OPERATION_IDS = [
   'getProjectTrash',
   'getSharedPages',
   'grantPagePermission',
+  'grantAssetToPage',
+  'initiateAssetUpload',
   'listProjects',
   'logout',
   'logoutEverywhere',
@@ -39,6 +45,9 @@ const SECURED_OPERATION_IDS = [
   'restoreProject',
   'revokePagePermission',
   'setPageAccessMode',
+  'setPageCover',
+  'setCurrentUserAvatar',
+  'uploadAssetContent',
 ];
 
 interface DocumentedOperation {

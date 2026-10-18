@@ -4,6 +4,11 @@ import { NodeEnvironment, validateEnvironment } from './environment';
 
 const validEnvironment: Record<string, unknown> = {
   ACCESS_TOKEN_TTL_S: '900',
+  ASSETS_S3_ACCESS_KEY_ID: 'local-access-key',
+  ASSETS_S3_BUCKET: 'lite-notion-private',
+  ASSETS_S3_ENDPOINT: 'https://s3.example.com',
+  ASSETS_S3_REGION: 'ru-1',
+  ASSETS_S3_SECRET_ACCESS_KEY: 'local-secret-key',
   BCRYPT_ROUNDS: '12',
   COLLABORATION_BASE_URL: 'http://collaboration.example.com',
   COLLABORATION_TIMEOUT_MS: '5000',
