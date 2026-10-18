@@ -15,6 +15,7 @@ class GrantSetChangedError extends Error {}
 export class AssetGcUseCases {
   private readonly logger = new Logger(AssetGcUseCases.name);
   private orphanContinuationToken: string | undefined;
+  private deletedAssetsCursor: string | undefined;
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -29,10 +30,13 @@ export class AssetGcUseCases {
   async reconcileDeletedAssets(): Promise<void> {
     const deleted = await this.prisma.asset.findMany({
       where: { status: 'deleted' },
-      orderBy: { updatedAt: 'asc' },
+      orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }],
+      ...(this.deletedAssetsCursor ? { cursor: { id: this.deletedAssetsCursor }, skip: 1 } : {}),
       take: this.config.assets.gcBatchSize,
       select: { id: true, storageKey: true },
     });
+    this.deletedAssetsCursor =
+      deleted.length === this.config.assets.gcBatchSize ? deleted.at(-1)?.id : undefined;
     for (const asset of deleted) await this.deleteObjectIfTombstoned(asset.id, asset.storageKey);
   }
 

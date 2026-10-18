@@ -24,6 +24,8 @@ import { CreateSnapshotManualUseCase } from '../../snapshots/use-cases/create-sn
 import type { UsersService } from '../../users/users.service';
 import { PrismaPagesRepository } from '../pages.repository';
 import { PrismaPageDocumentRepository } from './page-document.repository';
+import { ProjectionRetryScheduler } from './projection-retry.scheduler';
+import { ProjectPageAssetsUseCase } from './use-cases/project-page-assets.use-case';
 
 describe('PageDocument provenance on PostgreSQL', () => {
   let prisma: PrismaClient;
@@ -173,6 +175,38 @@ describe('PageDocument provenance on PostgreSQL', () => {
       sizeBytes: bytes.length,
     });
     expect(projection.sourceStorageRevision).toBe(document.storageRevision);
+  });
+
+  it('retries a new document revision after the previous revision exhausted its attempts', async () => {
+    const pageId = await createPage();
+    const previousRevision = 0n;
+    await prisma.pageAssetProjection.update({
+      where: { pageId },
+      data: {
+        attemptedStorageRevision: previousRevision,
+        attemptCount: 5,
+        lastErrorCode: 'retry_exhausted',
+        retryAfter: null,
+      },
+    });
+    const repository = new PrismaPageDocumentRepository(prisma as unknown as DatabaseClient);
+    const committed = await repository.replaceYjsState(pageId, new Uint8Array(), 0n, 1);
+    expect(committed?.storageRevision).toBe(1n);
+    // The synchronous projection did not run for this write; the old watermark remains.
+    expect(
+      (await prisma.pageAssetProjection.findUniqueOrThrow({ where: { pageId } }))
+        .sourceStorageRevision,
+    ).toBe(previousRevision);
+
+    const projection = new ProjectPageAssetsUseCase(prisma as unknown as PrismaService);
+    const scheduler = new ProjectionRetryScheduler(prisma as unknown as PrismaService, projection);
+    await scheduler.retryStaleProjections();
+
+    const watermark = await prisma.pageAssetProjection.findUniqueOrThrow({ where: { pageId } });
+    expect(watermark.sourceStorageRevision).toBe(committed?.storageRevision);
+    expect(watermark.attemptedStorageRevision).toBe(committed?.storageRevision);
+    expect(watermark.attemptCount).toBe(0);
+    expect(watermark.lastErrorCode).toBeNull();
   });
 
   it('keeps a committed ready object after the PostgreSQL acknowledgement is lost', async () => {

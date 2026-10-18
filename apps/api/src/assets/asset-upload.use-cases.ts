@@ -85,18 +85,6 @@ export class AssetUploadUseCases {
       ) {
         throw new PayloadTooLargeException('Asset exceeds the upload size limit');
       }
-      const attemptKey = `assets/${assetId}/${randomUUID()}`;
-      const claim = await this.prisma.asset.updateMany({
-        where: {
-          id: assetId,
-          uploadedById: actorId,
-          status: 'pending',
-          storageKey: asset.storageKey,
-        },
-        data: { storageKey: attemptKey },
-      });
-      if (claim.count !== 1) throw new ConflictException('Asset upload attempt was superseded');
-      assertStorageKey(attemptKey);
       let sizeBytes = 0;
       const limiter = new Transform({
         transform: (chunk: Buffer, _encoding, callback) => {
@@ -123,12 +111,31 @@ export class AssetUploadUseCases {
       const mimeType = detectMime(header);
       const contentType = request.headers['content-type']?.split(';')[0]?.trim();
       if (!mimeType || (contentType !== 'application/octet-stream' && contentType !== mimeType)) {
-        await this.prisma.asset.updateMany({
-          where: { id: assetId, status: 'pending', storageKey: attemptKey },
-          data: { status: 'failed' },
-        });
+        if (!isUploadAttemptKey(asset.storageKey)) {
+          await this.prisma.asset.updateMany({
+            where: {
+              id: assetId,
+              uploadedById: actorId,
+              status: 'pending',
+              storageKey: asset.storageKey,
+            },
+            data: { status: 'failed' },
+          });
+        }
         throw new UnsupportedMediaTypeException('Unsupported or mismatched image content');
       }
+      const attemptKey = `assets/${assetId}/attempt-${randomUUID()}`;
+      const claim = await this.prisma.asset.updateMany({
+        where: {
+          id: assetId,
+          uploadedById: actorId,
+          status: 'pending',
+          storageKey: asset.storageKey,
+        },
+        data: { storageKey: attemptKey },
+      });
+      if (claim.count !== 1) throw new ConflictException('Asset upload attempt was superseded');
+      assertStorageKey(attemptKey);
       const checksum = await hashFile(filePath);
       await this.storage.putObject(attemptKey, {
         body: createReadStream(filePath),
@@ -216,4 +223,8 @@ async function hashFile(path: string): Promise<string> {
   const hash = createHash('sha256');
   for await (const chunk of createReadStream(path)) hash.update(chunk);
   return hash.digest('hex');
+}
+
+function isUploadAttemptKey(key: string): boolean {
+  return key.includes('/attempt-');
 }

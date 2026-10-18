@@ -36,7 +36,7 @@ export interface ObjectStorage {
 export const OBJECT_STORAGE = Symbol('OBJECT_STORAGE');
 
 export function assertStorageKey(key: string): void {
-  if (!/^assets\/[0-9a-f-]{36}\/[0-9a-f-]{36}$/i.test(key)) {
+  if (!/^assets\/[0-9a-f-]{36}\/(?:[0-9a-f-]{36}|attempt-[0-9a-f-]{36})$/i.test(key)) {
     throw new Error('Invalid server-generated storage key');
   }
 }

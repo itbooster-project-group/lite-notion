@@ -122,10 +122,12 @@ describe('AssetsUseCases', () => {
       sizeBytes: null as bigint | null,
       checksum: null as string | null,
     };
-    prisma.asset.findUnique.mockImplementation(async () => current);
+    const invalidRead = deferred();
+    prisma.asset.findUnique.mockImplementation(async () => {
+      invalidRead.resolve();
+      return { ...current };
+    });
     prisma.asset.findUniqueOrThrow.mockImplementation(async () => current);
-    const claimIssued = deferred();
-    let claims = 0;
     prisma.asset.updateMany.mockImplementation(
       async ({
         where,
@@ -139,8 +141,6 @@ describe('AssetsUseCases', () => {
             return { count: 0 };
           }
           Object.assign(current, data);
-          claims += 1;
-          if (claims === 1) claimIssued.resolve();
           return { count: 1 };
         }
         if (current.status !== where.status || current.storageKey !== where.storageKey) {
@@ -165,7 +165,7 @@ describe('AssetsUseCases', () => {
       headers: { 'content-type': 'application/octet-stream' },
     }) as Request;
     const invalidUpload = uploadUseCases.upload(actorId, assetId, invalidRequest);
-    await claimIssued.promise;
+    await invalidRead.promise;
 
     const pngHeader = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
     const validRequest = Object.assign(Readable.from([pngHeader]), {
@@ -177,6 +177,106 @@ describe('AssetsUseCases', () => {
     releaseInvalid();
     await expect(invalidUpload).rejects.toMatchObject({ status: 415 });
     expect(current.status).toBe('ready');
+  });
+
+  it('does not let a later invalid PUT supersede an active valid upload', async () => {
+    const current = {
+      id: assetId,
+      uploadedById: actorId,
+      originalName: 'image.png',
+      storageKey: originalKey,
+      status: 'pending',
+      mimeType: null as string | null,
+      sizeBytes: null as bigint | null,
+      checksum: null as string | null,
+    };
+    prisma.asset.findUnique.mockImplementation(async () => current);
+    prisma.asset.findUniqueOrThrow.mockImplementation(async () => current);
+    const validAttemptClaimed = deferred();
+    prisma.asset.updateMany.mockImplementation(
+      async ({
+        where,
+        data,
+      }: {
+        where: { storageKey: string; status: string };
+        data: Partial<typeof current>;
+      }) => {
+        if (current.status !== where.status || current.storageKey !== where.storageKey) {
+          return { count: 0 };
+        }
+        Object.assign(current, data);
+        if (typeof data.storageKey === 'string' && data.storageKey.includes('/attempt-')) {
+          validAttemptClaimed.resolve();
+        }
+        return { count: 1 };
+      },
+    );
+    const putObject = storage.putObject.bind(storage);
+    let releaseValidStorage!: () => void;
+    const validStorageGate = new Promise<void>((resolve) => {
+      releaseValidStorage = resolve;
+    });
+    vi.spyOn(storage, 'putObject').mockImplementation(async (key, input) => {
+      await validStorageGate;
+      await putObject(key, input);
+    });
+
+    const pngHeader = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const validRequest = Object.assign(Readable.from([pngHeader]), {
+      headers: { 'content-length': String(pngHeader.length), 'content-type': 'image/png' },
+    }) as Request;
+    const validUpload = uploadUseCases.upload(actorId, assetId, validRequest);
+    await validAttemptClaimed.promise;
+    const validAttemptKey = current.storageKey;
+
+    const invalidRequest = Object.assign(Readable.from([Buffer.from('not an image')]), {
+      headers: { 'content-type': 'application/octet-stream' },
+    }) as Request;
+    await expect(uploadUseCases.upload(actorId, assetId, invalidRequest)).rejects.toMatchObject({
+      status: 415,
+    });
+    expect(current.status).toBe('pending');
+    expect(current.storageKey).toBe(validAttemptKey);
+
+    releaseValidStorage();
+    await expect(validUpload).resolves.toMatchObject({ id: assetId, status: 'ready' });
+    expect(current.status).toBe('ready');
+    expect(current.storageKey).toBe(validAttemptKey);
+  });
+
+  it('marks an invalid upload failed when its original intent is still current', async () => {
+    const current = {
+      id: assetId,
+      uploadedById: actorId,
+      originalName: 'image.png',
+      storageKey: originalKey,
+      status: 'pending',
+    };
+    prisma.asset.findUnique.mockImplementation(async () => ({ ...current }));
+    prisma.asset.updateMany.mockImplementation(
+      async ({
+        where,
+        data,
+      }: {
+        where: { storageKey: string; status: string };
+        data: Partial<typeof current>;
+      }) => {
+        if (current.status !== where.status || current.storageKey !== where.storageKey) {
+          return { count: 0 };
+        }
+        Object.assign(current, data);
+        return { count: 1 };
+      },
+    );
+    const invalidRequest = Object.assign(Readable.from([Buffer.from('not an image')]), {
+      headers: { 'content-type': 'application/octet-stream' },
+    }) as Request;
+
+    await expect(uploadUseCases.upload(actorId, assetId, invalidRequest)).rejects.toMatchObject({
+      status: 415,
+    });
+
+    expect(current.status).toBe('failed');
   });
 
   it('fails closed when a page asset reference is ahead of the projection', async () => {
@@ -293,6 +393,66 @@ describe('AssetsUseCases', () => {
     await gcUseCases.cleanupOrphanedObjects();
 
     expect(storage.objects.has(key)).toBe(true);
+  });
+
+  it('reconciles later tombstones over multiple bounded passes', async () => {
+    const ids = [
+      '550e8400-e29b-41d4-a716-446655440020',
+      '550e8400-e29b-41d4-a716-446655440021',
+      '550e8400-e29b-41d4-a716-446655440022',
+      '550e8400-e29b-41d4-a716-446655440023',
+      '550e8400-e29b-41d4-a716-446655440024',
+    ];
+    const deletedAssets = ids.map((id, index) => ({
+      id,
+      status: 'deleted',
+      storageKey: `assets/${id}/550e8400-e29b-41d4-a716-${String(index + 30).padStart(12, '0')}`,
+    }));
+    for (const asset of deletedAssets) {
+      await storage.putObject(asset.storageKey, {
+        body: Readable.from([Buffer.from([1])]),
+        checksum: 'checksum',
+        contentLength: 1,
+        contentType: 'image/png',
+      });
+    }
+    const queryPage = vi.spyOn(prisma.asset, 'findMany').mockImplementation((async (args: {
+      cursor?: { id: string };
+      skip?: number;
+      take: number;
+    }) => {
+      const cursorIndex = args.cursor
+        ? deletedAssets.findIndex(({ id }) => id === args.cursor?.id) + (args.skip ?? 0)
+        : 0;
+      return deletedAssets.slice(cursorIndex, cursorIndex + args.take);
+    }) as never);
+    prisma.asset.findUnique.mockImplementation(async ({ where }: { where: { id: string } }) => {
+      const asset = deletedAssets.find(({ id }) => id === where.id);
+      return asset ? { status: asset.status, storageKey: asset.storageKey } : null;
+    });
+    const gcBatchSize = 2;
+    gcUseCases = new AssetGcUseCases(prisma as never, storage, {
+      assets: { gcBatchSize },
+    } as ApplicationConfig);
+
+    await gcUseCases.reconcileDeletedAssets();
+    expect(storage.objects.size).toBe(3);
+    await gcUseCases.reconcileDeletedAssets();
+    expect(storage.objects.size).toBe(1);
+    await gcUseCases.reconcileDeletedAssets();
+
+    expect(storage.objects.size).toBe(0);
+    expect(queryPage).toHaveBeenCalledTimes(3);
+    expect(queryPage.mock.calls[1]?.[0]).toMatchObject({
+      cursor: { id: ids[1] },
+      skip: 1,
+      take: gcBatchSize,
+    });
+    expect(queryPage.mock.calls[2]?.[0]).toMatchObject({
+      cursor: { id: ids[3] },
+      skip: 1,
+      take: gcBatchSize,
+    });
   });
 });
 

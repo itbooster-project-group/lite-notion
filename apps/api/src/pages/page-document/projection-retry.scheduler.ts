@@ -27,7 +27,10 @@ export class ProjectionRetryScheduler {
         FROM "PageDocument" AS document
         INNER JOIN "PageAssetProjection" AS projection ON projection."pageId" = document."pageId"
         WHERE projection."sourceStorageRevision" IS DISTINCT FROM document."storageRevision"
-          AND projection."attemptCount" < ${PAGE_ASSET_PROJECTION_MAX_ATTEMPTS}
+          AND (
+            projection."attemptedStorageRevision" IS DISTINCT FROM document."storageRevision"
+            OR projection."attemptCount" < ${PAGE_ASSET_PROJECTION_MAX_ATTEMPTS}
+          )
           AND (
             projection."attemptedStorageRevision" IS NULL
             OR projection."attemptedStorageRevision" <> document."storageRevision"
