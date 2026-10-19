@@ -250,6 +250,7 @@ describe('PageDocument provenance on PostgreSQL', () => {
     await prisma.asset.create({
       data: {
         id: assetId,
+        checksum: 'projection-lag-checksum',
         mimeType: 'image/png',
         originalName: 'projection.png',
         sizeBytes: 8n,

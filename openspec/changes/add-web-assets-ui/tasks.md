@@ -33,7 +33,7 @@
 
 ## 6. Collaboration and recovery verification
 
-- [ ] 6.1 Add the projection-lag scenario to the existing PostgreSQL integration suite and use the existing scheduler/use case directly: viewer read fails closed before convergence, projection catches up, and a subsequent authorized read succeeds; do not wait for a real scheduler interval or create a parallel harness.
+- [x] 6.1 Add the projection-lag scenario to the existing PostgreSQL integration suite and use the existing scheduler/use case directly: viewer read fails closed before convergence, projection catches up, and a subsequent authorized read succeeds; do not wait for a real scheduler interval or create a parallel harness.
 - [ ] 6.2 Extend the existing opt-in collaboration E2E with two-user upload/insert/sync, viewer controls, remove sync, reload, and reconnect; verify no duplicate node and no signed URL in document content, and verify the node can be removed while unreadable when page edit permission remains.
 - [ ] 6.3 Verify access-token expiry/refresh during upload and asset URL reads, plus actual page permission loss during attachment, cover mutation, and document edit.
 - [ ] 6.4 Run configured local checks for affected web/API scope: Vitest/RTL, PostgreSQL integration tests, collaboration E2E where its required environment is available, lint, typecheck, build, OpenAPI/generated-client consistency, and strict OpenSpec validation; record unavailable external S3 smoke checks as unrun.

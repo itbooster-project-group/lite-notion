@@ -47,6 +47,7 @@ function AssetImageNodeView({ deleteNode, editor, node, pageId, userId }: AssetI
         onImageError={
           assetId ? resolved.onImageError : () => setFailedExternalUrl(attrs?.src ?? undefined)
         }
+        {...(assetId ? { onImageLoad: resolved.onImageLoad } : {})}
         src={src}
         state={state}
         width={800}

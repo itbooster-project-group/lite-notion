@@ -5,6 +5,7 @@ export type AssetImageProps = Readonly<{
   alt: string;
   fallback: ReactNode;
   onImageError?: () => void;
+  onImageLoad?: () => void;
   src?: string | undefined;
   state: 'loading' | 'ready' | 'unavailable';
   className?: string;
@@ -17,6 +18,7 @@ export function AssetImage({
   className,
   fallback,
   onImageError,
+  onImageLoad,
   src,
   state,
   height = 256,
@@ -30,6 +32,7 @@ export function AssetImage({
       className={className}
       height={height}
       {...(onImageError ? { onError: onImageError } : {})}
+      {...(onImageLoad ? { onLoad: onImageLoad } : {})}
       src={src}
       unoptimized
       width={width}

@@ -242,26 +242,90 @@ describe('media forms', () => {
     ]);
   });
 
-  it('не запускает повторную инициацию после неоднозначного ответа POST', async () => {
+  it('после терминальной ошибки заменяет Blob и preview и начинает новую операцию только по submit', async () => {
     const editor = createEditor();
+    const firstAssetId = '22222222-2222-4222-8222-222222222222';
+    const secondAssetId = '33333333-3333-4333-8333-333333333333';
+    let initiated = 0;
+    const initiate = vi.spyOn(api, 'initiateAssetUpload').mockImplementation(async () => {
+      const assetId = initiated++ === 0 ? firstAssetId : secondAssetId;
+      return { assetId, contentPath: `/api/v1/assets/${assetId}/content` };
+    });
+    const firstFile = new File(['first'], 'first.png', { type: 'image/png' });
+    const secondFile = new File(['second'], 'second.png', { type: 'image/png' });
+    vi.mocked(URL.createObjectURL)
+      .mockReset()
+      .mockReturnValueOnce('blob:first-preview')
+      .mockReturnValueOnce('blob:second-preview');
+    const put = vi
+      .spyOn(api, 'uploadAssetContentWithProgress')
+      .mockRejectedValueOnce(new AssetUploadError('invalid upload', 400))
+      .mockResolvedValue({
+        id: secondAssetId,
+        status: 'ready',
+        mimeType: 'image/png',
+        sizeBytes: 6,
+        originalName: secondFile.name,
+      });
+    render(<ImageForm editor={editor} onClose={vi.fn()} pageId="page-1" />);
+    fireEvent.change(screen.getByRole('textbox', { name: 'Описание изображения' }), {
+      target: { value: 'Картинка' },
+    });
+    const input = screen.getByLabelText('Выбрать файл изображения');
+    fireEvent.change(input, { target: { files: [firstFile] } });
+    expect(document.querySelector('img[src="blob:first-preview"]')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Вставить изображение' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Не удалось загрузить');
+
+    fireEvent.change(input, { target: { files: [secondFile] } });
+    expect(screen.getByText(secondFile.name)).toBeInTheDocument();
+    expect(document.querySelector('img[src="blob:second-preview"]')).toBeInTheDocument();
+    expect(initiate).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button', { name: 'Вставить изображение' }));
+
+    await waitFor(() => expect(editor.getJSON()).toMatchObject({ content: [{ type: 'image' }] }));
+    expect(initiate).toHaveBeenCalledTimes(2);
+    expect(initiate.mock.calls.map(([body]) => body.fileName)).toEqual(['first.png', 'second.png']);
+    expect(put.mock.calls.map(([, blob]) => blob)).toEqual([firstFile, secondFile]);
+  });
+
+  it('после неопределённого ответа POST предупреждает и позволяет явно загрузить другой файл', async () => {
+    const editor = createEditor();
+    const assetId = '22222222-2222-4222-8222-222222222222';
     const initiate = vi
       .spyOn(api, 'initiateAssetUpload')
-      .mockRejectedValue(new TypeError('network'));
+      .mockRejectedValueOnce(new TypeError('network'))
+      .mockResolvedValue({ assetId, contentPath: `/api/v1/assets/${assetId}/content` });
+    const upload = vi.spyOn(api, 'uploadAssetContentWithProgress').mockResolvedValue({
+      id: assetId,
+      status: 'ready',
+      mimeType: 'image/png',
+      sizeBytes: 4,
+      originalName: 'second.png',
+    });
     render(<ImageForm editor={editor} onClose={vi.fn()} pageId="page-1" />);
     fireEvent.change(screen.getByRole('textbox', { name: 'Описание изображения' }), {
       target: { value: 'Карта' },
     });
-    fireEvent.change(screen.getByLabelText('Выбрать файл изображения'), {
-      target: { files: [new File(['png'], 'map.png', { type: 'image/png' })] },
-    });
+    const input = screen.getByLabelText('Выбрать файл изображения');
+    const firstFile = new File(['first'], 'first.png', { type: 'image/png' });
+    const secondFile = new File(['second'], 'second.png', { type: 'image/png' });
+    fireEvent.change(input, { target: { files: [firstFile] } });
     fireEvent.click(screen.getByRole('button', { name: 'Вставить изображение' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('не создать дубликат');
-    expect(screen.getByLabelText('Выбрать файл изображения')).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Вставить изображение' })).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: 'Вставить изображение' }));
+    expect(input).toBeEnabled();
     expect(initiate).toHaveBeenCalledOnce();
-    expect(editor.getJSON()).not.toMatchObject({ content: [{ type: 'image' }] });
+    fireEvent.change(input, { target: { files: [secondFile] } });
+    expect(screen.getByText(secondFile.name)).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Предыдущая загрузка могла завершиться');
+    expect(screen.getByRole('button', { name: 'Вставить изображение' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Вставить изображение' }));
+
+    await waitFor(() => expect(editor.getJSON()).toMatchObject({ content: [{ type: 'image' }] }));
+    expect(initiate).toHaveBeenCalledTimes(2);
+    expect(initiate.mock.calls.map(([body]) => body.fileName)).toEqual(['first.png', 'second.png']);
+    expect(upload).toHaveBeenCalledWith(assetId, secondFile, expect.any(Function));
   });
 
   it('не вставляет image и не повторяет upload при отказе в permission', async () => {

@@ -5,6 +5,31 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as api from '@/shared/api';
 import { useAssetReadUrl } from './use-asset-read-url';
 
+function createWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { refetchOnReconnect: false, refetchOnWindowFocus: false, retry: false },
+    },
+  });
+  return {
+    queryClient,
+    wrapper: ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    ),
+  };
+}
+
+function mockReadUrls(assetId: string, urls: string[]) {
+  let nextUrl = 0;
+  return vi.spyOn(api, 'createAssetReadUrl').mockImplementation(async (requestedAssetId) => ({
+    url:
+      requestedAssetId === assetId
+        ? (urls[Math.min(nextUrl++, urls.length - 1)] ?? '')
+        : 'https://cdn.example.com/unrelated.jpg',
+    expiresInSeconds: 300,
+  }));
+}
+
 describe('useAssetReadUrl', () => {
   afterEach(() => vi.restoreAllMocks());
 
@@ -65,6 +90,101 @@ describe('useAssetReadUrl', () => {
     await waitFor(() => expect(result.current.state).toBe('unavailable'));
     expect(read).toHaveBeenCalledTimes(1);
     expect(result.current.src).toBeUndefined();
+    queryClient.clear();
+  });
+
+  it('refreshes once when the image first fails, even if the signed URL changes', async () => {
+    const read = mockReadUrls('asset-cycle', [
+      'https://cdn.example.com/old.jpg',
+      'https://cdn.example.com/new.jpg',
+    ]);
+    const { queryClient, wrapper } = createWrapper();
+    const { result } = renderHook(
+      () => useAssetReadUrl('asset-cycle', 'user-1', { id: 'page-1', kind: 'page' }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.src).toBe('https://cdn.example.com/old.jpg'));
+
+    act(() => result.current.onImageError());
+    await waitFor(() => expect(result.current.src).toBe('https://cdn.example.com/new.jpg'));
+    act(() => result.current.onImageError());
+
+    await waitFor(() => expect(result.current.state).toBe('unavailable'));
+    expect(read).toHaveBeenCalledTimes(2);
+    queryClient.clear();
+  });
+
+  it('shows unavailable when the refreshed URL also fails to load', async () => {
+    mockReadUrls('asset-fallback', [
+      'https://cdn.example.com/old.jpg',
+      'https://cdn.example.com/new.jpg',
+    ]);
+    const { queryClient, wrapper } = createWrapper();
+    const { result } = renderHook(
+      () => useAssetReadUrl('asset-fallback', 'user-1', { id: 'page-1', kind: 'page' }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.src).toBe('https://cdn.example.com/old.jpg'));
+
+    act(() => result.current.onImageError());
+    await waitFor(() => expect(result.current.src).toBe('https://cdn.example.com/new.jpg'));
+    act(() => result.current.onImageError());
+
+    await waitFor(() => expect(result.current.state).toBe('unavailable'));
+    queryClient.clear();
+  });
+
+  it('starts a new refresh cycle when the asset identity changes', async () => {
+    const read = vi.spyOn(api, 'createAssetReadUrl').mockImplementation(async (assetId) => ({
+      url: `https://cdn.example.com/${assetId}.jpg`,
+      expiresInSeconds: 300,
+    }));
+    const { queryClient, wrapper } = createWrapper();
+    const { result, rerender } = renderHook(
+      ({ assetId }: { assetId: string }) =>
+        useAssetReadUrl(assetId, 'user-1', { id: 'page-1', kind: 'page' }),
+      { initialProps: { assetId: 'asset-a' }, wrapper },
+    );
+    await waitFor(() => expect(result.current.src).toContain('asset-a'));
+    act(() => result.current.onImageError());
+    await waitFor(() =>
+      expect(
+        read.mock.calls.filter(([requestedAssetId]) => requestedAssetId === 'asset-a'),
+      ).toHaveLength(2),
+    );
+
+    rerender({ assetId: 'asset-b' });
+    await waitFor(() => expect(result.current.src).toContain('asset-b'));
+    act(() => result.current.onImageError());
+    await waitFor(() =>
+      expect(
+        read.mock.calls.filter(([requestedAssetId]) => requestedAssetId === 'asset-b'),
+      ).toHaveLength(2),
+    );
+    queryClient.clear();
+  });
+
+  it('resets the recovery limit after a successful image load', async () => {
+    const read = mockReadUrls('asset-reset', [
+      'https://cdn.example.com/old.jpg',
+      'https://cdn.example.com/new.jpg',
+      'https://cdn.example.com/loaded-again.jpg',
+    ]);
+    const { queryClient, wrapper } = createWrapper();
+    const { result } = renderHook(
+      () => useAssetReadUrl('asset-reset', 'user-1', { id: 'page-1', kind: 'page' }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.src).toBe('https://cdn.example.com/old.jpg'));
+    act(() => result.current.onImageError());
+    await waitFor(() => expect(result.current.src).toBe('https://cdn.example.com/new.jpg'));
+    act(() => result.current.onImageLoad());
+    act(() => result.current.onImageError());
+
+    await waitFor(() =>
+      expect(result.current.src).toBe('https://cdn.example.com/loaded-again.jpg'),
+    );
+    expect(read).toHaveBeenCalledWith('asset-reset', { pageId: 'page-1' });
     queryClient.clear();
   });
 

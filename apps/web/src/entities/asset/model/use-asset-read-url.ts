@@ -25,8 +25,15 @@ export function useAssetReadUrl(
   const authorizationContext = `${context.kind}:${context.id}`;
   const accessKey = `${assetId ?? ''}:${userId ?? ''}:${authorizationContext}`;
   const queryKey = getAssetReadUrlQueryKey(assetId ?? '', authorizationContext, userId ?? '');
+  const imageRefreshUsedFor = useRef<string | undefined>(undefined);
+  const imageCycle = useRef({ accessKey, id: 0 });
+  if (imageCycle.current.accessKey !== accessKey) {
+    imageCycle.current = { accessKey, id: imageCycle.current.id + 1 };
+    imageRefreshUsedFor.current = undefined;
+  }
+  const imageCycleKey = `${accessKey}:${imageCycle.current.id}`;
   const query = useQuery<ResolvedAssetUrl, Error & { status?: number }>({
-    enabled: Boolean(assetId && userId && context.id && deniedFor !== accessKey),
+    enabled: Boolean(assetId && userId && context.id && deniedFor !== imageCycleKey),
     queryKey,
     queryFn: async () => {
       if (!assetId) throw new Error('Asset identity is unavailable.');
@@ -46,7 +53,6 @@ export function useAssetReadUrl(
     retry: (failureCount, error) =>
       failureCount < 1 && error.status !== 401 && error.status !== 403 && error.status !== 404,
   });
-  const imageRefreshUsedFor = useRef<string | undefined>(undefined);
   const [imageUnavailableFor, setImageUnavailableFor] = useState<string>();
 
   useEffect(() => {
@@ -61,35 +67,41 @@ export function useAssetReadUrl(
 
   useEffect(() => {
     if (query.error?.status === 401 || query.error?.status === 403) {
-      setDeniedFor(accessKey);
+      setDeniedFor(imageCycleKey);
       void queryClient.removeQueries({ queryKey, exact: true });
     }
-  }, [accessKey, query.error, queryKey, queryClient]);
+  }, [imageCycleKey, query.error, queryKey, queryClient]);
 
   const refreshAfterImageError = useCallback(() => {
     if (query.error?.status === 401 || query.error?.status === 403) return;
-    const failedUrl = query.data?.url;
-    const refreshKey = `${accessKey}:${failedUrl ?? ''}`;
-    if (imageRefreshUsedFor.current === refreshKey) {
-      setImageUnavailableFor(refreshKey);
+    if (imageRefreshUsedFor.current === accessKey) {
+      setImageUnavailableFor(imageCycleKey);
       return;
     }
-    imageRefreshUsedFor.current = refreshKey;
+    imageRefreshUsedFor.current = accessKey;
     void query.refetch().then((result) => {
-      if (result.data?.url === failedUrl) setImageUnavailableFor(refreshKey);
+      if (!result.data || result.data.url === query.data?.url || result.error) {
+        setImageUnavailableFor(imageCycleKey);
+      }
     });
-  }, [accessKey, query.data?.url, query.error?.status, query.refetch]);
+  }, [accessKey, imageCycleKey, query.data?.url, query.error?.status, query.refetch]);
+
+  const resetImageError = useCallback(() => {
+    if (imageRefreshUsedFor.current === accessKey) imageRefreshUsedFor.current = undefined;
+    setImageUnavailableFor((current) => (current === imageCycleKey ? undefined : current));
+  }, [accessKey, imageCycleKey]);
 
   return {
+    onImageLoad: resetImageError,
     onImageError: refreshAfterImageError,
     src: query.data?.url,
     state:
-      query.isPending && deniedFor !== accessKey
+      query.isPending && deniedFor !== imageCycleKey
         ? 'loading'
-        : deniedFor === accessKey ||
+        : deniedFor === imageCycleKey ||
             query.isError ||
             !query.data ||
-            imageUnavailableFor === `${accessKey}:${query.data.url}`
+            imageUnavailableFor === imageCycleKey
           ? 'unavailable'
           : 'ready',
   } as const;

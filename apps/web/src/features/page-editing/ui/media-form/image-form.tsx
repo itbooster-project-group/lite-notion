@@ -112,7 +112,7 @@ export function ImageForm({ editor, onClose, pageId }: ImageFormProps) {
 
   function chooseFile(nextFile: File | undefined) {
     setError(null);
-    if (nextFile) setFile(nextFile);
+    if (nextFile && assetUpload.selectNewFile()) setFile(nextFile);
   }
 
   return (
@@ -185,7 +185,7 @@ export function ImageForm({ editor, onClose, pageId }: ImageFormProps) {
             accept="image/jpeg,image/png,image/webp"
             aria-label="Выбрать файл изображения"
             className="peer sr-only"
-            disabled={uploadIsBusy || !assetUpload.canStartNew}
+            disabled={!assetUpload.canSelectNewFile}
             onChange={(event) => {
               const selectedFile = event.currentTarget.files?.[0];
               event.currentTarget.value = '';
@@ -213,7 +213,7 @@ export function ImageForm({ editor, onClose, pageId }: ImageFormProps) {
                   <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
                 </div>
                 <Button
-                  disabled={uploadIsBusy || !assetUpload.canStartNew}
+                  disabled={!assetUpload.canSelectNewFile}
                   onClick={() => fileInputRef.current?.click()}
                   type="button"
                   variant="outline"

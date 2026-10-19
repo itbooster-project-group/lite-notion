@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from 'react';
 import {
   AssetUploadError,
+  getAssetMetadata,
   initiateAssetUpload,
   uploadAssetContentWithProgress,
 } from '@/shared/api';
@@ -12,7 +13,8 @@ type UploadState = Readonly<{
   assetId?: string;
   error?: string;
   progress: number;
-  status: 'idle' | 'uploading' | 'ready' | 'failed';
+  retryable?: boolean;
+  status: 'idle' | 'uploading' | 'ready' | 'failed' | 'unresolved';
 }>;
 
 const INITIAL_STATE: UploadState = { progress: 0, status: 'idle' };
@@ -20,13 +22,14 @@ const INITIAL_STATE: UploadState = { progress: 0, status: 'idle' };
 export function useImageAssetUpload() {
   const [state, setState] = useState(INITIAL_STATE);
   const [initiationUncertain, setInitiationUncertain] = useState(false);
+  const [needsFileReselection, setNeedsFileReselection] = useState(false);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const operation = useRef<UploadOperation | undefined>(undefined);
   const active = useRef(false);
 
   const execute = useCallback(async (current: UploadOperation) => {
     setState((previous) => {
-      const { error: _error, ...current } = previous;
+      const { error: _error, retryable: _retryable, ...current } = previous;
       return { ...current, progress: 0, status: 'uploading' };
     });
     try {
@@ -45,7 +48,35 @@ export function useImageAssetUpload() {
       return result.id;
     } catch (error) {
       const status = error instanceof AssetUploadError ? error.status : getStatus(error);
-      if (status === 403) operation.current = undefined;
+      if (status === 409) {
+        operation.current = undefined;
+        setNeedsFileReselection(true);
+        if (current.pageId) {
+          try {
+            const metadata = await getAssetMetadata(current.assetId, { pageId: current.pageId });
+            if (metadata.id === current.assetId && metadata.status === 'ready') {
+              setNeedsFileReselection(false);
+              setState({ assetId: metadata.id, progress: 100, status: 'ready' });
+              return metadata.id;
+            }
+          } catch {
+            // Metadata only confirms ready; other outcomes remain indistinguishable.
+          }
+        }
+        setState({
+          error:
+            'Загрузка столкнулась с конфликтом. Состояние файла не подтверждено; выберите файл заново.',
+          progress: 0,
+          status: 'unresolved',
+        });
+        return undefined;
+      }
+
+      const retryable = isRetryableUploadError(error, status);
+      if (!retryable || status === 403 || status === 401) {
+        operation.current = undefined;
+        setNeedsFileReselection(true);
+      }
       if (status === 401 || status === 403) setPermissionDenied(true);
       const message =
         status === 403
@@ -53,9 +84,15 @@ export function useImageAssetUpload() {
           : status === 401
             ? 'Сессия завершена. Войдите снова и повторите загрузку.'
             : error instanceof AssetUploadError && error.ambiguous
-              ? 'Сервер мог завершить загрузку, но ответ не получен. Повторите эту же попытку.'
+              ? 'Сервер мог завершить загрузку, но ответ не получен. Повторите ту же попытку или выберите другой файл.'
               : 'Не удалось загрузить изображение. Повторите попытку.';
-      setState((previous) => ({ ...previous, error: message, status: 'failed' }));
+      setState((previous) => ({
+        ...previous,
+        error: message,
+        progress: 0,
+        retryable,
+        status: 'failed',
+      }));
       return undefined;
     } finally {
       active.current = false;
@@ -66,6 +103,7 @@ export function useImageAssetUpload() {
     async (file: File, pageId?: string) => {
       if (active.current || operation.current || initiationUncertain) return undefined;
       active.current = true;
+      setState({ progress: 0, status: 'uploading' });
       try {
         const initiated = await initiateAssetUpload({
           fileName: file.name,
@@ -99,18 +137,51 @@ export function useImageAssetUpload() {
   );
 
   const retry = useCallback(() => {
-    if (!operation.current || active.current) return Promise.resolve(undefined);
+    if (!operation.current || active.current || !state.retryable) return Promise.resolve(undefined);
     active.current = true;
     return execute(operation.current);
-  }, [execute]);
+  }, [execute, state.retryable]);
+
+  const selectNewFile = useCallback(() => {
+    if (active.current || permissionDenied) return false;
+    const warnAboutUnknownResult =
+      initiationUncertain ||
+      state.status === 'unresolved' ||
+      (state.status === 'failed' && state.error?.includes('ответ не получен'));
+    operation.current = undefined;
+    setInitiationUncertain(false);
+    setNeedsFileReselection(false);
+    setState({
+      ...(warnAboutUnknownResult
+        ? {
+            error:
+              'Предыдущая загрузка могла завершиться на сервере. Новый файл загрузится отдельно.',
+          }
+        : {}),
+      progress: 0,
+      status: warnAboutUnknownResult ? 'unresolved' : 'idle',
+    });
+    return true;
+  }, [initiationUncertain, permissionDenied, state.error, state.status]);
 
   return {
     ...state,
-    canRetry: operation.current !== undefined,
-    canStartNew: operation.current === undefined && !initiationUncertain && !permissionDenied,
+    canRetry: operation.current !== undefined && state.retryable === true,
+    canSelectNewFile: !active.current && !permissionDenied,
+    canStartNew:
+      operation.current === undefined &&
+      !initiationUncertain &&
+      !needsFileReselection &&
+      !permissionDenied,
     retry,
+    selectNewFile,
     upload,
   };
+}
+
+function isRetryableUploadError(error: unknown, status: number | undefined): boolean {
+  if (error instanceof AssetUploadError && error.ambiguous) return true;
+  return status === 408 || status === 429 || (status !== undefined && status >= 500);
 }
 
 function getStatus(error: unknown): number | undefined {

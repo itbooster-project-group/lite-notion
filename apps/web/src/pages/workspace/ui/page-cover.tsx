@@ -89,6 +89,7 @@ export function PageCover({ page, placement }: PageCoverProps) {
         }
         height={256}
         onImageError={image.onImageError}
+        onImageLoad={image.onImageLoad}
         src={image.src}
         state={image.state}
         width={1200}
@@ -155,11 +156,14 @@ export function PageCover({ page, placement }: PageCoverProps) {
             accept="image/jpeg,image/png,image/webp"
             aria-label="Загрузить изображение обложки"
             className="sr-only"
-            disabled={isBusy || !upload.canStartNew}
+            disabled={isBusy || !upload.canSelectNewFile}
             onChange={(event) => {
               const file = event.currentTarget.files?.[0];
               event.currentTarget.value = '';
-              if (file) void uploadCover(file);
+              if (file) {
+                upload.selectNewFile();
+                void uploadCover(file);
+              }
             }}
             ref={fileInputRef}
             type="file"
@@ -201,7 +205,7 @@ export function PageCover({ page, placement }: PageCoverProps) {
         <>
           <Button
             className="text-muted-foreground"
-            disabled={isBusy || !upload.canStartNew}
+            disabled={isBusy || !upload.canSelectNewFile}
             onClick={() => fileInputRef.current?.click()}
             size="sm"
             type="button"
@@ -214,11 +218,14 @@ export function PageCover({ page, placement }: PageCoverProps) {
             accept="image/jpeg,image/png,image/webp"
             aria-label="Загрузить изображение обложки"
             className="sr-only"
-            disabled={isBusy || !upload.canStartNew}
+            disabled={isBusy || !upload.canSelectNewFile}
             onChange={(event) => {
               const file = event.currentTarget.files?.[0];
               event.currentTarget.value = '';
-              if (file) void uploadCover(file);
+              if (file) {
+                upload.selectNewFile();
+                void uploadCover(file);
+              }
             }}
             ref={fileInputRef}
             type="file"

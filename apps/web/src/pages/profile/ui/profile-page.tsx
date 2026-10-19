@@ -48,6 +48,7 @@ export function ProfilePage() {
             }
             height={80}
             onImageError={avatar.onImageError}
+            onImageLoad={avatar.onImageLoad}
             src={avatar.src}
             state={user.avatarAssetId ? avatar.state : 'unavailable'}
             width={80}
@@ -58,12 +59,14 @@ export function ProfilePage() {
             </label>
             <Input
               accept="image/jpeg,image/png,image/webp"
-              disabled={permissionDenied || upload.status === 'uploading' || !upload.canStartNew}
+              disabled={permissionDenied || !upload.canSelectNewFile}
               id="profile-avatar-file"
               onChange={(event) => {
                 const file = event.target.files?.[0];
                 if (file) {
+                  event.currentTarget.value = '';
                   setPermissionDenied(false);
+                  upload.selectNewFile();
                   void saveAvatar(file);
                 }
               }}

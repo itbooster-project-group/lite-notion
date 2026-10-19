@@ -79,6 +79,7 @@ function ParticipantAvatar({
       }
       height={28}
       onImageError={avatar.onImageError}
+      onImageLoad={avatar.onImageLoad}
       src={avatar.src}
       state={user.avatarAssetId ? avatar.state : 'unavailable'}
       width={28}

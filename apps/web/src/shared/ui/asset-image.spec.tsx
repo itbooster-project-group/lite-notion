@@ -5,13 +5,15 @@ import { AssetImage } from './asset-image';
 afterEach(cleanup);
 
 describe('AssetImage', () => {
-  it('renders resolved image data and forwards load errors without resolving assets itself', () => {
+  it('renders resolved image data and forwards load errors without resolving assets itself', async () => {
     const onImageError = vi.fn();
+    const onImageLoad = vi.fn();
     render(
       <AssetImage
         alt="Карта"
         fallback={<span role="status">Нет изображения</span>}
         onImageError={onImageError}
+        onImageLoad={onImageLoad}
         src="https://cdn.example.com/signed.jpg"
         state="ready"
       />,
@@ -21,6 +23,9 @@ describe('AssetImage', () => {
     expect(image).toHaveAttribute('src', 'https://cdn.example.com/signed.jpg');
     fireEvent.error(image);
     expect(onImageError).toHaveBeenCalledOnce();
+    fireEvent.load(image);
+    await screen.findByRole('img', { name: 'Карта' });
+    await vi.waitFor(() => expect(onImageLoad).toHaveBeenCalledOnce());
   });
 
   it.each(['loading', 'unavailable'] as const)(
