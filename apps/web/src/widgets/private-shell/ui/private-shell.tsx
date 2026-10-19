@@ -3,8 +3,10 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
+import { useAssetReadUrl } from '@/entities/asset';
 import { useSession } from '@/entities/session';
 import { LogoutButton } from '@/features/auth';
+import { AssetImage } from '@/shared/ui';
 
 type PrivateShellProps = Readonly<{
   children: ReactNode;
@@ -14,6 +16,10 @@ type PrivateShellProps = Readonly<{
 
 export function PrivateShell({ children, breadcrumbs, headerStart }: PrivateShellProps) {
   const { user } = useSession();
+  const avatar = useAssetReadUrl(user?.avatarAssetId, user?.id, {
+    id: user?.id ?? '',
+    kind: 'avatar',
+  });
 
   return (
     <div className="grid min-h-dvh grid-rows-[auto_minmax(0,1fr)] bg-background">
@@ -25,11 +31,29 @@ export function PrivateShell({ children, breadcrumbs, headerStart }: PrivateShel
           </div>
           <div className="flex shrink-0 items-center gap-3">
             <Link
-              className="block max-w-24 truncate rounded-sm text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 sm:max-w-48"
+              aria-label={user ? `Профиль: ${user.name}` : 'Профиль'}
+              className="block size-8 shrink-0 overflow-hidden rounded-full bg-muted text-muted-foreground outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring/50"
               href="/profile"
               title={user?.name ?? 'Профиль'}
             >
-              {user?.name ?? 'Профиль'}
+              <AssetImage
+                alt={`${user?.name ?? 'Профиль'}: аватар`}
+                className="size-8 rounded-full object-cover"
+                fallback={
+                  <span
+                    aria-hidden="true"
+                    className="flex size-8 items-center justify-center rounded-full text-sm font-medium"
+                  >
+                    {getInitial(user?.name)}
+                  </span>
+                }
+                height={32}
+                onImageError={avatar.onImageError}
+                onImageLoad={avatar.onImageLoad}
+                src={avatar.src}
+                state={user?.avatarAssetId ? avatar.state : 'unavailable'}
+                width={32}
+              />
             </Link>
             <LogoutButton />
           </div>
@@ -38,4 +62,8 @@ export function PrivateShell({ children, breadcrumbs, headerStart }: PrivateShel
       {children}
     </div>
   );
+}
+
+function getInitial(name: string | undefined): string {
+  return name?.trim().slice(0, 1).toUpperCase() || '?';
 }

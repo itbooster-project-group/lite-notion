@@ -1,9 +1,14 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import * as api from '@/shared/api';
 import { PrivateShell } from './private-shell';
 
-const session = vi.hoisted<{ user: { name: string } | undefined }>(() => ({
+const session = vi.hoisted<{
+  user: { avatarAssetId?: string | null; id?: string; name: string } | undefined;
+}>(() => ({
   user: undefined,
 }));
 
@@ -16,18 +21,31 @@ vi.mock('@/features/auth', () => ({
 }));
 
 beforeEach(() => {
-  session.user = { name: 'Ada Lovelace' };
+  session.user = { id: 'user-a', name: 'Ada Lovelace' };
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+
+function renderShell(headerStart?: ReactNode) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <PrivateShell
+        breadcrumbs={<nav aria-label="Хлебные крошки">Проекты</nav>}
+        headerStart={headerStart}
+      >
+        <main>Приватный экран</main>
+      </PrivateShell>
+    </QueryClientProvider>,
+  );
+}
 
 describe('private shell navigation', () => {
-  it('отображает переданные хлебные крошки и в профиль по видимому имени пользователя', () => {
-    render(
-      <PrivateShell breadcrumbs={<nav aria-label="Хлебные крошки">Проекты</nav>}>
-        <main>Приватный экран</main>
-      </PrivateShell>,
-    );
+  it('показывает аватар вместо имени и оставляет доступный переход в профиль', () => {
+    renderShell();
 
     expect(screen.queryByRole('link', { name: 'Lite Notion' })).not.toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Хлебные крошки' })).toHaveTextContent('Проекты');
@@ -36,11 +54,12 @@ describe('private shell navigation', () => {
     expect(headerContent).toHaveClass('px-page-inline');
     expect(headerContent).not.toHaveClass('pl-14', 'pr-page-inline', 'md:px-page-inline');
 
-    const profileLink = screen.getByRole('link', { name: 'Ada Lovelace' });
+    const profileLink = screen.getByRole('link', { name: 'Профиль: Ada Lovelace' });
     expect(profileLink).toHaveAttribute('href', '/profile');
     expect(profileLink).toHaveAttribute('title', 'Ada Lovelace');
-    expect(profileLink).toHaveClass('max-w-24', 'truncate', 'sm:max-w-48');
-    expect(profileLink).not.toHaveClass('hidden');
+    expect(profileLink).toHaveClass('size-8', 'rounded-full');
+    expect(profileLink).toHaveTextContent('A');
+    expect(screen.queryByText('Ada Lovelace')).not.toBeInTheDocument();
 
     expect(screen.queryByRole('link', { name: 'Главная' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Профиль' })).not.toBeInTheDocument();
@@ -49,14 +68,7 @@ describe('private shell navigation', () => {
   });
 
   it('рендерит headerStart как обычный слот без компенсации layout под внешний trigger', () => {
-    render(
-      <PrivateShell
-        breadcrumbs={<nav aria-label="Хлебные крошки">Проекты</nav>}
-        headerStart={<button type="button">Меню</button>}
-      >
-        Контент
-      </PrivateShell>,
-    );
+    renderShell(<button type="button">Меню</button>);
 
     const headerContent = screen.getByRole('banner').firstElementChild;
     expect(screen.getByRole('button', { name: 'Меню' })).toBeInTheDocument();
@@ -67,14 +79,29 @@ describe('private shell navigation', () => {
   it('сохраняет доступный переход в профиль до появления имени пользователя', () => {
     session.user = undefined;
 
-    render(
-      <PrivateShell breadcrumbs={<nav aria-label="Хлебные крошки">Проекты</nav>}>
-        Контент
-      </PrivateShell>,
-    );
+    renderShell();
 
     const profileLink = screen.getByRole('link', { name: 'Профиль' });
     expect(profileLink).toHaveAttribute('href', '/profile');
     expect(profileLink).toHaveAttribute('title', 'Профиль');
+  });
+
+  it('показывает загруженное изображение и возвращает fallback, если оно недоступно', async () => {
+    session.user = {
+      id: 'user-a',
+      name: 'Ada Lovelace',
+      avatarAssetId: 'asset-a',
+    };
+    vi.spyOn(api, 'createAvatarReadUrl').mockResolvedValue({
+      url: 'https://cdn.example.com/ada.jpg',
+      expiresInSeconds: 300,
+    });
+
+    renderShell();
+
+    expect(await screen.findByRole('img', { name: 'Ada Lovelace: аватар' })).toHaveAttribute(
+      'src',
+      'https://cdn.example.com/ada.jpg',
+    );
   });
 });

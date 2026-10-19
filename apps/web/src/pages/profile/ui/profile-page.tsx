@@ -5,7 +5,11 @@ import { ImagePlus, LoaderCircle, MoreHorizontal, Trash2, Upload } from 'lucide-
 import { useRef, useState } from 'react';
 import { useAssetReadUrl, useImageAssetUpload } from '@/entities/asset';
 import { useSession } from '@/entities/session';
-import { getGetCurrentUserQueryKey, setCurrentUserAvatar } from '@/shared/api';
+import {
+  assetReadUrlQueryKey,
+  getGetCurrentUserQueryKey,
+  setCurrentUserAvatar,
+} from '@/shared/api';
 import {
   AssetImage,
   Button,
@@ -69,17 +73,28 @@ export function ProfilePage() {
               state={user.avatarAssetId ? avatar.state : 'unavailable'}
               width={96}
             />
-            {isBusy ? (
+            {upload.status === 'uploading' ? (
               <div
-                aria-label={savingAvatar ? 'Сохраняем аватар' : 'Загрузка аватара'}
+                aria-label="Загрузка аватара"
                 aria-valuemax={100}
                 aria-valuemin={0}
-                aria-valuenow={savingAvatar ? 100 : upload.progress}
+                aria-valuenow={upload.progress}
                 className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-background/75 px-3 text-xs"
                 role="progressbar"
               >
                 <LoaderCircle aria-hidden="true" className="size-5 animate-spin" />
-                <span>{savingAvatar ? 'Сохраняем…' : `${upload.progress}%`}</span>
+                <span>{upload.progress}%</span>
+              </div>
+            ) : null}
+            {savingAvatar ? (
+              <div
+                aria-label="Сохраняем аватар"
+                aria-live="polite"
+                className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-background/75 px-3 text-xs"
+                role="status"
+              >
+                <LoaderCircle aria-hidden="true" className="size-5 animate-spin" />
+                <span>Сохраняем аватар</span>
               </div>
             ) : null}
           </div>
@@ -101,6 +116,8 @@ export function ProfilePage() {
                 const file = event.currentTarget.files?.[0];
                 event.currentTarget.value = '';
                 if (file && upload.selectNewFile()) {
+                  setPendingAvatarAssetId(undefined);
+                  setError(undefined);
                   setPermissionDenied(false);
                   void saveAvatar(file);
                 }
@@ -211,10 +228,21 @@ export function ProfilePage() {
   }
 
   async function updateAvatar(assetId: string | null) {
+    if (!user) return;
     setSavingAvatar(true);
     try {
       await setCurrentUserAvatar({ assetId });
-      queryClient.setQueryData(getGetCurrentUserQueryKey(), { ...user, avatarAssetId: assetId });
+      queryClient.setQueryData(getGetCurrentUserQueryKey(), (currentUser) =>
+        currentUser && typeof currentUser === 'object'
+          ? { ...currentUser, avatarAssetId: assetId }
+          : currentUser,
+      );
+      queryClient.removeQueries({
+        predicate: (query) =>
+          query.queryKey[0] === assetReadUrlQueryKey[0] &&
+          query.queryKey[2] === `avatar:${user.id}` &&
+          query.queryKey[3] === user.id,
+      });
       await queryClient.invalidateQueries({ queryKey: getGetCurrentUserQueryKey() });
       setPendingAvatarAssetId(undefined);
       setError(undefined);

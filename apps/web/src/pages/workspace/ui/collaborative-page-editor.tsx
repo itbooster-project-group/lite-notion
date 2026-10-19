@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getPageCapabilities, type PageAccessRole, type PageCapabilities } from '@/entities/page';
 import { useSession } from '@/entities/session';
 import {
@@ -24,10 +24,15 @@ export function CollaborativePageEditor({
   const userId = auth.user?.id;
   const userName = auth.user?.name;
   const avatarAssetId = auth.user?.avatarAssetId ?? null;
+  const avatarAssetIdRef = useRef(avatarAssetId);
   const resolvedCapabilities = capabilities ?? getPageCapabilities(accessRole ?? 'viewer');
   const editable = resolvedCapabilities.canEditContent;
   const [session, setSession] = useState<PageDocumentSession | null>(null);
   const [, rerender] = useState(0);
+
+  useEffect(() => {
+    avatarAssetIdRef.current = avatarAssetId;
+  }, [avatarAssetId]);
 
   useEffect(() => {
     const getToken = auth.getAccessToken ?? (() => undefined);
@@ -38,7 +43,9 @@ export function CollaborativePageEditor({
       editable,
       getAccessToken: getToken,
       refreshAccessToken: refreshToken,
-      ...(userId && userName ? { user: { id: userId, name: userName } } : {}),
+      ...(userId && userName
+        ? { user: { id: userId, name: userName, avatarAssetId: avatarAssetIdRef.current } }
+        : {}),
     });
     setSession(nextSession);
     const unsubscribe = nextSession.subscribe?.(() => rerender((value) => value + 1));

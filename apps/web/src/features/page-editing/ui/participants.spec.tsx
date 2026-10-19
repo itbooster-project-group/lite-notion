@@ -105,6 +105,44 @@ describe('Participants', () => {
     );
     expect(readUrl).toHaveBeenCalledWith('user-a', assetId);
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
+
+    users = [{ id: 'user-a', name: 'Ada Lovelace', color: '#2563eb' }];
+    act(() => notify());
+    expect(await screen.findByRole('img', { name: 'Ada Lovelace' })).toHaveTextContent('AL');
+    expect(screen.queryByRole('img', { name: 'Ada Lovelace: аватар' })).not.toBeInTheDocument();
+  });
+
+  it('resolves each participant avatar with that participant identity', async () => {
+    vi.spyOn(api, 'createAvatarReadUrl').mockImplementation(async (userId, assetId) => ({
+      url: `https://cdn.example.com/${userId}/${assetId}.jpg`,
+      expiresInSeconds: 300,
+    }));
+    renderParticipants(
+      createPresence([
+        {
+          id: 'user-a',
+          name: 'Ada',
+          color: '#2563eb',
+          avatarAssetId: 'asset-a',
+        },
+        {
+          id: 'user-b',
+          name: 'Bob',
+          color: '#16a34a',
+          avatarAssetId: 'asset-b',
+        },
+      ]),
+      'viewer-id',
+    );
+
+    expect(await screen.findByRole('img', { name: 'Ada: аватар' })).toHaveAttribute(
+      'src',
+      'https://cdn.example.com/user-a/asset-a.jpg',
+    );
+    expect(await screen.findByRole('img', { name: 'Bob: аватар' })).toHaveAttribute(
+      'src',
+      'https://cdn.example.com/user-b/asset-b.jpg',
+    );
   });
 
   it('keeps accessible initials when a participant avatar is unavailable', async () => {

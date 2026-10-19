@@ -114,6 +114,36 @@ describe('useAssetReadUrl', () => {
     queryClient.clear();
   });
 
+  it('hides a failed image while the bounded signed URL refresh is pending', async () => {
+    let resolveRefresh: ((value: { url: string; expiresInSeconds: number }) => void) | undefined;
+    let readCount = 0;
+    const refreshPromise = new Promise<{ url: string; expiresInSeconds: number }>((resolve) => {
+      resolveRefresh = resolve;
+    });
+    vi.spyOn(api, 'createAssetReadUrl').mockImplementation(async () => {
+      readCount += 1;
+      return readCount === 1
+        ? { url: 'https://cdn.example.com/old.jpg', expiresInSeconds: 300 }
+        : refreshPromise;
+    });
+    const { queryClient, wrapper } = createWrapper();
+    const { result } = renderHook(
+      () => useAssetReadUrl('asset-pending-refresh', 'user-1', { id: 'page-1', kind: 'page' }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.src).toBe('https://cdn.example.com/old.jpg'));
+
+    act(() => result.current.onImageError());
+
+    expect(result.current.state).toBe('unavailable');
+    await act(async () => {
+      resolveRefresh?.({ url: 'https://cdn.example.com/new.jpg', expiresInSeconds: 300 });
+    });
+    await waitFor(() => expect(result.current.src).toBe('https://cdn.example.com/new.jpg'));
+    expect(result.current.state).toBe('ready');
+    queryClient.clear();
+  });
+
   it('shows unavailable when the refreshed URL also fails to load', async () => {
     mockReadUrls('asset-fallback', [
       'https://cdn.example.com/old.jpg',

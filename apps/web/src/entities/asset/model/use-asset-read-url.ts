@@ -79,9 +79,12 @@ export function useAssetReadUrl(
       return;
     }
     imageRefreshUsedFor.current = accessKey;
+    setImageUnavailableFor(imageCycleKey);
     void query.refetch().then((result) => {
       if (!result.data || result.data.url === query.data?.url || result.error) {
         setImageUnavailableFor(imageCycleKey);
+      } else {
+        setImageUnavailableFor((current) => (current === imageCycleKey ? undefined : current));
       }
     });
   }, [accessKey, imageCycleKey, query.data?.url, query.error?.status, query.refetch]);

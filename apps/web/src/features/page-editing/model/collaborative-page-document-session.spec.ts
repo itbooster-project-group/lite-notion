@@ -136,9 +136,49 @@ describe('collaborative page document session', () => {
 
     expect(setLocalStateField).toHaveBeenCalledWith(
       'user',
-      expect.objectContaining({ avatarAssetId: '22222222-2222-4222-8222-222222222222' }),
+      expect.objectContaining({
+        id: 'editor-id',
+        name: 'Editor',
+        color: '#2563eb',
+        avatarAssetId: '22222222-2222-4222-8222-222222222222',
+      }),
     );
+    session.updatePresenceUser?.({ id: 'editor-id', name: 'Editor', avatarAssetId: null });
+    expect(setLocalStateField).toHaveBeenLastCalledWith(
+      'user',
+      expect.objectContaining({
+        id: 'editor-id',
+        name: 'Editor',
+        color: '#2563eb',
+        avatarAssetId: null,
+      }),
+    );
+    expect(JSON.stringify(awareness.getLocalState())).not.toContain('https://');
     expect(documentUpdate).not.toHaveBeenCalled();
+    session.destroy();
+  });
+
+  it('seeds the initial avatar identity into editor Awareness configuration', () => {
+    const session = createCollaborativePageDocumentSession({
+      roomName: 'page:page-id',
+      url: 'ws://collaboration.test',
+      user: {
+        id: 'editor-id',
+        name: 'Editor',
+        avatarAssetId: '22222222-2222-4222-8222-222222222222',
+      },
+      getAccessToken: () => 'token',
+      refreshAccessToken: async () => undefined,
+      transportFactory: () => ({ provider: createTestProvider(vi.fn()), destroy: vi.fn() }),
+    });
+
+    expect(session.editorCollaboration?.user).toEqual(
+      expect.objectContaining({
+        id: 'editor-id',
+        name: 'Editor',
+        avatarAssetId: '22222222-2222-4222-8222-222222222222',
+      }),
+    );
     session.destroy();
   });
 
