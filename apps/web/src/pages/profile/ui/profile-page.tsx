@@ -1,23 +1,38 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { ImagePlus, LoaderCircle, MoreHorizontal, Trash2, Upload } from 'lucide-react';
+import { useRef, useState } from 'react';
 import { useAssetReadUrl, useImageAssetUpload } from '@/entities/asset';
 import { useSession } from '@/entities/session';
 import { getGetCurrentUserQueryKey, setCurrentUserAvatar } from '@/shared/api';
-import { AssetImage, Button, ContentContainer, Heading, Input, Text } from '@/shared/ui';
+import {
+  AssetImage,
+  Button,
+  ContentContainer,
+  Heading,
+  Menu,
+  MenuItem,
+  MenuPopup,
+  MenuTrigger,
+  Text,
+} from '@/shared/ui';
 
 export function ProfilePage() {
   const { user } = useSession();
   const queryClient = useQueryClient();
   const upload = useImageAssetUpload();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string>();
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [pendingAvatarAssetId, setPendingAvatarAssetId] = useState<string>();
+  const [savingAvatar, setSavingAvatar] = useState(false);
   const avatar = useAssetReadUrl(user?.avatarAssetId, user?.id, {
     id: user?.id ?? '',
     kind: 'avatar',
   });
+  const isBusy = upload.status === 'uploading' || savingAvatar;
+  const canChooseAvatar = !permissionDenied && upload.canSelectNewFile && !savingAvatar;
 
   if (user === undefined) {
     return (
@@ -33,60 +48,116 @@ export function ProfilePage() {
         <Heading as="h1" variant="page" id="profile-title">
           Профиль
         </Heading>
-        <div className="flex items-center gap-4">
-          <AssetImage
-            alt={`${user.name}: аватар`}
-            className="size-20 rounded-full object-cover"
-            fallback={
+        <div className="flex flex-col gap-5 rounded-lg border bg-card p-4 sm:flex-row sm:items-center">
+          <div className="relative size-24 shrink-0 overflow-hidden rounded-full bg-muted">
+            <AssetImage
+              alt={`${user.name}: аватар`}
+              className="size-24 rounded-full object-cover"
+              fallback={
+                <div
+                  aria-label="Нет аватара"
+                  className="flex size-24 items-center justify-center rounded-full bg-muted text-2xl font-medium text-muted-foreground"
+                  role="img"
+                >
+                  {getInitial(user.name)}
+                </div>
+              }
+              height={96}
+              onImageError={avatar.onImageError}
+              onImageLoad={avatar.onImageLoad}
+              src={avatar.src}
+              state={user.avatarAssetId ? avatar.state : 'unavailable'}
+              width={96}
+            />
+            {isBusy ? (
               <div
-                aria-label="Нет аватара"
-                className="flex size-20 items-center justify-center rounded-full bg-muted text-xl"
-                role="img"
+                aria-label={savingAvatar ? 'Сохраняем аватар' : 'Загрузка аватара'}
+                aria-valuemax={100}
+                aria-valuemin={0}
+                aria-valuenow={savingAvatar ? 100 : upload.progress}
+                className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-background/75 px-3 text-xs"
+                role="progressbar"
               >
-                {getInitial(user.name)}
+                <LoaderCircle aria-hidden="true" className="size-5 animate-spin" />
+                <span>{savingAvatar ? 'Сохраняем…' : `${upload.progress}%`}</span>
               </div>
-            }
-            height={80}
-            onImageError={avatar.onImageError}
-            onImageLoad={avatar.onImageLoad}
-            src={avatar.src}
-            state={user.avatarAssetId ? avatar.state : 'unavailable'}
-            width={80}
-          />
-          <div className="space-y-2">
-            <label className="block text-sm font-medium" htmlFor="profile-avatar-file">
-              Аватар
-            </label>
-            <Input
+            ) : null}
+          </div>
+
+          <div className="min-w-0 flex-1 space-y-3">
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Аватар</p>
+              <p className="text-sm text-muted-foreground">
+                JPG, PNG или WebP. Загрузите изображение профиля.
+              </p>
+            </div>
+
+            <input
               accept="image/jpeg,image/png,image/webp"
-              disabled={permissionDenied || !upload.canSelectNewFile}
-              id="profile-avatar-file"
+              aria-label="Выбрать изображение аватара"
+              className="sr-only"
+              disabled={!canChooseAvatar}
               onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) {
-                  event.currentTarget.value = '';
+                const file = event.currentTarget.files?.[0];
+                event.currentTarget.value = '';
+                if (file && upload.selectNewFile()) {
                   setPermissionDenied(false);
-                  upload.selectNewFile();
                   void saveAvatar(file);
                 }
               }}
+              ref={fileInputRef}
+              tabIndex={-1}
               type="file"
             />
+
             {user.avatarAssetId ? (
+              <Menu>
+                <MenuTrigger
+                  render={
+                    <Button
+                      aria-label="Действия с аватаром"
+                      disabled={isBusy || !canChooseAvatar}
+                      type="button"
+                      variant="outline"
+                    />
+                  }
+                >
+                  <MoreHorizontal aria-hidden="true" className="size-4" />
+                  Изменить
+                </MenuTrigger>
+                <MenuPopup align="start">
+                  <MenuItem
+                    disabled={!canChooseAvatar}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Upload aria-hidden="true" />
+                    Заменить аватар
+                  </MenuItem>
+                  <MenuItem
+                    disabled={isBusy || permissionDenied}
+                    onClick={() => void updateAvatar(null)}
+                    variant="destructive"
+                  >
+                    <Trash2 aria-hidden="true" />
+                    Удалить аватар
+                  </MenuItem>
+                </MenuPopup>
+              </Menu>
+            ) : (
               <Button
-                disabled={upload.status === 'uploading'}
-                onClick={() => void updateAvatar(null)}
+                disabled={!canChooseAvatar}
+                onClick={() => fileInputRef.current?.click()}
                 type="button"
                 variant="outline"
               >
-                Удалить аватар
+                <ImagePlus aria-hidden="true" className="size-4" />
+                Загрузить аватар
               </Button>
-            ) : null}
-            {upload.status === 'uploading' ? (
-              <progress aria-label="Загрузка аватара" max={100} value={upload.progress} />
-            ) : null}
+            )}
+
             {upload.status === 'failed' && upload.canRetry ? (
               <Button
+                disabled={savingAvatar}
                 onClick={() =>
                   void upload.retry().then(async (id) => {
                     if (id) {
@@ -102,6 +173,7 @@ export function ProfilePage() {
             ) : null}
             {pendingAvatarAssetId && upload.status !== 'uploading' && !permissionDenied ? (
               <Button
+                disabled={savingAvatar}
                 onClick={() => void updateAvatar(pendingAvatarAssetId)}
                 type="button"
                 variant="outline"
@@ -110,7 +182,7 @@ export function ProfilePage() {
               </Button>
             ) : null}
             {upload.error || error ? (
-              <p role="alert" className="text-sm text-destructive">
+              <p className="max-w-xl break-words text-sm text-destructive" role="alert">
                 {error ?? upload.error}
               </p>
             ) : null}
@@ -139,6 +211,7 @@ export function ProfilePage() {
   }
 
   async function updateAvatar(assetId: string | null) {
+    setSavingAvatar(true);
     try {
       await setCurrentUserAvatar({ assetId });
       queryClient.setQueryData(getGetCurrentUserQueryKey(), { ...user, avatarAssetId: assetId });
@@ -155,6 +228,8 @@ export function ProfilePage() {
             ? 'Сессия завершена. Войдите снова. Текущий аватар сохранён.'
             : 'Не удалось изменить аватар. Текущий аватар сохранён.',
       );
+    } finally {
+      setSavingAvatar(false);
     }
   }
 }

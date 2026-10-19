@@ -47,6 +47,10 @@ describe('ProfilePage', () => {
     renderWithSession(<ProfilePage />);
 
     expect(await screen.findByRole('heading', { name: 'Профиль' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Нет аватара' })).toHaveTextContent('A');
+    expect(screen.getByRole('button', { name: 'Загрузить аватар' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Выбрать изображение аватара')).toHaveClass('sr-only');
+    expect(screen.getByLabelText('Выбрать изображение аватара')).toHaveAttribute('tabindex', '-1');
     expect(screen.getByText('Имя')).toBeInTheDocument();
     expect(screen.getByText('Ada')).toBeInTheDocument();
     expect(screen.getByText('Email')).toBeInTheDocument();
@@ -87,8 +91,10 @@ describe('ProfilePage', () => {
       'https://cdn.example.com/old-asset.jpg',
     );
 
-    expect(await screen.findByLabelText('Аватар')).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Аватар'), {
+    expect(await screen.findByRole('button', { name: 'Действия с аватаром' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Действия с аватаром' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Заменить аватар' }));
+    fireEvent.change(screen.getByLabelText('Выбрать изображение аватара'), {
       target: { files: [new File(['png'], 'avatar.png', { type: 'image/png' })] },
     });
     await waitFor(() => expect(setAvatar).toHaveBeenCalledWith({ assetId: nextAssetId }));
@@ -99,7 +105,8 @@ describe('ProfilePage', () => {
       ),
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Удалить аватар' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Действия с аватаром' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить аватар' }));
     await waitFor(() => expect(setAvatar).toHaveBeenLastCalledWith({ assetId: null }));
     expect(await screen.findByRole('img', { name: 'Нет аватара' })).toBeInTheDocument();
   });
@@ -130,12 +137,68 @@ describe('ProfilePage', () => {
       expiresInSeconds: 300,
     });
     renderWithSession(<ProfilePage />);
-    fireEvent.change(await screen.findByLabelText('Аватар'), {
+    fireEvent.change(await screen.findByLabelText('Выбрать изображение аватара'), {
       target: { files: [new File(['png'], 'avatar.png', { type: 'image/png' })] },
     });
 
     await waitFor(() => expect(setAvatar).toHaveBeenCalledOnce());
     expect(await screen.findByRole('alert')).toHaveTextContent('Текущий аватар сохранён');
     expect(screen.queryByRole('img', { name: 'Нет аватара' })).not.toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Ada: аватар' })).toHaveAttribute(
+      'src',
+      'https://cdn.example.com/old-asset.jpg',
+    );
+  });
+
+  it('сохраняет старый аватар и показывает состояние загрузки при замене', async () => {
+    const nextAssetId = '22222222-2222-4222-8222-222222222222';
+    let resolveUpload:
+      | ((value: Awaited<ReturnType<typeof api.uploadAssetContentWithProgress>>) => void)
+      | undefined;
+    vi.spyOn(api, 'initiateAssetUpload').mockResolvedValue({
+      assetId: nextAssetId,
+      contentPath: `/api/v1/assets/${nextAssetId}/content`,
+    });
+    vi.spyOn(api, 'uploadAssetContentWithProgress').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveUpload = resolve;
+        }),
+    );
+    server.use(
+      http.get('*/api/v1/auth/me', () =>
+        HttpResponse.json({ ...user, avatarAssetId: 'old-asset' }),
+      ),
+    );
+    vi.spyOn(api, 'createAvatarReadUrl').mockResolvedValue({
+      url: 'https://cdn.example.com/old-asset.jpg',
+      expiresInSeconds: 300,
+    });
+    const setAvatar = vi.spyOn(api, 'setCurrentUserAvatar').mockResolvedValue(undefined);
+    renderWithSession(<ProfilePage />);
+
+    await screen.findByRole('img', { name: 'Ada: аватар' });
+    fireEvent.change(screen.getByLabelText('Выбрать изображение аватара'), {
+      target: { files: [new File(['png'], 'avatar.png', { type: 'image/png' })] },
+    });
+
+    expect(
+      await screen.findByRole('progressbar', { name: 'Загрузка аватара' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Ada: аватар' })).toHaveAttribute(
+      'src',
+      'https://cdn.example.com/old-asset.jpg',
+    );
+    expect(screen.getByRole('button', { name: 'Действия с аватаром' })).toBeDisabled();
+    expect(screen.getByLabelText('Выбрать изображение аватара')).toBeDisabled();
+
+    resolveUpload?.({
+      id: nextAssetId,
+      status: 'ready',
+      mimeType: 'image/png',
+      sizeBytes: 3,
+      originalName: 'avatar.png',
+    });
+    await waitFor(() => expect(setAvatar).toHaveBeenCalledWith({ assetId: nextAssetId }));
   });
 });
