@@ -36,3 +36,16 @@ The profile MUST display the selected avatar when it can be read and a stable ac
 #### Scenario: Profile avatar cannot be loaded
 - **WHEN** the selected avatar is deleted, inaccessible, or its signed URL cannot be refreshed
 - **THEN** the UI shows an accessible fallback without a broken image
+
+### Requirement: Private workspace header identifies the profile with its avatar
+
+The private workspace header MUST show the current user's avatar instead of their name as the profile link content. It MUST resolve the selected avatar from its stable asset ID, show initials when no avatar is selected or the asset is unavailable, and retain an accessible link name identifying the user and linking to the profile.
+
+#### Scenario: Header shows the current avatar
+- **WHEN** the authenticated user's profile has a readable avatar asset
+- **THEN** the header profile link displays that image and remains accessible by the user's name
+
+#### Scenario: Header avatar is absent or unavailable
+- **WHEN** the user has no avatar or the selected asset cannot be read
+- **THEN** the header shows an initials fallback without a broken-image icon
+- **AND** the profile link remains available
