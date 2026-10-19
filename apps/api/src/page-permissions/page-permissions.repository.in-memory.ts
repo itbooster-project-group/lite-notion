@@ -89,7 +89,7 @@ export class InMemoryPagePermissionsRepository extends PagePermissionsRepository
       if (role !== null && role !== PageRole.OWNER) {
         const { deletedAt: _deletedAt, deletedOrigin: _deletedOrigin, ...record } = page;
 
-        rows.push({ ...record, role });
+        rows.push({ ...record, coverAssetId: record.coverAssetId ?? null, role });
       }
     }
 

@@ -20,6 +20,7 @@ export const getRegisterResponseMock = (
     id: faker.string.uuid(),
     email: faker.internet.email(),
     name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    avatarAssetId: faker.helpers.arrayElement([faker.string.uuid(), null]),
     createdAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
   },
   ...overrideResponse,
@@ -34,6 +35,7 @@ export const getLoginResponseMock = (
     id: faker.string.uuid(),
     email: faker.internet.email(),
     name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+    avatarAssetId: faker.helpers.arrayElement([faker.string.uuid(), null]),
     createdAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
   },
   ...overrideResponse,
@@ -53,6 +55,7 @@ export const getGetCurrentUserResponseMock = (
   id: faker.string.uuid(),
   email: faker.internet.email(),
   name: faker.string.alpha({ length: { min: 10, max: 20 } }),
+  avatarAssetId: faker.helpers.arrayElement([faker.string.uuid(), null]),
   createdAt: `${faker.date.past().toISOString().slice(0, 19)}Z`,
   ...overrideResponse,
 });

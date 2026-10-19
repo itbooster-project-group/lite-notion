@@ -38,6 +38,91 @@ async function createAuthenticatedPage(
 }
 
 test.describe('page editor collaboration', () => {
+  test('uploads an asset image once, syncs it to two users and removes the same node', async ({
+    browser,
+  }) => {
+    if (process.env.PLAYWRIGHT_ASSET_UPLOAD_ENABLED !== '1') {
+      test.skip(true, 'PLAYWRIGHT_ASSET_UPLOAD_ENABLED=1 is required for the storage-backed E2E');
+      return;
+    }
+    const credentialsA = getTestCredentials('A');
+    const credentialsB = getTestCredentials('B');
+    if (!pageId || !credentialsA || !credentialsB) {
+      test.skip(true, 'PLAYWRIGHT_PAGE_ID and both editor credentials are required');
+      return;
+    }
+
+    const [{ context: contextA, page: pageA }, { context: contextB, page: pageB }] =
+      await Promise.all([
+        createAuthenticatedPage(browser, credentialsA),
+        createAuthenticatedPage(browser, credentialsB),
+      ]);
+    const uploadRequests: string[] = [];
+    pageA.on('request', (request) => {
+      if (request.method() === 'POST' && request.url().endsWith('/api/v1/assets/uploads')) {
+        uploadRequests.push(request.url());
+      }
+    });
+
+    try {
+      await Promise.all([pageA.goto(`/pages/${pageId}`), pageB.goto(`/pages/${pageId}`)]);
+      const editorA = pageA.locator('[data-page-editor-content]');
+      const editorB = pageB.locator('[data-page-editor-content]');
+      await expect(editorA).toBeVisible();
+      await expect(editorB).toBeVisible();
+      await expect(editorB).toHaveAttribute('contenteditable', 'true');
+      await editorA.click();
+      await pageA.keyboard.type('/image');
+      await pageA.getByRole('option', { name: 'Изображение' }).click();
+      await pageA.getByLabel('Описание изображения').fill('Shared asset image');
+      await pageA.getByLabel('Выбрать файл изображения').setInputFiles({
+        name: 'shared.png',
+        mimeType: 'image/png',
+        buffer: Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lN8AAAAASUVORK5CYII=',
+          'base64',
+        ),
+      });
+      await pageA.getByRole('button', { name: 'Вставить изображение' }).click();
+
+      const imageA = editorA.locator('[data-image-node-id]');
+      const imageB = editorB.locator('[data-image-node-id]');
+      await expect(imageA).toHaveCount(1);
+      await expect(imageB).toHaveCount(1);
+      const stableNodeId = await imageA.getAttribute('data-image-node-id');
+      expect(stableNodeId).toBeTruthy();
+      expect(uploadRequests).toHaveLength(1);
+      await expect(imageA.locator('img')).toHaveAttribute('src', /^https:/);
+      await expect(imageB.locator('img')).toHaveAttribute('src', /^https:/);
+
+      await pageA.reload();
+      const restoredImage = pageA.locator('[data-image-node-id]');
+      await expect(restoredImage).toHaveCount(1);
+      await expect(restoredImage).toHaveAttribute('data-image-node-id', stableNodeId ?? '');
+
+      await contextA.setOffline(true);
+      await expect(pageA.locator('[data-collaboration-status="offline"]')).toBeVisible();
+      await contextA.setOffline(false);
+      await expect(pageA.locator('[data-collaboration-status="connected"]')).toBeVisible();
+      await expect(restoredImage).toHaveCount(1);
+
+      await pageB.route('**/api/v1/assets/*/read-url*', (route) =>
+        route.fulfill({ body: JSON.stringify({ message: 'forbidden' }), status: 403 }),
+      );
+      await pageB.reload();
+      await expect(pageB.getByText('Изображение недоступно')).toBeVisible();
+      await expect(pageB.getByRole('button', { name: 'Удалить изображение' })).toBeVisible();
+
+      await pageB.getByRole('button', { name: 'Удалить изображение' }).click();
+      await expect(pageA.locator('[data-image-node-id]')).toHaveCount(0);
+      await pageA.reload();
+      await expect(pageA.locator('[data-image-node-id]')).toHaveCount(0);
+    } finally {
+      await contextA.close();
+      await contextB.close();
+    }
+  });
+
   test('synchronizes two independent browser contexts and restores persisted content', async ({
     browser,
   }) => {
@@ -216,6 +301,8 @@ test.describe('page editor collaboration', () => {
         'contenteditable',
         'false',
       );
+      await expect(pageB.getByLabel('Обложка')).toHaveCount(0);
+      await expect(pageB.getByRole('button', { name: 'Удалить обложку' })).toHaveCount(0);
       await expect(pageB.locator('[data-participants] [data-participant-id]')).toHaveCount(2);
       await expect(pageB.locator(`[data-participant-id="${userA.id}"]`)).toBeVisible();
       await expect(pageB.locator(`[data-participant-id="${userB.id}"]`)).toBeVisible();

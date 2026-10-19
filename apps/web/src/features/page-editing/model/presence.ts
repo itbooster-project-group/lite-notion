@@ -32,7 +32,7 @@ export function getPresenceUsers(awareness: AwarenessLike): readonly PresenceUse
 
 function parsePresenceUser(state: unknown): PresenceUser | undefined {
   if (!isRecord(state) || !isRecord(state.user)) return undefined;
-  const { id, name, color } = state.user;
+  const { id, name, color, avatarAssetId } = state.user;
   if (
     typeof id !== 'string' ||
     id.length === 0 ||
@@ -43,7 +43,16 @@ function parsePresenceUser(state: unknown): PresenceUser | undefined {
     return undefined;
   }
 
-  return { id, name, color };
+  if (avatarAssetId !== undefined && avatarAssetId !== null && typeof avatarAssetId !== 'string') {
+    return undefined;
+  }
+
+  return {
+    id,
+    name,
+    color,
+    ...(avatarAssetId !== undefined ? { avatarAssetId } : {}),
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

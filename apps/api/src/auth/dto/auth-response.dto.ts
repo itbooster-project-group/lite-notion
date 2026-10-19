@@ -16,12 +16,16 @@ export class UserProfileDto {
   @ApiProperty({ example: 'Ada', type: String })
   name!: string;
 
+  @ApiProperty({ format: 'uuid', nullable: true, type: String })
+  avatarAssetId!: string | null;
+
   @ApiProperty({ example: '2026-08-21T12:00:00.000Z', format: 'date-time', type: String })
   createdAt!: Date;
 
   static fromUser(user: UserRecord): UserProfileDto {
     return {
       createdAt: user.createdAt,
+      avatarAssetId: user.avatarAssetId,
       email: user.email,
       id: user.id,
       name: user.name,

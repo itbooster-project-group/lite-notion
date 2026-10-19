@@ -28,6 +28,7 @@ const pageId = '55555555-5555-5555-5555-555555555555';
 const projectId = '44444444-4444-4444-4444-444444444444';
 
 const record = {
+  coverAssetId: null,
   createdAt: new Date('2026-08-27T12:00:00.000Z'),
   createdById: user.id,
   id: pageId,
@@ -128,6 +129,7 @@ describe('PagesController', () => {
     expect(Object.keys(page).sort()).toEqual([
       'accessMode',
       'accessRole',
+      'coverAssetId',
       'createdAt',
       'createdById',
       'id',
@@ -138,6 +140,14 @@ describe('PagesController', () => {
       'title',
       'updatedAt',
     ]);
+  });
+
+  it('возвращает выбранный cover asset id в DTO страницы', async () => {
+    pages.findById.mockResolvedValue({ ...record, coverAssetId: 'asset-id' });
+
+    await expect(controller.findById(user, pageId)).resolves.toMatchObject({
+      coverAssetId: 'asset-id',
+    });
   });
 
   describe('перевод доменных ошибок в HTTP', () => {

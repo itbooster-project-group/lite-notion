@@ -18,6 +18,7 @@ function page(
     children,
     createdAt: '2026-08-29T00:00:00.000Z',
     createdById: 'user-1',
+    coverAssetId: null,
     id,
     ownerId: 'user-1',
     parentPageId,

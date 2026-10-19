@@ -27,6 +27,9 @@ export class PageDto {
   @ApiProperty({ format: 'uuid', nullable: true, type: String })
   parentPageId!: string | null;
 
+  @ApiProperty({ format: 'uuid', nullable: true, type: String })
+  coverAssetId!: string | null;
+
   @ApiProperty({ example: '9f6d4a5e-0f6d-4a5e-9f6d-0f6d4a5e9f6d', format: 'uuid', type: String })
   createdById!: string;
 
@@ -68,6 +71,7 @@ export class PageDto {
       accessRole: role,
       createdAt: page.createdAt,
       createdById: page.createdById,
+      coverAssetId: page.coverAssetId ?? null,
       id: page.id,
       ownerId: page.ownerId,
       parentPageId: page.parentPageId,

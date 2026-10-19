@@ -6,6 +6,7 @@ import { Readable } from 'node:stream';
 import { Logger } from '@nestjs/common';
 import type { Request } from 'express';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import * as Y from 'yjs';
 import { AssetGcUseCases } from '../../assets/asset-gc.use-cases';
 import { AssetUploadUseCases } from '../../assets/asset-upload.use-cases';
 import { AssetsUseCases } from '../../assets/assets.use-cases';
@@ -36,6 +37,7 @@ describe('PageDocument provenance on PostgreSQL', () => {
   let projectId: string;
   const pageIds: string[] = [];
   const assetIds: string[] = [];
+  const additionalUserIds: string[] = [];
 
   async function createPage(): Promise<string> {
     const pageId = randomUUID();
@@ -86,6 +88,8 @@ describe('PageDocument provenance on PostgreSQL', () => {
         await prisma.page.deleteMany({ where: { id: { in: pageIds } } });
       }
       if (assetIds.length > 0) await prisma.asset.deleteMany({ where: { id: { in: assetIds } } });
+      if (additionalUserIds.length > 0)
+        await prisma.user.deleteMany({ where: { id: { in: additionalUserIds } } });
       await prisma.project.deleteMany({ where: { id: projectId } });
       await prisma.user.deleteMany({ where: { id: ownerId } });
     } finally {
@@ -222,6 +226,90 @@ describe('PageDocument provenance on PostgreSQL', () => {
     expect(document.storageRevision).toBe(committed?.storageRevision);
     expect(watermark.sourceStorageRevision).toBe(document.storageRevision);
     expect(watermark.lastErrorCode).toBeNull();
+  });
+
+  it('fails closed for a viewer during projection lag and allows reading after the scheduler converges', async () => {
+    const pageId = await createPage();
+    const viewerId = randomUUID();
+    additionalUserIds.push(viewerId);
+    await prisma.user.create({
+      data: {
+        email: `${viewerId}@document-provenance.integration.test`,
+        id: viewerId,
+        name: viewerId,
+        passwordHash: 'test-hash',
+      },
+    });
+    await prisma.pagePermission.create({
+      data: { grantedById: ownerId, pageId, role: 'VIEWER', userId: viewerId },
+    });
+
+    const assetId = randomUUID();
+    const storageKey = `assets/${assetId}/${randomUUID()}`;
+    assetIds.push(assetId);
+    await prisma.asset.create({
+      data: {
+        id: assetId,
+        checksum: 'projection-lag-checksum',
+        mimeType: 'image/png',
+        originalName: 'projection.png',
+        sizeBytes: 8n,
+        status: 'ready',
+        storageKey,
+        uploadedById: ownerId,
+      },
+    });
+    await prisma.pageAssetGrant.create({ data: { assetId, pageId } });
+    await storage.putObject(storageKey, {
+      body: Readable.from([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])]),
+      checksum: 'projection-smoke-checksum',
+      contentLength: 8,
+      contentType: 'image/png',
+    });
+
+    const ydoc = new Y.Doc();
+    const image = new Y.XmlElement('image');
+    image.setAttribute('nodeId', randomUUID());
+    image.setAttribute('source', { type: 'asset', assetId } as unknown as string);
+    image.setAttribute('alt', 'Diagram');
+    image.setAttribute('decorative', false as unknown as string);
+    image.setAttribute('alignment', 'center');
+    image.setAttribute('widthPercent', 100 as unknown as string);
+    ydoc.getXmlFragment('default').insert(0, [image]);
+    const state = Uint8Array.from(Y.encodeStateAsUpdate(ydoc));
+    ydoc.destroy();
+    const committed = await new PrismaPageDocumentRepository(
+      prisma as unknown as DatabaseClient,
+    ).replaceYjsState(pageId, state, 0n, 2);
+    if (!committed) throw new Error('Expected the asset document write to commit');
+
+    const permissions = new PagePermissionsService(
+      new PrismaPagePermissionsRepository(prisma as unknown as DatabaseClient),
+      {} as UsersService,
+    );
+    const config = { assets: { readUrlTtlSeconds: 60 } } as unknown as ApplicationConfig;
+    const assets = new AssetsUseCases(
+      prisma as unknown as PrismaService,
+      permissions,
+      storage,
+      config,
+    );
+
+    await expect(assets.readUrlForPage(viewerId, assetId, pageId)).rejects.toMatchObject({
+      status: 401,
+    });
+    expect(await prisma.pageAsset.count({ where: { pageId, assetId } })).toBe(0);
+
+    await new ProjectionRetryScheduler(
+      prisma as unknown as PrismaService,
+      new ProjectPageAssetsUseCase(prisma as unknown as PrismaService),
+    ).retryStaleProjections();
+
+    await expect(assets.readUrlForPage(viewerId, assetId, pageId)).resolves.toMatchObject({
+      url: expect.any(String),
+      expiresInSeconds: 60,
+    });
+    expect(await prisma.pageAsset.count({ where: { pageId, assetId } })).toBe(1);
   });
 
   it('allows an editor to upload immediately on a new page before any rebuild', async () => {

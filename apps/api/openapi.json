@@ -206,6 +206,16 @@
       "post": {
         "operationId": "initiateAssetUpload",
         "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitiateAssetUploadDto"
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "description": "",
@@ -438,6 +448,16 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAssetReferenceDto"
+              }
+            }
+          }
+        },
         "responses": {
           "204": {
             "description": ""
@@ -456,6 +476,16 @@
       "put": {
         "operationId": "setCurrentUserAvatar",
         "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAssetReferenceDto"
+              }
+            }
+          }
+        },
         "responses": {
           "204": {
             "description": ""
@@ -2096,13 +2126,18 @@
             "type": "string",
             "example": "Ada"
           },
+          "avatarAssetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
           "createdAt": {
             "type": "string",
             "example": "2026-08-21T12:00:00.000Z",
             "format": "date-time"
           }
         },
-        "required": ["id", "email", "name", "createdAt"]
+        "required": ["id", "email", "name", "avatarAssetId", "createdAt"]
       },
       "AuthResponseDto": {
         "type": "object",
@@ -2182,6 +2217,20 @@
         },
         "required": ["accessToken", "expiresIn"]
       },
+      "InitiateAssetUploadDto": {
+        "type": "object",
+        "properties": {
+          "pageId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fileName": {
+            "type": "string",
+            "maxLength": 255
+          }
+        },
+        "required": ["fileName"]
+      },
       "AssetUploadInitiatedDto": {
         "type": "object",
         "properties": {
@@ -2232,6 +2281,16 @@
           }
         },
         "required": ["url", "expiresInSeconds"]
+      },
+      "SetAssetReferenceDto": {
+        "type": "object",
+        "properties": {
+          "assetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        }
       },
       "PagePermissionDto": {
         "type": "object",
@@ -2346,6 +2405,11 @@
             "format": "uuid",
             "nullable": true
           },
+          "coverAssetId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
           "createdById": {
             "type": "string",
             "example": "9f6d4a5e-0f6d-4a5e-9f6d-0f6d4a5e9f6d",
@@ -2388,6 +2452,7 @@
           "ownerId",
           "projectId",
           "parentPageId",
+          "coverAssetId",
           "createdById",
           "title",
           "position",
@@ -2416,6 +2481,11 @@
             "format": "uuid"
           },
           "parentPageId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "coverAssetId": {
             "type": "string",
             "format": "uuid",
             "nullable": true
@@ -2468,6 +2538,7 @@
           "ownerId",
           "projectId",
           "parentPageId",
+          "coverAssetId",
           "createdById",
           "title",
           "position",

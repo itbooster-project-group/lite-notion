@@ -5,6 +5,7 @@ export type PresenceUser = Readonly<{
   id: string;
   name: string;
   color: string;
+  avatarAssetId?: string | null;
 }>;
 
 export type PageDocumentPresence = Readonly<{
@@ -39,6 +40,9 @@ export type PageDocumentSession = Readonly<{
   error?: PageDocumentError;
   connectionStatus?: PageDocumentConnectionStatus;
   subscribe?(listener: () => void): () => void;
+  updatePresenceUser?(
+    user: Readonly<{ id: string; name: string; avatarAssetId: string | null }>,
+  ): void;
   destroy(): void;
 }>;
 

@@ -103,6 +103,7 @@ export class InMemoryPagesRepository extends PagesRepository {
   async insert(input: InsertPageInput): Promise<PageRecord> {
     const page: StoredPage = {
       accessMode: 'INHERIT',
+      coverAssetId: null,
       createdAt: new Date(),
       createdById: input.createdById,
       deletedAt: null,

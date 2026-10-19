@@ -22,7 +22,8 @@ export type PageDocumentImageAttributes = Readonly<{
   caption: string | null;
   decorative: boolean;
   nodeId: string;
-  src: string;
+  source: Readonly<{ type: 'asset'; assetId: string }> | null;
+  src: string | null;
   widthPercent: number;
 }>;
 
@@ -203,14 +204,22 @@ export function normalizePersistedPageDocumentImageAttributes(
   value: unknown,
 ): PageDocumentImageAttributes | undefined {
   const input = asRecord(value);
-  if (!input || !isPageDocumentNodeId(input.nodeId) || typeof input.src !== 'string') {
-    return undefined;
-  }
-
-  const src = normalizePageDocumentImageUrl(input.src);
+  if (!input || !isPageDocumentNodeId(input.nodeId)) return undefined;
+  const source = asRecord(input.source);
+  const assetId =
+    source?.type === 'asset' && typeof source.assetId === 'string' ? source.assetId : undefined;
+  const isAsset = assetId !== undefined && UUID_PATTERN.test(assetId);
+  if (input.source !== undefined && input.source !== null && !isAsset) return undefined;
+  const src = typeof input.src === 'string' ? normalizePageDocumentImageUrl(input.src) : undefined;
   const decorative = input.decorative === true;
   const alt = typeof input.alt === 'string' ? input.alt.trim() : '';
-  if (!src || (decorative ? alt.length > 0 : alt.length === 0)) return undefined;
+  if (
+    (!isAsset && !src) ||
+    (typeof input.src === 'string' && !src) ||
+    (decorative ? alt.length > 0 : alt.length === 0)
+  ) {
+    return undefined;
+  }
 
   return {
     alignment: normalizeAlignment(input.alignment),
@@ -218,7 +227,8 @@ export function normalizePersistedPageDocumentImageAttributes(
     caption: normalizeCaption(input.caption),
     decorative,
     nodeId: input.nodeId,
-    src,
+    source: isAsset && assetId ? { assetId, type: 'asset' } : null,
+    src: src ?? null,
     widthPercent: clampPageDocumentWidthPercent(Number(input.widthPercent)),
   };
 }
@@ -286,7 +296,27 @@ export function createPageDocumentImageAttributes(
     alt,
     decorative: input.decorative,
     nodeId: nodeIdFactory(),
+    source: null,
     src,
+  };
+}
+
+export function createPageDocumentAssetImageAttributes(
+  input: MediaPresentationInput & Readonly<{ alt: string; assetId: string; decorative: boolean }>,
+  nodeIdFactory: NodeIdFactory = createPageDocumentNodeId,
+): PageDocumentImageAttributes | undefined {
+  const alt = input.alt.trim();
+  if (!UUID_PATTERN.test(input.assetId) || (input.decorative ? alt.length > 0 : alt.length === 0)) {
+    return undefined;
+  }
+
+  return {
+    ...createPresentationAttributes(input),
+    alt,
+    decorative: input.decorative,
+    nodeId: nodeIdFactory(),
+    source: { assetId: input.assetId, type: 'asset' },
+    src: null,
   };
 }
 

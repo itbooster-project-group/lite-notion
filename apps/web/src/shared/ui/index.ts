@@ -1,3 +1,4 @@
+export { AssetImage, type AssetImageProps } from './asset-image';
 export { Button, type ButtonProps } from './button';
 export { Checkbox, type CheckboxProps } from './checkbox';
 export { ContentContainer } from './content-container';

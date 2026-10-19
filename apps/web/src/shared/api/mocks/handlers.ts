@@ -1,6 +1,6 @@
 import { HttpResponse, http } from 'msw';
 
-import { getAuthMock, getHealthMock } from '../generated/index.msw';
+import { getAssetsMock, getAuthMock, getHealthMock } from '../generated/index.msw';
 import { getGetPagePermissionsMockHandler } from '../generated/page-permissions/page-permissions.msw';
 import { getGetSharedPagesMockHandler } from '../generated/pages/pages.msw';
 
@@ -23,4 +23,5 @@ export const handlers = [
   getGetPagePermissionsMockHandler([]),
   ...getHealthMock(),
   ...getAuthMock(),
+  ...getAssetsMock(),
 ];

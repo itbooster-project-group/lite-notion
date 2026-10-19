@@ -14,6 +14,8 @@ export interface PageTreeNodeDto {
   projectId: string;
   /** @nullable */
   parentPageId: string | null;
+  /** @nullable */
+  coverAssetId: string | null;
   createdById: string;
   title: string;
   /** Fractional rank among siblings. Server-generated, ordered lexicographically. */

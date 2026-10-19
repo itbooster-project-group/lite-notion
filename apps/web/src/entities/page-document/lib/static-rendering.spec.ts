@@ -102,6 +102,34 @@ describe('page document static rendering boundary', () => {
     expect(html).not.toContain('<video');
   });
 
+  it('безопасно отображает asset node без resolver и использует готовый URL при статическом рендеринге', () => {
+    const content: JSONContent = {
+      content: [
+        {
+          attrs: {
+            alt: 'Схема',
+            decorative: false,
+            nodeId: NODE_ID,
+            source: { assetId: '22222222-2222-4222-8222-222222222222', type: 'asset' },
+            src: null,
+          },
+          type: 'image',
+        },
+      ],
+      type: 'doc',
+    };
+    const fallbackHtml = renderPageDocumentToHTML({ content, schemaVersion: 2 });
+    const resolvedHtml = renderPageDocumentToHTML({
+      assetUrls: { '22222222-2222-4222-8222-222222222222': 'https://cdn.example.com/signed.jpg' },
+      content,
+      schemaVersion: 2,
+    });
+
+    expect(fallbackHtml).toContain('Изображение недоступно');
+    expect(fallbackHtml).not.toContain('signed.jpg');
+    expect(resolvedHtml).toContain('src="https://cdn.example.com/signed.jpg"');
+  });
+
   it('явно отклоняет неизвестную schemaVersion вместо частичного rendering', () => {
     const futureContent = new Proxy<JSONContent>(
       {

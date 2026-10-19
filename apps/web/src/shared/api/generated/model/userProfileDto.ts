@@ -10,5 +10,7 @@ export interface UserProfileDto {
   id: string;
   email: string;
   name: string;
+  /** @nullable */
+  avatarAssetId: string | null;
   createdAt: string;
 }

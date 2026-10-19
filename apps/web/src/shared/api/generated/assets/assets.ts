@@ -30,6 +30,8 @@ import type {
   AssetUploadInitiatedDto,
   CreateAssetReadUrlParams,
   GetAssetMetadataParams,
+  InitiateAssetUploadDto,
+  SetAssetReferenceDto,
 } from '../model';
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
@@ -57,11 +59,14 @@ export const getInitiateAssetUploadUrl = () => {
  * @summary Start an image upload
  */
 export const initiateAssetUpload = async (
+  initiateAssetUploadDto: InitiateAssetUploadDto,
   options?: Parameters<typeof apiFetch>[1],
 ): Promise<AssetUploadInitiatedDto> => {
   return apiFetch<AssetUploadInitiatedDto>(getInitiateAssetUploadUrl(), {
     ...options,
     method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(initiateAssetUploadDto),
   });
 };
 
@@ -72,11 +77,16 @@ export const getInitiateAssetUploadMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof initiateAssetUpload>>,
     TError,
-    void,
+    { data: BodyType<InitiateAssetUploadDto> },
     TContext
   >;
   request?: SecondParameter<typeof apiFetch>;
-}): UseMutationOptions<Awaited<ReturnType<typeof initiateAssetUpload>>, TError, void, TContext> => {
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof initiateAssetUpload>>,
+  TError,
+  { data: BodyType<InitiateAssetUploadDto> },
+  TContext
+> => {
   const mutationKey = ['initiateAssetUpload'];
   const { mutation: mutationOptions, request: requestOptions } = options
     ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
@@ -86,9 +96,11 @@ export const getInitiateAssetUploadMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof initiateAssetUpload>>,
-    void
-  > = () => {
-    return initiateAssetUpload(requestOptions);
+    { data: BodyType<InitiateAssetUploadDto> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return initiateAssetUpload(data, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
@@ -97,7 +109,7 @@ export const getInitiateAssetUploadMutationOptions = <
 export type InitiateAssetUploadMutationResult = NonNullable<
   Awaited<ReturnType<typeof initiateAssetUpload>>
 >;
-
+export type InitiateAssetUploadMutationBody = BodyType<InitiateAssetUploadDto>;
 export type InitiateAssetUploadMutationError = ErrorType<unknown>;
 
 /**
@@ -108,13 +120,18 @@ export const useInitiateAssetUpload = <TError = ErrorType<unknown>, TContext = u
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof initiateAssetUpload>>,
       TError,
-      void,
+      { data: BodyType<InitiateAssetUploadDto> },
       TContext
     >;
     request?: SecondParameter<typeof apiFetch>;
   },
   queryClient?: QueryClient,
-): UseMutationResult<Awaited<ReturnType<typeof initiateAssetUpload>>, TError, void, TContext> => {
+): UseMutationResult<
+  Awaited<ReturnType<typeof initiateAssetUpload>>,
+  TError,
+  { data: BodyType<InitiateAssetUploadDto> },
+  TContext
+> => {
   return useMutation(getInitiateAssetUploadMutationOptions(options), queryClient);
 };
 export const getUploadAssetContentUrl = (assetId: string) => {
@@ -607,11 +624,14 @@ export const getSetPageCoverUrl = (pageId: string) => {
  */
 export const setPageCover = async (
   pageId: string,
+  setAssetReferenceDto: SetAssetReferenceDto,
   options?: Parameters<typeof apiFetch>[1],
 ): Promise<void> => {
   return apiFetch<void>(getSetPageCoverUrl(pageId), {
     ...options,
     method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(setAssetReferenceDto),
   });
 };
 
@@ -622,14 +642,14 @@ export const getSetPageCoverMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof setPageCover>>,
     TError,
-    { pageId: string },
+    { pageId: string; data: BodyType<SetAssetReferenceDto> },
     TContext
   >;
   request?: SecondParameter<typeof apiFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof setPageCover>>,
   TError,
-  { pageId: string },
+  { pageId: string; data: BodyType<SetAssetReferenceDto> },
   TContext
 > => {
   const mutationKey = ['setPageCover'];
@@ -641,18 +661,18 @@ export const getSetPageCoverMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof setPageCover>>,
-    { pageId: string }
+    { pageId: string; data: BodyType<SetAssetReferenceDto> }
   > = (props) => {
-    const { pageId } = props ?? {};
+    const { pageId, data } = props ?? {};
 
-    return setPageCover(pageId, requestOptions);
+    return setPageCover(pageId, data, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
 };
 
 export type SetPageCoverMutationResult = NonNullable<Awaited<ReturnType<typeof setPageCover>>>;
-
+export type SetPageCoverMutationBody = BodyType<SetAssetReferenceDto>;
 export type SetPageCoverMutationError = ErrorType<unknown>;
 
 /**
@@ -663,7 +683,7 @@ export const useSetPageCover = <TError = ErrorType<unknown>, TContext = unknown>
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof setPageCover>>,
       TError,
-      { pageId: string },
+      { pageId: string; data: BodyType<SetAssetReferenceDto> },
       TContext
     >;
     request?: SecondParameter<typeof apiFetch>;
@@ -672,7 +692,7 @@ export const useSetPageCover = <TError = ErrorType<unknown>, TContext = unknown>
 ): UseMutationResult<
   Awaited<ReturnType<typeof setPageCover>>,
   TError,
-  { pageId: string },
+  { pageId: string; data: BodyType<SetAssetReferenceDto> },
   TContext
 > => {
   return useMutation(getSetPageCoverMutationOptions(options), queryClient);
@@ -685,11 +705,14 @@ export const getSetCurrentUserAvatarUrl = () => {
  * @summary Set or remove the current user avatar
  */
 export const setCurrentUserAvatar = async (
+  setAssetReferenceDto: SetAssetReferenceDto,
   options?: Parameters<typeof apiFetch>[1],
 ): Promise<void> => {
   return apiFetch<void>(getSetCurrentUserAvatarUrl(), {
     ...options,
     method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(setAssetReferenceDto),
   });
 };
 
@@ -700,14 +723,14 @@ export const getSetCurrentUserAvatarMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof setCurrentUserAvatar>>,
     TError,
-    void,
+    { data: BodyType<SetAssetReferenceDto> },
     TContext
   >;
   request?: SecondParameter<typeof apiFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof setCurrentUserAvatar>>,
   TError,
-  void,
+  { data: BodyType<SetAssetReferenceDto> },
   TContext
 > => {
   const mutationKey = ['setCurrentUserAvatar'];
@@ -719,9 +742,11 @@ export const getSetCurrentUserAvatarMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof setCurrentUserAvatar>>,
-    void
-  > = () => {
-    return setCurrentUserAvatar(requestOptions);
+    { data: BodyType<SetAssetReferenceDto> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return setCurrentUserAvatar(data, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
@@ -730,7 +755,7 @@ export const getSetCurrentUserAvatarMutationOptions = <
 export type SetCurrentUserAvatarMutationResult = NonNullable<
   Awaited<ReturnType<typeof setCurrentUserAvatar>>
 >;
-
+export type SetCurrentUserAvatarMutationBody = BodyType<SetAssetReferenceDto>;
 export type SetCurrentUserAvatarMutationError = ErrorType<unknown>;
 
 /**
@@ -741,13 +766,18 @@ export const useSetCurrentUserAvatar = <TError = ErrorType<unknown>, TContext = 
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof setCurrentUserAvatar>>,
       TError,
-      void,
+      { data: BodyType<SetAssetReferenceDto> },
       TContext
     >;
     request?: SecondParameter<typeof apiFetch>;
   },
   queryClient?: QueryClient,
-): UseMutationResult<Awaited<ReturnType<typeof setCurrentUserAvatar>>, TError, void, TContext> => {
+): UseMutationResult<
+  Awaited<ReturnType<typeof setCurrentUserAvatar>>,
+  TError,
+  { data: BodyType<SetAssetReferenceDto> },
+  TContext
+> => {
   return useMutation(getSetCurrentUserAvatarMutationOptions(options), queryClient);
 };
 export const getCreateAvatarReadUrlUrl = (userId: string, assetId: string) => {

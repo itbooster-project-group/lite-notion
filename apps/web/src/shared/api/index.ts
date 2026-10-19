@@ -1,11 +1,36 @@
 export { type ApiFetchOptions, apiFetch, type ErrorType } from './api-fetch';
 export {
+  AssetUploadError,
+  assetReadUrlQueryKey,
+  getAssetReadUrlQueryKey,
+  uploadAssetContentWithProgress,
+} from './asset-transport';
+export {
   clearAccessToken,
   configureAuthTransport,
   getAccessToken,
   refreshAccessToken,
   setAccessToken,
 } from './auth-session';
+export {
+  createAssetReadUrl,
+  createAvatarReadUrl,
+  deleteAsset,
+  getAssetMetadata,
+  getCreateAssetReadUrlUrl,
+  getCreateAvatarReadUrlUrl,
+  getDeleteAssetUrl,
+  getGetAssetMetadataUrl,
+  getGrantAssetToPageUrl,
+  getInitiateAssetUploadUrl,
+  getSetCurrentUserAvatarUrl,
+  getSetPageCoverUrl,
+  getUploadAssetContentUrl,
+  grantAssetToPage,
+  initiateAssetUpload,
+  setCurrentUserAvatar,
+  setPageCover,
+} from './generated/assets/assets';
 export {
   getCurrentUser,
   getGetCurrentUserQueryKey,
@@ -17,13 +42,19 @@ export {
   useGetCurrentUser,
 } from './generated/auth/auth';
 export type {
+  AssetReadUrlDto,
+  AssetResponseDto,
+  AssetUploadInitiatedDto,
   AuthResponseDto,
+  CreateAssetReadUrlParams,
   CreatePageDto,
   CreateProjectDto,
   DeletedPageTreeNodeDto,
   DeletedProjectDto,
+  GetAssetMetadataParams,
   GrantPagePermissionDto,
   HttpErrorResponseDto,
+  InitiateAssetUploadDto,
   LoginDto,
   MovePageDto,
   PageDto,
@@ -37,6 +68,7 @@ export type {
   RenamePageDto,
   RestorePageDto,
   SetAccessModeDto,
+  SetAssetReferenceDto,
   UserProfileDto,
 } from './generated/model';
 export {

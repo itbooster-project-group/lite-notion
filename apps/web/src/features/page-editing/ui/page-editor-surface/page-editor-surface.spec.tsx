@@ -1,9 +1,12 @@
 import { HocuspocusProvider, HocuspocusProviderWebsocket } from '@hocuspocus/provider';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Editor } from '@tiptap/core';
-import { afterEach, describe, expect, it } from 'vitest';
+import { HttpResponse, http } from 'msw';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
 import { createPageDocumentEditorExtensions, pageDocumentToJSON } from '@/entities/page-document';
+import { server } from '@/shared/api/mocks/server';
 import type { CollaborationProvider } from '@/shared/collaboration';
 import { PageEditorSurface } from './page-editor-surface';
 
@@ -156,5 +159,90 @@ describe('page editor surface document lifecycle', () => {
     provider.destroy();
     websocket.destroy();
     doc.destroy();
+  });
+
+  it('оставляет unavailable asset node удаляемым и не меняет Y.Doc при ошибке чтения', async () => {
+    const doc = new Y.Doc();
+    documents.push(doc);
+    const editor = new Editor({ extensions: createPageDocumentEditorExtensions(doc) });
+    editor.commands.setContent({
+      type: 'doc',
+      content: [
+        {
+          type: 'image',
+          attrs: {
+            nodeId: '11111111-1111-4111-8111-111111111111',
+            source: { type: 'asset', assetId: '22222222-2222-4222-8222-222222222222' },
+            src: null,
+            alt: 'Описание',
+            decorative: false,
+          },
+        },
+      ],
+    });
+    editor.destroy();
+    server.use(
+      http.post('*/api/v1/assets/:assetId/read-url', () => HttpResponse.json({}, { status: 403 })),
+    );
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <PageEditorSurface doc={doc} editable pageId="page-1" userId="editor-1" />
+      </QueryClientProvider>,
+    );
+    const documentUpdate = vi.fn();
+    doc.on('update', documentUpdate);
+
+    expect(await screen.findByText('Изображение недоступно')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Удалить изображение' })).toBeEnabled(),
+    );
+    expect(documentUpdate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить изображение' }));
+    await waitFor(() => expect(pageDocumentToJSON(doc).content).toEqual([{ type: 'paragraph' }]));
+    expect(documentUpdate).toHaveBeenCalledOnce();
+
+    view.unmount();
+    queryClient.clear();
+  });
+
+  it('сохраняет legacy external image и показывает fallback при ошибке загрузки без Y.Doc update', async () => {
+    const doc = new Y.Doc();
+    documents.push(doc);
+    const editor = new Editor({ extensions: createPageDocumentEditorExtensions(doc) });
+    editor.commands.setContent({
+      type: 'doc',
+      content: [
+        {
+          type: 'image',
+          attrs: {
+            nodeId: '11111111-1111-4111-8111-111111111111',
+            source: null,
+            src: 'https://example.com/legacy-image.jpg',
+            alt: 'Legacy image',
+            decorative: false,
+          },
+        },
+      ],
+    });
+    editor.destroy();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <PageEditorSurface doc={doc} editable pageId="page-1" userId="editor-1" />
+      </QueryClientProvider>,
+    );
+    const documentUpdate = vi.fn();
+    doc.on('update', documentUpdate);
+    const image = await screen.findByRole('img', { name: 'Legacy image' });
+    expect(image).toHaveAttribute('src', 'https://example.com/legacy-image.jpg');
+
+    fireEvent.error(image);
+
+    expect(await screen.findByText('Изображение недоступно')).toBeInTheDocument();
+    expect(documentUpdate).not.toHaveBeenCalled();
+    expect(pageDocumentToJSON(doc).content).toMatchObject([{ type: 'image' }]);
+    view.unmount();
+    queryClient.clear();
   });
 });

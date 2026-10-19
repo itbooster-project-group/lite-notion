@@ -16,6 +16,7 @@ import { type PageDeleteRequest, PageTree } from '@/features/workspace-managemen
 import { workspacePagePath } from '@/shared/routing';
 import { ContentContainer, Heading } from '@/shared/ui';
 import { CollaborativePageEditor } from './collaborative-page-editor';
+import { PageCover } from './page-cover';
 
 type WorkspaceMainProps = Readonly<{
   activePageId: string | undefined;
@@ -70,10 +71,14 @@ export function WorkspaceMain({
   return (
     <ContentContainer as="section" className="min-w-0">
       <div className="space-y-6">
+        {page.coverAssetId ? <PageCover page={page} placement="banner" /> : null}
         <div className="flex items-start justify-between gap-4">
-          <Heading as="h1" variant="page">
-            {getPageDisplayTitle(page.title)}
-          </Heading>
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <Heading as="h1" variant="page">
+              {getPageDisplayTitle(page.title)}
+            </Heading>
+            {!page.coverAssetId ? <PageCover page={page} placement="inline" /> : null}
+          </div>
           {pageCapabilities?.canManageAccess ? <PageAccessPanel page={page} /> : null}
         </div>
         <CollaborativePageEditor

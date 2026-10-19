@@ -16,7 +16,7 @@ type Options = Readonly<{
   roomName: string;
   url: string;
   editable?: boolean;
-  user?: Readonly<{ id: string; name: string }>;
+  user?: Readonly<{ id: string; name: string; avatarAssetId?: string | null }>;
   getAccessToken: () => string | undefined;
   refreshAccessToken: () => Promise<void>;
   transportFactory?: typeof createCollaborationTransport;
@@ -161,7 +161,12 @@ export function createCollaborativePageDocumentSession({
     transport && user && isValidPresenceIdentity(user)
       ? {
           provider: transport.provider,
-          user: { id: user.id, name: user.name, color: getPresenceColor(user.id) },
+          user: {
+            id: user.id,
+            name: user.name,
+            color: getPresenceColor(user.id),
+            ...(user.avatarAssetId !== undefined ? { avatarAssetId: user.avatarAssetId } : {}),
+          },
         }
       : undefined;
 
@@ -180,6 +185,22 @@ export function createCollaborativePageDocumentSession({
     },
     presence,
     ...(editorCollaboration ? { editorCollaboration } : {}),
+    updatePresenceUser(nextUser) {
+      const awareness = transport?.provider.awareness;
+      if (!awareness || !user || nextUser.id !== user.id) return;
+      const current = awareness.getLocalState()?.user;
+      if (isRecord(current) && current.id !== user.id) return;
+      awareness.setLocalStateField('user', {
+        ...(isRecord(current) ? current : {}),
+        color:
+          isRecord(current) && typeof current.color === 'string'
+            ? current.color
+            : getPresenceColor(user.id),
+        id: user.id,
+        avatarAssetId: nextUser.avatarAssetId,
+        name: nextUser.name,
+      });
+    },
     ...(sessionStatus === 'error' ? { error: CONFIG_ERROR } : {}),
     subscribe(listener) {
       listeners.add(listener);
@@ -210,9 +231,14 @@ function samePresenceUsers(
       (user, index) =>
         user.id === next[index]?.id &&
         user.name === next[index]?.name &&
-        user.color === next[index]?.color,
+        user.color === next[index]?.color &&
+        user.avatarAssetId === next[index]?.avatarAssetId,
     )
   );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
 
 /** Запас на дорогу до сервера и на разброс часов. */

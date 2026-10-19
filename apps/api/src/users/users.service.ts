@@ -4,6 +4,7 @@ import { normalizeEmail } from '../common/helpers';
 import { PrismaService } from '../database/prisma.service';
 
 export interface UserRecord {
+  avatarAssetId: string | null;
   id: string;
   email: string;
   name: string;
@@ -21,21 +22,30 @@ export interface CreateUserInput {
 export class UsersService {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
-  findByEmail(email: string): Promise<UserRecord | null> {
-    return this.prisma.user.findUnique({ where: { email: normalizeEmail(email) } });
+  async findByEmail(email: string): Promise<UserRecord | null> {
+    const user = await this.prisma.user.findUnique({
+      include: { profile: { select: { avatarAssetId: true } } },
+      where: { email: normalizeEmail(email) },
+    });
+    return user ? { ...user, avatarAssetId: user.profile?.avatarAssetId ?? null } : null;
   }
 
-  findById(id: string): Promise<UserRecord | null> {
-    return this.prisma.user.findUnique({ where: { id } });
+  async findById(id: string): Promise<UserRecord | null> {
+    const user = await this.prisma.user.findUnique({
+      include: { profile: { select: { avatarAssetId: true } } },
+      where: { id },
+    });
+    return user ? { ...user, avatarAssetId: user.profile?.avatarAssetId ?? null } : null;
   }
 
-  create(input: CreateUserInput): Promise<UserRecord> {
-    return this.prisma.user.create({
+  async create(input: CreateUserInput): Promise<UserRecord> {
+    const user = await this.prisma.user.create({
       data: {
         email: normalizeEmail(input.email),
         name: input.name,
         passwordHash: input.passwordHash,
       },
     });
+    return { ...user, avatarAssetId: null };
   }
 }

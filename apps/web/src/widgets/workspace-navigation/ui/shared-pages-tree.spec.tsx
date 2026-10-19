@@ -10,6 +10,7 @@ function page(id: string, title: string, children: PageTreeNodeDto[] = []): Page
     children,
     createdAt: '2026-09-01T00:00:00.000Z',
     createdById: 'owner-1',
+    coverAssetId: null,
     id,
     ownerId: 'owner-1',
     parentPageId: null,

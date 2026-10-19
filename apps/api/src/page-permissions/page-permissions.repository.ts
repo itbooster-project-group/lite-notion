@@ -20,6 +20,7 @@ export interface AccessiblePageRow {
   ownerId: string;
   projectId: string;
   parentPageId: string | null;
+  coverAssetId: string | null;
   createdById: string;
   title: string;
   position: string;
@@ -214,6 +215,7 @@ export class PrismaPagePermissionsRepository extends PagePermissionsRepository {
           AND NOT EXISTS (SELECT 1 FROM granted own WHERE own."id" = child."id")
       )
       SELECT page."id", page."ownerId", page."projectId", page."parentPageId",
+             page."coverAssetId",
              page."createdById", page."title", page."position", page."accessMode",
              page."createdAt", page."updatedAt", accessible."role"
       FROM accessible

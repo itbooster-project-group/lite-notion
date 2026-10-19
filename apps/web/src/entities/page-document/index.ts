@@ -1,5 +1,6 @@
 export {
   clampPageDocumentWidthPercent,
+  createPageDocumentAssetImageAttributes,
   createPageDocumentImageAttributes,
   createPageDocumentNodeId,
   createPageDocumentVideoAttributes,
@@ -9,6 +10,7 @@ export {
   normalizePageDocumentLink,
   normalizePageDocumentVideoUrl,
   normalizePageDocumentYoutubeVideoId,
+  normalizePersistedPageDocumentImageAttributes,
   PAGE_DOCUMENT_MAX_WIDTH_PERCENT,
   PAGE_DOCUMENT_MEDIA_ALIGNMENTS,
   PAGE_DOCUMENT_MIN_WIDTH_PERCENT,
