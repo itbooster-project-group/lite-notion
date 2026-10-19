@@ -71,3 +71,54 @@ describe('PrismaPagePermissionsRepository.resolveRole', () => {
     );
   });
 });
+
+describe('PrismaPagePermissionsRepository.findAccessiblePages', () => {
+  it('maps the selected cover reference for shared page DTOs', async () => {
+    const coverAssetId = '22222222-2222-4222-8222-222222222222';
+    const row = {
+      accessMode: 'INHERIT' as const,
+      coverAssetId,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      createdById: OWNER,
+      id: 'page-id',
+      ownerId: OWNER,
+      parentPageId: null,
+      position: 'a',
+      projectId: 'project-id',
+      role: 'EDITOR' as const,
+      title: 'Shared page',
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    };
+    const repository = new PrismaPagePermissionsRepository({
+      $queryRaw: vi.fn(async () => [row]),
+    } as never);
+
+    await expect(repository.findAccessiblePages(ACTOR)).resolves.toEqual([
+      { ...row, role: PageRole.EDITOR },
+    ]);
+  });
+
+  it('maps an absent cover reference as null for shared page DTOs', async () => {
+    const row = {
+      accessMode: 'INHERIT' as const,
+      coverAssetId: null,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      createdById: OWNER,
+      id: 'page-id',
+      ownerId: OWNER,
+      parentPageId: null,
+      position: 'a',
+      projectId: 'project-id',
+      role: 'VIEWER' as const,
+      title: 'Shared page',
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    };
+    const repository = new PrismaPagePermissionsRepository({
+      $queryRaw: vi.fn(async () => [row]),
+    } as never);
+
+    await expect(repository.findAccessiblePages(ACTOR)).resolves.toEqual([
+      { ...row, role: PageRole.VIEWER },
+    ]);
+  });
+});

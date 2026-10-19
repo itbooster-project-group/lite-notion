@@ -23,6 +23,7 @@ export function CollaborativePageEditor({
   const auth = useSession();
   const userId = auth.user?.id;
   const userName = auth.user?.name;
+  const avatarAssetId = auth.user?.avatarAssetId ?? null;
   const resolvedCapabilities = capabilities ?? getPageCapabilities(accessRole ?? 'viewer');
   const editable = resolvedCapabilities.canEditContent;
   const [session, setSession] = useState<PageDocumentSession | null>(null);
@@ -48,6 +49,11 @@ export function CollaborativePageEditor({
     };
   }, [auth.getAccessToken, auth.refreshAccessToken, editable, pageId, userId, userName]);
 
+  useEffect(() => {
+    if (userId && userName)
+      session?.updatePresenceUser?.({ id: userId, name: userName, avatarAssetId });
+  }, [avatarAssetId, session, userId, userName]);
+
   if (!session) return <div aria-busy="true">Подготавливаем документ…</div>;
 
   return (
@@ -56,9 +62,11 @@ export function CollaborativePageEditor({
         <div aria-live="polite" data-collaboration-status={session.connectionStatus ?? 'offline'}>
           {connectionLabel(session.connectionStatus)}
         </div>
-        {session.presence ? <Participants presence={session.presence} /> : null}
+        {session.presence ? (
+          <Participants currentUserId={userId} presence={session.presence} />
+        ) : null}
       </div>
-      <PageEditor session={session} />
+      <PageEditor pageId={pageId} session={session} userId={userId} />
     </div>
   );
 }

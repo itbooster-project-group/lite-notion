@@ -38,6 +38,7 @@ export class InMemoryAuthRepository extends AuthRepository {
 
     const user: UserRecord = {
       ...input.user,
+      avatarAssetId: null,
       createdAt: new Date(),
       email,
       id: randomUUID(),

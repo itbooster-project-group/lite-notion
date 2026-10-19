@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   clampPageDocumentWidthPercent,
+  createPageDocumentAssetImageAttributes,
   createPageDocumentImageAttributes,
   createPageDocumentNodeId,
   createPageDocumentVideoAttributes,
@@ -101,6 +102,7 @@ describe('page document media attributes', () => {
       caption: 'Поход',
       decorative: false,
       nodeId: NODE_ID,
+      source: null,
       src: 'https://example.com/mountains.jpg',
       widthPercent: 68,
     });
@@ -118,6 +120,41 @@ describe('page document media attributes', () => {
         { alt: 'Описание', decorative: true, src: 'https://example.com/photo.jpg' },
         () => NODE_ID,
       ),
+    ).toBeUndefined();
+  });
+
+  it('создаёт asset image с узлом и asset identity стабильными, без URL', () => {
+    expect(
+      createPageDocumentAssetImageAttributes(
+        { alt: 'Описание', assetId: '22222222-2222-4222-8222-222222222222', decorative: false },
+        () => NODE_ID,
+      ),
+    ).toMatchObject({
+      alt: 'Описание',
+      decorative: false,
+      nodeId: NODE_ID,
+      source: { assetId: '22222222-2222-4222-8222-222222222222', type: 'asset' },
+      src: null,
+    });
+    expect(
+      createPageDocumentAssetImageAttributes(
+        { alt: '', assetId: '22222222-2222-4222-8222-222222222222', decorative: true },
+        () => NODE_ID,
+      ),
+    ).toMatchObject({ alt: '', decorative: true });
+    expect(
+      createPageDocumentAssetImageAttributes({
+        alt: '',
+        assetId: '22222222-2222-4222-8222-222222222222',
+        decorative: false,
+      }),
+    ).toBeUndefined();
+    expect(
+      createPageDocumentAssetImageAttributes({
+        alt: 'Описание',
+        assetId: '22222222-2222-4222-8222-222222222222',
+        decorative: true,
+      }),
     ).toBeUndefined();
   });
 

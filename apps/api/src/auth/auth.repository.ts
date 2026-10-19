@@ -81,7 +81,7 @@ export class PrismaAuthRepository extends AuthRepository {
           data: { ...input.session, userId: user.id },
         });
 
-        return { session, user };
+        return { session, user: { ...user, avatarAssetId: null } };
       });
     } catch (error) {
       // Предварительная проверка email в сервисе — быстрый путь, а не гарантия:

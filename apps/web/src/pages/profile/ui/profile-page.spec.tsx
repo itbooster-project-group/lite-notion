@@ -1,10 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { HttpResponse, http } from 'msw';
 import type { ReactNode } from 'react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SessionProvider } from '@/entities/session';
+import * as api from '@/shared/api';
 import { clearAccessToken } from '@/shared/api';
 import { server } from '@/shared/api/mocks/server';
 
@@ -29,6 +30,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   clearAccessToken();
+  vi.restoreAllMocks();
 });
 
 function renderWithSession(children: ReactNode) {
@@ -53,5 +55,87 @@ describe('ProfilePage', () => {
     expect(screen.getByText(/2026/)).toBeInTheDocument();
     expect(screen.queryByText(user.id)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /сохран/i })).not.toBeInTheDocument();
+  });
+
+  it('заменяет и удаляет аватар только после ready и сохраняет fallback контракт', async () => {
+    let avatarAssetId: string | null = 'old-asset';
+    const nextAssetId = '22222222-2222-4222-8222-222222222222';
+    server.use(http.get('*/api/v1/auth/me', () => HttpResponse.json({ ...user, avatarAssetId })));
+    vi.spyOn(api, 'createAvatarReadUrl').mockImplementation(async (_userId, assetId) => ({
+      url: `https://cdn.example.com/${assetId}.jpg`,
+      expiresInSeconds: 300,
+    }));
+    vi.spyOn(api, 'initiateAssetUpload').mockResolvedValue({
+      assetId: nextAssetId,
+      contentPath: `/api/v1/assets/${nextAssetId}/content`,
+    });
+    vi.spyOn(api, 'uploadAssetContentWithProgress').mockResolvedValue({
+      id: nextAssetId,
+      status: 'ready',
+      mimeType: 'image/png',
+      sizeBytes: 3,
+      originalName: 'avatar.png',
+    });
+    const setAvatar = vi
+      .spyOn(api, 'setCurrentUserAvatar')
+      .mockImplementation(async ({ assetId }) => {
+        avatarAssetId = assetId ?? null;
+      });
+    renderWithSession(<ProfilePage />);
+    expect(await screen.findByRole('img', { name: 'Ada: аватар' })).toHaveAttribute(
+      'src',
+      'https://cdn.example.com/old-asset.jpg',
+    );
+
+    expect(await screen.findByLabelText('Аватар')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Аватар'), {
+      target: { files: [new File(['png'], 'avatar.png', { type: 'image/png' })] },
+    });
+    await waitFor(() => expect(setAvatar).toHaveBeenCalledWith({ assetId: nextAssetId }));
+    await waitFor(() =>
+      expect(screen.getByRole('img', { name: 'Ada: аватар' })).toHaveAttribute(
+        'src',
+        `https://cdn.example.com/${nextAssetId}.jpg`,
+      ),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Удалить аватар' }));
+    await waitFor(() => expect(setAvatar).toHaveBeenLastCalledWith({ assetId: null }));
+    expect(await screen.findByRole('img', { name: 'Нет аватара' })).toBeInTheDocument();
+  });
+
+  it('сохраняет прежний аватар при отказе backend на замену', async () => {
+    const nextAssetId = '22222222-2222-4222-8222-222222222222';
+    vi.spyOn(api, 'initiateAssetUpload').mockResolvedValue({
+      assetId: nextAssetId,
+      contentPath: `/api/v1/assets/${nextAssetId}/content`,
+    });
+    vi.spyOn(api, 'uploadAssetContentWithProgress').mockResolvedValue({
+      id: nextAssetId,
+      status: 'ready',
+      mimeType: 'image/png',
+      sizeBytes: 3,
+      originalName: 'avatar.png',
+    });
+    const setAvatar = vi
+      .spyOn(api, 'setCurrentUserAvatar')
+      .mockRejectedValue(Object.assign(new Error('forbidden'), { status: 403 }));
+    server.use(
+      http.get('*/api/v1/auth/me', () =>
+        HttpResponse.json({ ...user, avatarAssetId: 'old-asset' }),
+      ),
+    );
+    vi.spyOn(api, 'createAvatarReadUrl').mockResolvedValue({
+      url: 'https://cdn.example.com/old-asset.jpg',
+      expiresInSeconds: 300,
+    });
+    renderWithSession(<ProfilePage />);
+    fireEvent.change(await screen.findByLabelText('Аватар'), {
+      target: { files: [new File(['png'], 'avatar.png', { type: 'image/png' })] },
+    });
+
+    await waitFor(() => expect(setAvatar).toHaveBeenCalledOnce());
+    expect(await screen.findByRole('alert')).toHaveTextContent('Текущий аватар сохранён');
+    expect(screen.queryByRole('img', { name: 'Нет аватара' })).not.toBeInTheDocument();
   });
 });

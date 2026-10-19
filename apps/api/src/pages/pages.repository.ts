@@ -15,6 +15,7 @@ import { type PageAccessMode, PageDeletionOrigin } from '../generated/prisma/enu
 export type Bytes = Uint8Array<ArrayBuffer>;
 
 export interface PageRecord {
+  coverAssetId?: string | null;
   id: string;
   ownerId: string;
   projectId: string;
@@ -72,6 +73,7 @@ const PAGE_FIELDS = {
   accessMode: true,
   createdAt: true,
   createdById: true,
+  coverAssetId: true,
   id: true,
   ownerId: true,
   parentPageId: true,

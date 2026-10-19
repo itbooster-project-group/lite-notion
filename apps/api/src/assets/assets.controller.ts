@@ -49,6 +49,7 @@ export class AssetsController {
   ) {}
 
   @Post('uploads')
+  @ApiBody({ type: InitiateAssetUploadDto })
   @ApiOperation({ operationId: 'initiateAssetUpload', summary: 'Start an image upload' })
   @ApiCreatedResponse({ type: AssetUploadInitiatedDto })
   initiate(
@@ -146,6 +147,7 @@ export class PageAssetsController {
   }
 
   @Put('cover')
+  @ApiBody({ type: SetAssetReferenceDto })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ operationId: 'setPageCover', summary: 'Set or remove a page cover image' })
   @ApiNoContentResponse()
@@ -165,6 +167,7 @@ export class UserAvatarController {
   constructor(@Inject(AssetsUseCases) private readonly assets: AssetsUseCases) {}
 
   @Put('me/avatar')
+  @ApiBody({ type: SetAssetReferenceDto })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
     operationId: 'setCurrentUserAvatar',

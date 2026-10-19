@@ -9,7 +9,10 @@ describe('UsersService', () => {
   let user: { findUnique: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
-    user = { create: vi.fn().mockResolvedValue(null), findUnique: vi.fn().mockResolvedValue(null) };
+    user = {
+      create: vi.fn().mockResolvedValue({ id: 'user-id' }),
+      findUnique: vi.fn().mockResolvedValue(null),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [UsersService, { provide: PrismaService, useValue: { user } }],
@@ -21,7 +24,10 @@ describe('UsersService', () => {
   it('нормализует email при поиске', async () => {
     await service.findByEmail('  User@Example.COM ');
 
-    expect(user.findUnique).toHaveBeenCalledWith({ where: { email: 'user@example.com' } });
+    expect(user.findUnique).toHaveBeenCalledWith({
+      include: { profile: { select: { avatarAssetId: true } } },
+      where: { email: 'user@example.com' },
+    });
   });
 
   it('нормализует email при создании', async () => {
@@ -51,6 +57,37 @@ describe('UsersService', () => {
   it('ищет по идентификатору без преобразований', async () => {
     await service.findById('user-id');
 
-    expect(user.findUnique).toHaveBeenCalledWith({ where: { id: 'user-id' } });
+    expect(user.findUnique).toHaveBeenCalledWith({
+      include: { profile: { select: { avatarAssetId: true } } },
+      where: { id: 'user-id' },
+    });
+  });
+
+  it('возвращает выбранный avatar id профиля', async () => {
+    user.findUnique.mockResolvedValue({
+      createdAt: new Date(),
+      email: 'user@example.com',
+      id: 'user-id',
+      name: 'user',
+      passwordHash: 'hash',
+      profile: { avatarAssetId: 'asset-id' },
+    });
+
+    await expect(service.findById('user-id')).resolves.toMatchObject({
+      avatarAssetId: 'asset-id',
+    });
+  });
+
+  it('возвращает null, если у пользователя нет profile или avatar', async () => {
+    user.findUnique.mockResolvedValue({
+      createdAt: new Date(),
+      email: 'user@example.com',
+      id: 'user-id',
+      name: 'user',
+      passwordHash: 'hash',
+      profile: null,
+    });
+
+    await expect(service.findById('user-id')).resolves.toMatchObject({ avatarAssetId: null });
   });
 });

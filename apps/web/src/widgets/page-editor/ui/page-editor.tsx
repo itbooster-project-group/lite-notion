@@ -6,9 +6,11 @@ import { EditorStatus } from './editor-status';
 
 export type PageEditorProps = Readonly<{
   session: PageDocumentSession;
+  pageId?: string | undefined;
+  userId?: string | undefined;
 }>;
 
-export function PageEditor({ session }: PageEditorProps) {
+export function PageEditor({ pageId, session, userId }: PageEditorProps) {
   if (session.status === 'loading') return <EditorStatus status="loading" />;
 
   if (session.status === 'error') {
@@ -27,6 +29,8 @@ export function PageEditor({ session }: PageEditorProps) {
       <PageEditorSurface
         doc={session.doc}
         editable={session.editable}
+        pageId={pageId}
+        userId={userId}
         {...(session.editorCollaboration ? { collaboration: session.editorCollaboration } : {})}
       />
     </div>

@@ -13,6 +13,7 @@ import {
   type PageDocumentRelativeSelection,
 } from '../../model/page-document-relative-selection';
 import type { PageDocumentEditorCollaboration } from '../../model/page-document-session';
+import { createAssetImageEditorExtension } from '../asset-image-node-view';
 import { BlockReorderControls } from '../block-reorder-controls';
 import { BubbleFormattingMenu } from '../bubble-menu';
 import { useEditorPopupPosition } from '../editor-popup-position/use-editor-popup-position';
@@ -26,12 +27,16 @@ export type PageEditorSurfaceProps = Readonly<{
   doc: Y.Doc;
   editable: boolean;
   collaboration?: PageDocumentEditorCollaboration;
+  pageId?: string | undefined;
+  userId?: string | undefined;
 }>;
 
 type EditorFormDialogProps = Readonly<{
   children: ReactNode;
   description: string;
   editor: Editor;
+  showCloseButton?: boolean;
+  wide?: boolean;
   onClose(): void;
   title: string;
 }>;
@@ -41,17 +46,22 @@ function EditorFormDialog({
   description,
   editor,
   onClose,
+  showCloseButton = false,
   title,
+  wide = false,
 }: EditorFormDialogProps) {
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="sm:max-w-md"
+        className={`max-h-[calc(100dvh-2rem)] overflow-y-auto ${wide ? 'sm:max-w-[34rem]' : 'sm:max-w-md'}`}
         finalFocus={() => (editor.isDestroyed ? true : editor.view.dom)}
-        showCloseButton={false}
+        closeLabel="Закрыть"
+        showCloseButton={showCloseButton}
       >
         <div className="space-y-1">
-          <DialogTitle>{title}</DialogTitle>
+          <DialogTitle className={wide ? 'text-base font-semibold' : undefined}>
+            {title}
+          </DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </div>
         {children}
@@ -60,7 +70,13 @@ function EditorFormDialog({
   );
 }
 
-export function PageEditorSurface({ collaboration, doc, editable }: PageEditorSurfaceProps) {
+export function PageEditorSurface({
+  collaboration,
+  doc,
+  editable,
+  pageId,
+  userId,
+}: PageEditorSurfaceProps) {
   const [transientIdentity, setTransientIdentity] = useState<{
     doc: Y.Doc;
     editor: Editor | null;
@@ -99,13 +115,17 @@ export function PageEditorSurface({ collaboration, doc, editable }: PageEditorSu
           return slashKeyDownHandlerRef.current?.(event) ?? false;
         },
       },
-      extensions: createPageDocumentEditorExtensions(doc, collaboration),
+      extensions: createPageDocumentEditorExtensions(
+        doc,
+        collaboration,
+        createAssetImageEditorExtension(pageId, userId),
+      ),
       immediatelyRender: false,
       onCreate: ({ editor: createdEditor }) => {
         setTransientIdentity({ doc, editor: createdEditor });
       },
     },
-    [doc],
+    [doc, pageId, userId],
   );
   editorRef.current = editor;
   const documentUiIsCurrent = transientIdentity.doc === doc && transientIdentity.editor === editor;
@@ -187,12 +207,14 @@ export function PageEditorSurface({ collaboration, doc, editable }: PageEditorSu
           )}
           {editable && imageFormOpen && (
             <EditorFormDialog
-              description="Добавьте безопасный HTTPS-адрес и описание изображения."
+              description="Загрузите файл или добавьте безопасную HTTPS-ссылку."
               editor={editor}
               onClose={() => setImageFormOpen(false)}
+              showCloseButton
               title="Добавить изображение"
+              wide
             >
-              <ImageForm editor={editor} onClose={() => setImageFormOpen(false)} />
+              <ImageForm editor={editor} onClose={() => setImageFormOpen(false)} pageId={pageId} />
             </EditorFormDialog>
           )}
           {editable && youtubeFormOpen && (

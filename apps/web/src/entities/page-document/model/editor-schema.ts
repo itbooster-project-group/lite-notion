@@ -119,16 +119,22 @@ export const PageDocumentImage = Node.create({
   renderHTML({ node }) {
     const attrs = normalizePersistedPageDocumentImageAttributes(node.attrs);
     if (!attrs) return invalidMediaOutput('image');
-    const { alt, caption, decorative, src } = attrs;
-    const image = [
-      'img',
-      {
-        alt: decorative ? '' : String(alt ?? ''),
-        referrerpolicy: 'no-referrer',
-        role: decorative ? 'presentation' : undefined,
-        src: String(src ?? ''),
-      },
-    ];
+    const { alt, caption, decorative, source, src } = attrs;
+    const image = src
+      ? [
+          'img',
+          {
+            alt: decorative ? '' : String(alt ?? ''),
+            referrerpolicy: 'no-referrer',
+            role: decorative ? 'presentation' : undefined,
+            src,
+          },
+        ]
+      : [
+          'span',
+          { 'data-asset-unavailable': source?.assetId ?? '', role: 'img' },
+          'Изображение недоступно',
+        ];
     const renderedCaption = captionOutput(caption);
 
     return renderedCaption
@@ -137,6 +143,7 @@ export const PageDocumentImage = Node.create({
           {
             ...mediaFigureAttributes('image', attrs),
             'data-decorative': String(Boolean(decorative)),
+            ...(source ? { 'data-asset-id': source.assetId } : {}),
           },
           image,
           renderedCaption,
@@ -146,6 +153,7 @@ export const PageDocumentImage = Node.create({
           {
             ...mediaFigureAttributes('image', attrs),
             'data-decorative': String(Boolean(decorative)),
+            ...(source ? { 'data-asset-id': source.assetId } : {}),
           },
           image,
         ];
@@ -303,6 +311,7 @@ export function createPageDocumentEditorExtensions(
     provider: CollaborationProvider;
     user: Readonly<{ id: string; name: string; color: string }>;
   }>,
+  imageExtension?: typeof PageDocumentImage,
 ): Extensions {
   const collaborationCaret = collaboration
     ? [
@@ -332,7 +341,9 @@ export function createPageDocumentEditorExtensions(
     : [];
 
   return [
-    ...createPageDocumentSchemaExtensions(),
+    ...createPageDocumentSchemaExtensions().map((extension) =>
+      extension.name === 'image' && imageExtension ? imageExtension : extension,
+    ),
     PageDocumentNodeIdDeconflict,
     Collaboration.configure({
       document,

@@ -4,6 +4,7 @@ import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
 import { createPageDocumentSchemaExtensions } from '../model/editor-schema';
 import { isSupportedPageDocumentSchemaVersion } from '../model/schema-version';
 import {
+  normalizePageDocumentImageUrl,
   normalizePageDocumentLink,
   normalizePersistedPageDocumentImageAttributes,
   normalizePersistedPageDocumentVideoAttributes,
@@ -13,6 +14,7 @@ import {
 export type PageDocumentStaticRenderingInput = Readonly<{
   content: JSONContent;
   schemaVersion: unknown;
+  assetUrls?: Readonly<Record<string, string>>;
 }>;
 
 export class UnsupportedPageDocumentStaticRenderingSchemaError extends Error {
@@ -55,10 +57,17 @@ function normalizeMarks(marks: JSONContent['marks']): JSONContent['marks'] {
   return normalized.length ? normalized : undefined;
 }
 
-function normalizeNode(node: JSONContent): JSONContent | undefined {
+function normalizeNode(
+  node: JSONContent,
+  assetUrls: Readonly<Record<string, string>> = {},
+): JSONContent | undefined {
   if (node.type === 'image') {
     const attrs = normalizePersistedPageDocumentImageAttributes(node.attrs);
-    return attrs ? { attrs, type: 'image' } : undefined;
+    if (!attrs) return undefined;
+    const resolvedUrl = attrs.source
+      ? normalizePageDocumentImageUrl(assetUrls[attrs.source.assetId] ?? '')
+      : undefined;
+    return { attrs: { ...attrs, ...(resolvedUrl ? { src: resolvedUrl } : {}) }, type: 'image' };
   }
   if (node.type === 'youtube') {
     const attrs = normalizePersistedPageDocumentYoutubeAttributes(node.attrs);
@@ -77,7 +86,7 @@ function normalizeNode(node: JSONContent): JSONContent | undefined {
 
   const content = Array.isArray(node.content)
     ? node.content.flatMap((child) => {
-        const normalized = normalizeNode(child);
+        const normalized = normalizeNode(child, assetUrls);
         return normalized ? [normalized] : [];
       })
     : undefined;
@@ -89,13 +98,17 @@ function normalizeNode(node: JSONContent): JSONContent | undefined {
   };
 }
 
-function normalizePageDocumentV1Content(content: JSONContent): JSONContent {
+function normalizePageDocumentV1Content(
+  content: JSONContent,
+  assetUrls?: Readonly<Record<string, string>>,
+): JSONContent {
   if (content.type !== 'doc') return { type: 'doc' };
 
-  return normalizeNode(content) ?? { type: 'doc' };
+  return normalizeNode(content, assetUrls) ?? { type: 'doc' };
 }
 
 export function renderPageDocumentToHTML({
+  assetUrls,
   content,
   schemaVersion,
 }: PageDocumentStaticRenderingInput): string {
@@ -104,7 +117,7 @@ export function renderPageDocumentToHTML({
   }
 
   return renderToHTMLString({
-    content: normalizePageDocumentV1Content(content),
+    content: normalizePageDocumentV1Content(content, assetUrls),
     extensions: createPageDocumentSchemaExtensions(),
   });
 }

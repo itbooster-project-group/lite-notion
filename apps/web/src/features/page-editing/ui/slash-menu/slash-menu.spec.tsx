@@ -72,9 +72,7 @@ describe('slash menu', () => {
       keyDownHandler?.(new KeyboardEvent('keydown', { cancelable: true, key: 'Enter' }));
     });
 
-    await waitFor(() =>
-      expect(screen.getByRole('textbox', { name: 'Адрес изображения' })).toHaveFocus(),
-    );
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Загрузить файл' })).toHaveFocus());
     expect(editor.getText()).toBe('');
   });
 

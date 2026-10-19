@@ -140,6 +140,7 @@ function activePage(
     children,
     createdAt: '2026-01-01T00:00:00.000Z',
     createdById: 'owner',
+    coverAssetId: null,
     id,
     ownerId: 'owner',
     parentPageId,

@@ -110,6 +110,38 @@ describe('collaborative page document session', () => {
     expect(listener).toHaveBeenCalledOnce();
   });
 
+  it('updates avatar identity through Awareness without changing Y.Doc', () => {
+    const awareness = createTestAwareness();
+    const setLocalStateField = awareness.setLocalStateField;
+    awareness.setLocalState({ user: { id: 'editor-id', name: 'Editor', color: '#2563eb' } });
+    const session = createCollaborativePageDocumentSession({
+      roomName: 'page:page-id',
+      url: 'ws://collaboration.test',
+      user: { id: 'editor-id', name: 'Editor' },
+      getAccessToken: () => 'token',
+      refreshAccessToken: async () => undefined,
+      transportFactory: () => ({
+        provider: { awareness: awareness.provider, connect: async () => undefined },
+        destroy: vi.fn(),
+      }),
+    });
+    const documentUpdate = vi.fn();
+    session.doc?.on('update', documentUpdate);
+
+    session.updatePresenceUser?.({
+      id: 'editor-id',
+      name: 'Editor',
+      avatarAssetId: '22222222-2222-4222-8222-222222222222',
+    });
+
+    expect(setLocalStateField).toHaveBeenCalledWith(
+      'user',
+      expect.objectContaining({ avatarAssetId: '22222222-2222-4222-8222-222222222222' }),
+    );
+    expect(documentUpdate).not.toHaveBeenCalled();
+    session.destroy();
+  });
+
   it('keeps the same Y.Doc through sync and reconnect, then cleans transport', async () => {
     let callbacks: CollaborationTransportCallbacks | undefined;
     const connect = vi.fn(async () => undefined);
@@ -284,6 +316,7 @@ function createTestProvider(connect: () => Promise<unknown>): CollaborationProvi
 
 function createTestAwareness() {
   let listener: (() => void) | undefined;
+  let localState: unknown;
   const states = new Map<number, unknown>();
   const on = vi.fn((_event: 'change', next: () => void) => {
     listener = next;
@@ -291,16 +324,27 @@ function createTestAwareness() {
   const off = vi.fn(() => {
     listener = undefined;
   });
+  const getLocalState = () => localState;
+  const setLocalStateField = vi.fn((_key: string, value: unknown) => {
+    localState = { user: value };
+  });
   const provider = {
+    getLocalState,
     getStates: () => states,
     on,
     off,
+    setLocalStateField,
   } as unknown as NonNullable<CollaborationProvider['awareness']>;
 
   return {
     off,
     provider,
     states,
+    getLocalState,
+    setLocalStateField,
+    setLocalState: (value: unknown) => {
+      localState = value;
+    },
     emitChange: () => listener?.(),
   };
 }

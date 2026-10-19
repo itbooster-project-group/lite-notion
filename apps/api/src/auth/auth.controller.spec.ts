@@ -109,6 +109,7 @@ describe('AuthController', () => {
 
       expect(response.body.accessToken).toBeTypeOf('string');
       expect(response.body.user).toMatchObject({ email: 'ada@example.com', name: 'Ada' });
+      expect(response.body.user.avatarAssetId).toBeNull();
       expect(readRefreshCookie(response.headers)).toMatch(/HttpOnly/i);
     });
 
@@ -250,7 +251,30 @@ describe('AuthController', () => {
         .set(identityOf(registered.body.accessToken))
         .expect(200);
 
-      expect(response.body).toMatchObject({ email: 'ada@example.com', name: 'Ada' });
+      expect(response.body).toMatchObject({
+        avatarAssetId: null,
+        email: 'ada@example.com',
+        name: 'Ada',
+      });
+    });
+
+    it('возвращает выбранный avatar asset id в profile response', async () => {
+      const registered = await request(app.getHttpServer())
+        .post('/auth/register')
+        .send(credentials)
+        .expect(201);
+      const storedUser = stored.get(credentials.email);
+      stored.set(credentials.email, {
+        ...storedUser,
+        profile: { avatarAssetId: '11111111-1111-4111-8111-111111111111' },
+      });
+
+      const response = await request(app.getHttpServer())
+        .get('/auth/me')
+        .set(identityOf(registered.body.accessToken))
+        .expect(200);
+
+      expect(response.body.avatarAssetId).toBe('11111111-1111-4111-8111-111111111111');
     });
 
     it.each([
