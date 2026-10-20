@@ -49,6 +49,7 @@ describe('createApplicationConfig', () => {
       jwtSecret,
       nodeEnvironment: NodeEnvironment.Development,
       port: 3001,
+      publicationRevalidation: null,
       refreshTokenTtlS: 2592000,
     });
   });
@@ -72,6 +73,9 @@ describe('createApplicationConfig', () => {
         JWT_SECRET: 'production-jwt-secret-value-32-chars',
         NODE_ENV: 'production',
         PORT: '4100',
+        PUBLICATION_REVALIDATION_URL: 'https://frontend.example.com/api/internal/revalidate',
+        PUBLICATION_REVALIDATION_TOKEN: 'internal-token',
+        PUBLICATION_REVALIDATION_TIMEOUT_MS: '4500',
         REFRESH_TOKEN_TTL_S: '604800',
         UNRELATED_VALUE: 'not-mapped',
       }),
@@ -108,6 +112,11 @@ describe('createApplicationConfig', () => {
       jwtSecret: 'production-jwt-secret-value-32-chars',
       nodeEnvironment: NodeEnvironment.Production,
       port: 4100,
+      publicationRevalidation: {
+        token: 'internal-token',
+        timeoutMs: 4500,
+        url: 'https://frontend.example.com/api/internal/revalidate',
+      },
       refreshTokenTtlS: 604800,
     });
   });

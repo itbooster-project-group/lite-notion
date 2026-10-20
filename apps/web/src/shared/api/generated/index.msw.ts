@@ -4,3 +4,5 @@ export { getHealthMock } from './health/health.msw';
 export { getPagePermissionsMock } from './page-permissions/page-permissions.msw';
 export { getPagesMock } from './pages/pages.msw';
 export { getProjectsMock } from './projects/projects.msw';
+export { getPublicPublicationsMock } from './public-publications/public-publications.msw';
+export { getPublicationsMock } from './publications/publications.msw';

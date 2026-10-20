@@ -11,6 +11,7 @@ import {
 } from '../database/transaction';
 import { PrismaPagePermissionsRepository } from '../page-permissions/page-permissions.repository';
 import { PrismaProjectsRepository } from '../projects/projects.repository';
+import { PrismaPublicationsRepository } from '../publications/publications.repository';
 import { PrismaPageDocumentRepository } from './page-document/page-document.repository';
 import { PrismaPagesRepository } from './pages.repository';
 import { CreatePageUseCase } from './use-cases/create-page.use-case';
@@ -52,7 +53,12 @@ describe('очистка корзины страниц на живой базе'
       new PrismaPageDocumentRepository(prisma as unknown as DatabaseClient),
       permissions,
     );
-    softDeletePage = new SoftDeletePageUseCase(transactions, pages, permissions);
+    softDeletePage = new SoftDeletePageUseCase(
+      transactions,
+      pages,
+      permissions,
+      new PrismaPublicationsRepository(prisma as unknown as PrismaService),
+    );
     purgeTrash = new PurgePagesTrashUseCase(transactions, pages);
 
     await prisma.user.create({

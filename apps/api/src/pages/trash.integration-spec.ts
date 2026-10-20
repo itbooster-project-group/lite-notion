@@ -5,11 +5,13 @@ import { PurgeConfirmationRequiredError } from '../common/errors';
 import { PrismaClient } from '../database/client';
 import type { PrismaService } from '../database/prisma.service';
 import { PrismaTransactionRunner } from '../database/transaction';
+import { SnapshotReason } from '../generated/prisma/enums';
 import { PrismaPagePermissionsRepository } from '../page-permissions/page-permissions.repository';
 import { PrismaProjectsRepository } from '../projects/projects.repository';
 import { PurgeProjectUseCase } from '../projects/use-cases/purge-project.use-case';
 import { RestoreProjectUseCase } from '../projects/use-cases/restore-project.use-case';
 import { SoftDeleteProjectUseCase } from '../projects/use-cases/soft-delete-project.use-case';
+import { PrismaPublicationsRepository } from '../publications/publications.repository';
 import { PageNotFoundError, PageRestoreProjectDeletedError } from './errors';
 import { PrismaPageDocumentRepository } from './page-document/page-document.repository';
 import { PrismaPagesRepository } from './pages.repository';
@@ -49,6 +51,29 @@ describe('корзина страниц и проектов на живой ба
       title,
     });
 
+  const publishForDelete = async (pageId: string, slug: string) => {
+    const snapshot = await prisma.documentSnapshot.create({
+      data: {
+        createdById: ownerId,
+        pageId,
+        reason: SnapshotReason.publication,
+        revision: 1n,
+        sourceStorageRevision: 0n,
+        tiptapSchemaVersion: 2,
+        yjsState: new Uint8Array([1]),
+      },
+    });
+    await prisma.pagePublication.create({
+      data: {
+        pageId,
+        publishedAt: new Date(),
+        slug,
+        snapshotId: snapshot.id,
+        status: 'published',
+      },
+    });
+  };
+
   /** Сохраняет позиционный вызов тестов поверх командного контракта юзкейса. */
   const restorePage = (pageId: string, ownerId: string, targetProjectId: string | null) =>
     restorePageUseCase.execute({ ownerId, pageId, targetProjectId });
@@ -68,7 +93,8 @@ describe('корзина страниц и проектов на живой ба
     const transactions = new PrismaTransactionRunner(prisma as unknown as PrismaService);
     const permissions = new PrismaPagePermissionsRepository(prisma as unknown as PrismaService);
 
-    softDeleteProject = new SoftDeleteProjectUseCase(transactions, projects, pages);
+    const publications = new PrismaPublicationsRepository(prisma as unknown as PrismaService);
+    softDeleteProject = new SoftDeleteProjectUseCase(transactions, projects, pages, publications);
     restoreProject = new RestoreProjectUseCase(transactions, projects, pages);
     purgeProject = new PurgeProjectUseCase(transactions, projects, pages);
     createPageUseCase = new CreatePageUseCase(
@@ -78,7 +104,12 @@ describe('корзина страниц и проектов на живой ба
       new PrismaPageDocumentRepository(prisma as unknown as PrismaService),
       permissions,
     );
-    softDeletePageUseCase = new SoftDeletePageUseCase(transactions, pages, permissions);
+    softDeletePageUseCase = new SoftDeletePageUseCase(
+      transactions,
+      pages,
+      permissions,
+      publications,
+    );
     restorePageUseCase = new RestorePageUseCase(transactions, pages, projects);
     purgePageUseCase = new PurgePageUseCase(transactions, pages);
     purgePagesTrashUseCase = new PurgePagesTrashUseCase(transactions, pages);
@@ -137,6 +168,117 @@ describe('корзина страниц и проектов на живой ба
       await expect(softDeletePageUseCase.execute(page.id, ownerId)).rejects.toBeInstanceOf(
         PageNotFoundError,
       );
+    });
+
+    it('atomically unpublishes every published page in a deleted subtree and queues each route', async () => {
+      const root = await createPage(null, 'root');
+      const child = await createPage(root.id, 'child');
+      const grandchild = await createPage(child.id, 'grandchild');
+      await Promise.all([
+        publishForDelete(root.id, 'subtree-root'),
+        publishForDelete(child.id, 'subtree-child'),
+        publishForDelete(grandchild.id, 'subtree-grandchild'),
+      ]);
+
+      await softDeletePageUseCase.execute(root.id, ownerId);
+
+      const publications = await prisma.pagePublication.findMany({
+        orderBy: { slug: 'asc' },
+        select: { status: true },
+        where: { pageId: { in: [root.id, child.id, grandchild.id] } },
+      });
+      expect(publications).toHaveLength(3);
+      expect(publications.every(({ status }) => status === 'unpublished')).toBe(true);
+      await expect(
+        prisma.publicationRevalidation.findMany({
+          select: { paths: true },
+          where: {
+            paths: { hasSome: ['/p/subtree-root', '/p/subtree-child', '/p/subtree-grandchild'] },
+          },
+        }),
+      ).resolves.toEqual(
+        expect.arrayContaining([
+          { paths: ['/p/subtree-child', '/p/subtree-grandchild', '/p/subtree-root'] },
+        ]),
+      );
+
+      await restorePage(root.id, ownerId, null);
+      expect(
+        await prisma.pagePublication.findMany({
+          select: { status: true },
+          where: { pageId: { in: [root.id, child.id, grandchild.id] } },
+        }),
+      ).toHaveLength(3);
+      expect(
+        (
+          await prisma.pagePublication.findMany({
+            select: { status: true },
+            where: { pageId: { in: [root.id, child.id, grandchild.id] } },
+          })
+        ).every(({ status }) => status === 'unpublished'),
+      ).toBe(true);
+    });
+
+    it('unpublishes multiple project publications in the same soft-delete transaction', async () => {
+      const first = await createPage(null, 'first');
+      const second = await createPage(null, 'second');
+      await Promise.all([
+        publishForDelete(first.id, 'project-first'),
+        publishForDelete(second.id, 'project-second'),
+      ]);
+
+      await softDeleteProject.execute(projectId, ownerId);
+
+      const publications = await prisma.pagePublication.findMany({
+        select: { status: true },
+        where: { pageId: { in: [first.id, second.id] } },
+      });
+      expect(publications).toHaveLength(2);
+      expect(publications.every(({ status }) => status === 'unpublished')).toBe(true);
+      const revalidation = await prisma.publicationRevalidation.findMany({
+        select: { paths: true },
+        where: { paths: { hasSome: ['/p/project-first', '/p/project-second'] } },
+      });
+      expect(revalidation).toContainEqual({ paths: ['/p/project-first', '/p/project-second'] });
+    });
+
+    it('rolls back page deletion and unpublish when the durable invalidation insert fails', async () => {
+      const page = await createPage(null, 'rollback');
+      await publishForDelete(page.id, 'delete-rollback');
+      await prisma.$executeRawUnsafe(`
+        CREATE OR REPLACE FUNCTION fail_publication_revalidation_insert()
+        RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN RAISE EXCEPTION 'forced revalidation failure'; END;
+        $$
+      `);
+      await prisma.$executeRawUnsafe(`
+        CREATE TRIGGER fail_publication_revalidation_insert
+        BEFORE INSERT ON "PublicationRevalidation"
+        FOR EACH ROW EXECUTE FUNCTION fail_publication_revalidation_insert()
+      `);
+
+      try {
+        await expect(softDeletePageUseCase.execute(page.id, ownerId)).rejects.toThrow();
+      } finally {
+        await prisma.$executeRawUnsafe(
+          'DROP TRIGGER IF EXISTS fail_publication_revalidation_insert ON "PublicationRevalidation"',
+        );
+        await prisma.$executeRawUnsafe(
+          'DROP FUNCTION IF EXISTS fail_publication_revalidation_insert()',
+        );
+      }
+
+      await expect(rowOf(page.id)).resolves.toMatchObject({ deletedAt: null });
+      await expect(
+        prisma.pagePublication.findUnique({ where: { pageId: page.id } }),
+      ).resolves.toMatchObject({
+        status: 'published',
+      });
+      expect(
+        await prisma.publicationRevalidation.count({
+          where: { paths: { has: '/p/delete-rollback' } },
+        }),
+      ).toBe(0);
     });
   });
 

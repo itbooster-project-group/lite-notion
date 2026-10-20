@@ -6,6 +6,8 @@ import { TransactionRunner } from '../database/transaction';
 import { InMemoryTransactionRunner } from '../database/transaction.in-memory';
 import { PagesRepository } from '../pages/pages.repository';
 import { InMemoryPagesRepository } from '../pages/pages.repository.in-memory';
+import { PublicationsRepository } from '../publications/publications.repository';
+import { emptyPublicationsRepository } from '../testing/publications-repository.fake';
 import { ProjectsController } from './projects.controller';
 import { ProjectsRepository } from './projects.repository';
 import { InMemoryProjectsRepository } from './projects.repository.in-memory';
@@ -35,6 +37,7 @@ describe('ProjectsController', () => {
         PurgeProjectsTrashUseCase,
         RestoreProjectUseCase,
         SoftDeleteProjectUseCase,
+        { provide: PublicationsRepository, useValue: emptyPublicationsRepository() },
         { provide: ProjectsRepository, useValue: repository },
         { provide: PagesRepository, useValue: new InMemoryPagesRepository() },
         { provide: TransactionRunner, useValue: new InMemoryTransactionRunner() },

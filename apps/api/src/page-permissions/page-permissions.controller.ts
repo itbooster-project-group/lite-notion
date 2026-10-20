@@ -32,6 +32,8 @@ import { GrantPagePermissionDto } from './dto/grant-page-permission.dto';
 import { PagePermissionDto } from './dto/page-permission.dto';
 import { toHttpException } from './helpers';
 import { PagePermissionsService } from './page-permissions.service';
+import { GrantPagePermissionUseCase } from './use-cases/grant-page-permission.use-case';
+import { RevokePagePermissionUseCase } from './use-cases/revoke-page-permission.use-case';
 
 @ApiTags('page-permissions')
 @ApiBearerAuth()
@@ -53,6 +55,10 @@ import { PagePermissionsService } from './page-permissions.service';
 export class PagePermissionsController {
   constructor(
     @Inject(PagePermissionsService) private readonly permissions: PagePermissionsService,
+    @Inject(GrantPagePermissionUseCase)
+    private readonly grantPermission: GrantPagePermissionUseCase,
+    @Inject(RevokePagePermissionUseCase)
+    private readonly revokePermission: RevokePagePermissionUseCase,
   ) {}
 
   @Get()
@@ -83,7 +89,12 @@ export class PagePermissionsController {
     @Body() body: GrantPagePermissionDto,
   ): Promise<PagePermissionDto> {
     const permission = await toHttpException(() =>
-      this.permissions.grant(user.id, pageId, body.email, body.role),
+      this.grantPermission.execute(
+        user.id,
+        pageId,
+        body.email,
+        body.role === 'editor' ? 'EDITOR' : 'VIEWER',
+      ),
     );
 
     return PagePermissionDto.fromRecord(permission);
@@ -102,6 +113,6 @@ export class PagePermissionsController {
     @Param('pageId', ParseUUIDPipe) pageId: string,
     @Param('userId', ParseUUIDPipe) userId: string,
   ): Promise<void> {
-    await toHttpException(() => this.permissions.revoke(user.id, pageId, userId));
+    await toHttpException(() => this.revokePermission.execute(user.id, pageId, userId));
   }
 }

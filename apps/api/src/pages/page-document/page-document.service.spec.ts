@@ -10,6 +10,8 @@ import { PagePermissionsService } from '../../page-permissions/page-permissions.
 import { ProjectsRepository } from '../../projects/projects.repository';
 import { InMemoryProjectsRepository } from '../../projects/projects.repository.in-memory';
 import { ProjectsService } from '../../projects/projects.service';
+import { PublicationsRepository } from '../../publications/publications.repository';
+import { emptyPublicationsRepository } from '../../testing/publications-repository.fake';
 import { UsersService } from '../../users/users.service';
 import { TIPTAP_SCHEMA_VERSION } from '../constants';
 import { PageNotFoundError } from '../errors';
@@ -92,6 +94,7 @@ describe('PageDocumentService', () => {
         ProjectsService,
         CreatePageUseCase,
         SoftDeletePageUseCase,
+        { provide: PublicationsRepository, useValue: emptyPublicationsRepository() },
         { provide: PagesRepository, useValue: pages },
         { provide: PageDocumentRepository, useValue: documents },
         { provide: ProjectsRepository, useValue: projects },

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { DatabaseModule } from '../database/database.module';
 import { DocumentCaptureModule } from '../document-capture/document-capture.module';
 import { PagePermissionsModule } from '../page-permissions/page-permissions.module';
@@ -11,7 +11,12 @@ import { CreateSnapshotManualUseCase } from './use-cases/create-snapshot-manual.
 
 @Module({
   exports: [CreateCurrentManualSnapshotUseCase, CreateSnapshotInternalUseCase, SnapshotsService],
-  imports: [DatabaseModule, DocumentCaptureModule, PagePermissionsModule, PagesModule],
+  imports: [
+    DatabaseModule,
+    DocumentCaptureModule,
+    PagePermissionsModule,
+    forwardRef(() => PagesModule),
+  ],
   providers: [
     CreateSnapshotInternalUseCase,
     CreateSnapshotManualUseCase,

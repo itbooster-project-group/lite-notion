@@ -2,6 +2,7 @@ import { forwardRef, Module } from '@nestjs/common';
 
 import { DatabaseModule } from '../database/database.module';
 import { PagesModule } from '../pages/pages.module';
+import { PublicationsModule } from '../publications/publications.module';
 import { ProjectsController } from './projects.controller';
 import { PrismaProjectsRepository, ProjectsRepository } from './projects.repository';
 import { ProjectsService } from './projects.service';
@@ -20,7 +21,7 @@ const useCases = [
 @Module({
   controllers: [ProjectsController],
   exports: [ProjectsRepository, ProjectsService],
-  imports: [DatabaseModule, forwardRef(() => PagesModule)],
+  imports: [DatabaseModule, forwardRef(() => PagesModule), PublicationsModule],
   providers: [
     ProjectsService,
     { provide: ProjectsRepository, useClass: PrismaProjectsRepository },

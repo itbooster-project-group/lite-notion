@@ -96,6 +96,18 @@ export class InMemoryPagesRepository extends PagesRepository {
     return page === undefined || page.deletedAt !== null ? null : this.toRecord(page);
   }
 
+  async findLivePublicationCover(id: string): Promise<{ coverAssetId: string | null } | null> {
+    const page = this.findLivePublicationPage(id);
+    return page === null ? null : { coverAssetId: page.coverAssetId ?? null };
+  }
+
+  async findLivePublicationMetadata(
+    id: string,
+  ): Promise<{ coverAssetId: string | null; title: string } | null> {
+    const page = this.findLivePublicationPage(id);
+    return page === null ? null : { coverAssetId: page.coverAssetId ?? null, title: page.title };
+  }
+
   async lockLivePageForUpdate(id: string): Promise<boolean> {
     return (await this.findLiveById(id)) !== null;
   }
@@ -228,6 +240,11 @@ export class InMemoryPagesRepository extends PagesRepository {
       .sort(compareSiblings);
   }
 
+  private findLivePublicationPage(id: string): StoredPage | null {
+    const page = this.pages.get(id);
+    return page === undefined || page.deletedAt !== null ? null : page;
+  }
+
   private visible(): StoredPage[] {
     return [...this.pages.values()].filter((page) => page.deletedAt === null);
   }
@@ -273,6 +290,31 @@ export class InMemoryPagesRepository extends PagesRepository {
     }
 
     return descendants.length + 1;
+  }
+
+  async findLiveSubtreeIds(id: string): Promise<string[]> {
+    const root = this.pages.get(id);
+    if (!root || root.deletedAt !== null) return [];
+    const result: string[] = [];
+    const pending = [id];
+    while (pending.length > 0) {
+      const currentId = pending.pop();
+      if (!currentId) continue;
+      const page = this.pages.get(currentId);
+      if (!page || page.deletedAt !== null) continue;
+      result.push(currentId);
+      for (const child of this.pages.values()) {
+        if (child.parentPageId === currentId && child.deletedAt === null) pending.push(child.id);
+      }
+    }
+    return result.sort();
+  }
+
+  async findLiveIdsByProject(projectId: string): Promise<string[]> {
+    return [...this.pages.values()]
+      .filter((page) => page.projectId === projectId && page.deletedAt === null)
+      .map((page) => page.id)
+      .sort();
   }
 
   async findDeletedForOwner(id: string, ownerId: string): Promise<DeletedPageRecord | null> {

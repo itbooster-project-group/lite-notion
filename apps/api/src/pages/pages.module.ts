@@ -3,6 +3,7 @@ import { forwardRef, Module } from '@nestjs/common';
 import { DatabaseModule } from '../database/database.module';
 import { PagePermissionsModule } from '../page-permissions/page-permissions.module';
 import { ProjectsModule } from '../projects/projects.module';
+import { PublicationsModule } from '../publications/publications.module';
 import { PageDocumentModule } from './page-document/page-document.module';
 import { PagesController } from './pages.controller';
 import { PagesRepository, PrismaPagesRepository } from './pages.repository';
@@ -32,6 +33,7 @@ const useCases = [
     forwardRef(() => ProjectsModule),
     PageDocumentModule,
     PagePermissionsModule,
+    forwardRef(() => PublicationsModule),
   ],
   providers: [
     PagesService,

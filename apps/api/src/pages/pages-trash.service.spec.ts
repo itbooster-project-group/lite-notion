@@ -13,6 +13,8 @@ import {
 } from '../projects/projects.repository.in-memory';
 import { ProjectsService } from '../projects/projects.service';
 import { SoftDeleteProjectUseCase } from '../projects/use-cases/soft-delete-project.use-case';
+import { PublicationsRepository } from '../publications/publications.repository';
+import { emptyPublicationsRepository } from '../testing/publications-repository.fake';
 import { UsersService } from '../users/users.service';
 import {
   PageNotFoundError,
@@ -88,6 +90,7 @@ describe('PagesService: корзина', () => {
         RestorePageUseCase,
         SoftDeletePageUseCase,
         SoftDeleteProjectUseCase,
+        { provide: PublicationsRepository, useValue: emptyPublicationsRepository() },
         PagePermissionsService,
         { provide: PagesRepository, useValue: pages },
         {

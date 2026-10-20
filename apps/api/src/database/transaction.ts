@@ -23,6 +23,11 @@ export interface TransactionScope {
   lock(key: LockKey): Promise<void>;
 }
 
+export interface TransactionOptions {
+  maxWaitMs?: number;
+  timeoutMs?: number;
+}
+
 export class PrismaTransactionScope implements TransactionScope {
   constructor(readonly client: DatabaseClient) {}
 
@@ -43,7 +48,10 @@ export function databaseClientOf(scope: TransactionScope): DatabaseClient {
 /** Транзакцию открывает юзкейс, а не репозиторий. Абстрактный класс служит DI-токеном. */
 @Injectable()
 export abstract class TransactionRunner {
-  abstract run<T>(operation: (scope: TransactionScope) => Promise<T>): Promise<T>;
+  abstract run<T>(
+    operation: (scope: TransactionScope) => Promise<T>,
+    options?: TransactionOptions,
+  ): Promise<T>;
 }
 
 @Injectable()
@@ -52,7 +60,13 @@ export class PrismaTransactionRunner extends TransactionRunner {
     super();
   }
 
-  run<T>(operation: (scope: TransactionScope) => Promise<T>): Promise<T> {
-    return this.prisma.$transaction((tx) => operation(new PrismaTransactionScope(tx)));
+  run<T>(
+    operation: (scope: TransactionScope) => Promise<T>,
+    options?: TransactionOptions,
+  ): Promise<T> {
+    return this.prisma.$transaction((tx) => operation(new PrismaTransactionScope(tx)), {
+      ...(options?.maxWaitMs === undefined ? {} : { maxWait: options.maxWaitMs }),
+      ...(options?.timeoutMs === undefined ? {} : { timeout: options.timeoutMs }),
+    });
   }
 }

@@ -11,7 +11,14 @@ import { PrismaService } from './database/prisma.service';
  * guard'ом, не ломая рантайм, поэтому список публичных операций держится явным.
  * Новая операция роняет тест — её нужно осознанно отнести к одной из групп.
  */
-const PUBLIC_OPERATION_IDS = ['getHealth', 'login', 'refreshTokens', 'register'];
+const PUBLIC_OPERATION_IDS = [
+  'getHealth',
+  'getPublicPublication',
+  'login',
+  'refreshTokens',
+  'register',
+  'resolvePublicPublicationAsset',
+];
 
 const SECURED_OPERATION_IDS = [
   'createAssetReadUrl',
@@ -25,6 +32,7 @@ const SECURED_OPERATION_IDS = [
   'getAssetMetadata',
   'getPage',
   'getPagePermissions',
+  'getPagePublication',
   'getPageTrash',
   'getPageTree',
   'getProjectTrash',
@@ -36,16 +44,20 @@ const SECURED_OPERATION_IDS = [
   'logout',
   'logoutEverywhere',
   'movePage',
+  'publishPage',
   'purgePage',
   'purgePageTrash',
   'purgeProject',
   'purgeProjectTrash',
   'renamePage',
+  'republishPage',
   'restorePage',
   'restoreProject',
   'revokePagePermission',
   'setPageAccessMode',
   'setPageCover',
+  'unpublishPage',
+  'updatePagePublicationMetadata',
   'setCurrentUserAvatar',
   'uploadAssetContent',
 ];

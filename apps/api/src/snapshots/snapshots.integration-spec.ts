@@ -8,7 +8,6 @@ import { PrismaPagePermissionsRepository } from '../page-permissions/page-permis
 import { PagePermissionsService } from '../page-permissions/page-permissions.service';
 import { PageNotFoundError, PageRoleInsufficientError } from '../pages/errors';
 import { PrismaPagesRepository } from '../pages/pages.repository';
-import type { UsersService } from '../users/users.service';
 import { PrismaSnapshotsRepository } from './snapshots.repository';
 import { SnapshotsService } from './snapshots.service';
 import { CreateSnapshotInternalUseCase } from './use-cases/create-snapshot-internal.use-case';
@@ -109,9 +108,7 @@ describe('Snapshot use cases and metadata service on PostgreSQL', () => {
       pagesRepository,
       snapshotsRepository,
     );
-    const permissions = new PagePermissionsService(permissionsRepository, {
-      findByEmail: async () => null,
-    } as unknown as UsersService);
+    const permissions = new PagePermissionsService(permissionsRepository);
     snapshots = new SnapshotsService(snapshotsRepository, permissions);
   });
 

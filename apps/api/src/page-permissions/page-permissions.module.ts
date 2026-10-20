@@ -8,6 +8,8 @@ import {
   PrismaPagePermissionsRepository,
 } from './page-permissions.repository';
 import { PagePermissionsService } from './page-permissions.service';
+import { GrantPagePermissionUseCase } from './use-cases/grant-page-permission.use-case';
+import { RevokePagePermissionUseCase } from './use-cases/revoke-page-permission.use-case';
 
 /**
  * Зависимость односторонняя: `PagesModule` и `PageDocumentModule` импортируют этот
@@ -19,6 +21,8 @@ import { PagePermissionsService } from './page-permissions.service';
   exports: [PagePermissionsRepository, PagePermissionsService],
   imports: [DatabaseModule, UsersModule],
   providers: [
+    GrantPagePermissionUseCase,
+    RevokePagePermissionUseCase,
     PagePermissionsService,
     { provide: PagePermissionsRepository, useClass: PrismaPagePermissionsRepository },
   ],

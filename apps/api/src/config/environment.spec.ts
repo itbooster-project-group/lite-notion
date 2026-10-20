@@ -136,6 +136,41 @@ describe('validateEnvironment', () => {
     ).toThrowError(/^(?!.*service-value).*Environment validation failed: INTERNAL_SERVICE_TOKEN/);
   });
 
+  it('принимает отсутствие optional revalidation endpoint', () => {
+    expect(validateEnvironment(validEnvironment).PUBLICATION_REVALIDATION_URL).toBeUndefined();
+  });
+
+  it('требует URL и token revalidation вместе и не выводит token', () => {
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        PUBLICATION_REVALIDATION_URL: 'https://frontend.example.com/api/internal/revalidate',
+      }),
+    ).toThrowError(/PUBLICATION_REVALIDATION_URL and PUBLICATION_REVALIDATION_TOKEN/);
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        PUBLICATION_REVALIDATION_TOKEN: 'secret-revalidation-token',
+      }),
+    ).toThrowError(/^(?!.*secret-revalidation-token).*PUBLICATION_REVALIDATION_URL/);
+  });
+
+  it.each([
+    ['PUBLICATION_REVALIDATION_URL', 'ftp://frontend.example.com/revalidate'],
+    ['PUBLICATION_REVALIDATION_URL', 'https://user:password@frontend.example.com/revalidate'],
+    ['PUBLICATION_REVALIDATION_TIMEOUT_MS', '0'],
+    ['PUBLICATION_REVALIDATION_TIMEOUT_MS', '5001'],
+  ])('отклоняет невалидную revalidation конфигурацию %s', (property, value) => {
+    expect(() =>
+      validateEnvironment({
+        ...validEnvironment,
+        PUBLICATION_REVALIDATION_URL: 'https://frontend.example.com/api/internal/revalidate',
+        PUBLICATION_REVALIDATION_TOKEN: 'token',
+        [property]: value,
+      }),
+    ).toThrowError(new RegExp(`Environment validation failed: ${property}`));
+  });
+
   it.each([
     ['равном ACCESS_TOKEN_TTL_S', '3600', '3600'],
     ['меньше ACCESS_TOKEN_TTL_S', '3600', '3599'],

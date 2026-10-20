@@ -11,6 +11,7 @@ import { InternalModule } from './internal/internal.module';
 import { PageDocumentModule } from './pages/page-document/page-document.module';
 import { PagesModule } from './pages/pages.module';
 import { ProjectsModule } from './projects/projects.module';
+import { PublicationsModule } from './publications/publications.module';
 import { SnapshotsModule } from './snapshots/snapshots.module';
 import { TrashCleanupModule } from './trash/trash-cleanup.module';
 
@@ -29,6 +30,7 @@ import { TrashCleanupModule } from './trash/trash-cleanup.module';
     PagesModule,
     PageDocumentModule,
     ProjectsModule,
+    PublicationsModule,
     SnapshotsModule,
     TrashCleanupModule,
     InternalModule,

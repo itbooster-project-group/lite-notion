@@ -919,7 +919,7 @@ Cover хранится напрямую в `DOCUMENT_RENDERINGS.cover_asset_id`,
 id               uuid, PK
 page_id          uuid, unique, FK → PAGES.id
 snapshot_id      uuid, nullable
-slug             varchar, unique
+slug             varchar, NOT NULL, globally unique
 status           enum(draft, published, unpublished)
 seo_title        varchar, nullable
 seo_description  text, nullable
@@ -940,6 +940,8 @@ PAGE_PUBLICATIONS(snapshot_id, page_id)
 UNIQUE (DOCUMENT_SNAPSHOTS.id, DOCUMENT_SNAPSHOTS.page_id)
 ```
 
+Удаление политики: `PAGE_PUBLICATIONS.page_id` ссылается на `PAGES.id ON DELETE CASCADE`; составной FK snapshot/page также каскадирует при hard purge page и snapshot. `DOCUMENT_RENDERINGS.snapshot_id` и `SNAPSHOT_ASSETS.snapshot_id` каскадируют вместе со snapshot. `DOCUMENT_RENDERINGS.cover_asset_id` и `SNAPSHOT_ASSETS.asset_id` используют `ON DELETE RESTRICT`; GC помечает asset удалённым и не делает SQL DELETE. Статусный переход publication — application-level инвариант, не DB CHECK.
+
 Для `status = published`:
 
 - `snapshot_id` не `NULL`;
@@ -948,6 +950,26 @@ UNIQUE (DOCUMENT_SNAPSHOTS.id, DOCUMENT_SNAPSHOTS.page_id)
 - publication asset refs для snapshot успешно построены.
 
 Последние два инварианта обеспечиваются application transaction публикации.
+
+## PUBLICATION_REVALIDATIONS
+
+Durable PostgreSQL outbox для post-commit invalidation Next.js routes:
+
+```text
+id               uuid, PK
+paths            text[]
+attempts         int, default 0
+next_attempt_at  timestamptz
+lease_token      uuid, nullable
+lease_until      timestamptz, nullable
+delivered_at     timestamptz, nullable
+last_error_code  varchar, nullable
+created_at       timestamptz
+```
+
+Outbox намеренно не имеет FK на page/publication: hard purge не должен терять pending invalidation. `paths` содержат только canonical frontend routes `/p/:slug`, включая оба пути при смене slug. Claim использует короткую транзакцию `FOR UPDATE SKIP LOCKED`; HTTP delivery выполняется вне транзакции, а ACK/failure условны по `lease_token`. Lease/retry обеспечивают at-least-once delivery, не exactly-once. Повторы безопасны, потому что frontend endpoint только инвалидирует paths.
+
+Контракт scheduler: один delivery attempt ограничен 10 секундами, HTTP timeout — не более 5 секунд; lease фиксированно равна 30 секундам. Истёкшая lease допускает повторный claim после рестарта или длительной остановки процесса. Старый worker не может ACK-нуть новый claim. При отсутствующем frontend endpoint строки остаются pending без роста attempts. Revalidation eventual-consistent и не отзывает ранее сгенерированный HTML мгновенно.
 
 ## Slug
 
@@ -1261,6 +1283,8 @@ PAGE_PUBLICATIONS(snapshot_id, page_id)
     → DOCUMENT_SNAPSHOTS(id, page_id)
 
 PRIMARY KEY PAGE_SEARCH_DOCUMENTS(page_id)
+
+PUBLICATION_REVALIDATIONS(delivered_at, next_attempt_at, lease_until)
 ```
 
 Application-level transaction invariants дополнительно гарантируют:

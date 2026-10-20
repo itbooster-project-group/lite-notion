@@ -2065,6 +2065,543 @@
         "summary": "Restore a project from the trash",
         "tags": ["projects"]
       }
+    },
+    "/api/v1/pages/{pageId}/publication": {
+      "get": {
+        "operationId": "getPagePublication",
+        "parameters": [
+          {
+            "name": "pageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicationManagementDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The page is visible but requires editor permission",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Page or publication was not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Publication state or slug conflicts with current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get publication state for a page",
+        "tags": ["publications"]
+      },
+      "patch": {
+        "operationId": "updatePagePublicationMetadata",
+        "parameters": [
+          {
+            "name": "pageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePublicationMetadataDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicationManagementDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The page is visible but requires editor permission",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Page or publication was not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Publication state or slug conflicts with current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update publication slug and SEO metadata",
+        "tags": ["publications"]
+      }
+    },
+    "/api/v1/pages/{pageId}/publication/publish": {
+      "post": {
+        "operationId": "publishPage",
+        "parameters": [
+          {
+            "name": "pageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishPageDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicationManagementDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The page is visible but requires editor permission",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Page or publication was not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Publication state or slug conflicts with current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Publish the current page document",
+        "tags": ["publications"]
+      }
+    },
+    "/api/v1/pages/{pageId}/publication/republish": {
+      "post": {
+        "operationId": "republishPage",
+        "parameters": [
+          {
+            "name": "pageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepublishPageDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicationManagementDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The page is visible but requires editor permission",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Page or publication was not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Publication state or slug conflicts with current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a new published snapshot",
+        "tags": ["publications"]
+      }
+    },
+    "/api/v1/pages/{pageId}/publication/unpublish": {
+      "post": {
+        "operationId": "unpublishPage",
+        "parameters": [
+          {
+            "name": "pageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicationManagementDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The page is visible but requires editor permission",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Page or publication was not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Publication state or slug conflicts with current state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Make a published page unavailable",
+        "tags": ["publications"]
+      }
+    },
+    "/api/v1/public/publications/{slug}": {
+      "get": {
+        "operationId": "getPublicPublication",
+        "parameters": [
+          {
+            "name": "slug",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicPublicationDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Publication is unavailable"
+          }
+        },
+        "summary": "Read a published page by slug",
+        "tags": ["public-publications"]
+      }
+    },
+    "/api/v1/public/publications/{slug}/assets/{assetId}": {
+      "get": {
+        "operationId": "resolvePublicPublicationAsset",
+        "parameters": [
+          {
+            "name": "assetId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "slug",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Redirect to a short-lived signed asset URL",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Location": {
+                "schema": {
+                  "format": "uri",
+                  "type": "string"
+                }
+              },
+              "Referrer-Policy": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Asset is not part of the current public publication"
+          }
+        },
+        "summary": "Redirect to a short-lived public asset URL",
+        "tags": ["public-publications"]
+      }
     }
   },
   "info": {
@@ -2769,6 +3306,148 @@
           }
         },
         "required": ["id", "ownerId", "name", "deletedAt"]
+      },
+      "PublicationManagementDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["draft", "published", "unpublished"]
+          },
+          "slug": {
+            "type": "string"
+          },
+          "seoTitle": {
+            "type": "string",
+            "nullable": true
+          },
+          "seoDescription": {
+            "type": "string",
+            "nullable": true
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "publicPath": {
+            "type": "string",
+            "nullable": true,
+            "example": "/p/team-roadmap"
+          }
+        },
+        "required": ["status", "slug", "seoTitle", "seoDescription", "publishedAt", "publicPath"]
+      },
+      "PublishPageDto": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "example": "team-roadmap",
+            "maxLength": 100
+          }
+        },
+        "required": ["slug"]
+      },
+      "RepublishPageDto": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "example": "team-roadmap",
+            "maxLength": 100
+          }
+        }
+      },
+      "UpdatePublicationMetadataDto": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "example": "team-roadmap",
+            "maxLength": 100
+          },
+          "seoTitle": {
+            "type": "string",
+            "maxLength": 255,
+            "nullable": true
+          },
+          "seoDescription": {
+            "type": "string",
+            "maxLength": 1000,
+            "nullable": true
+          }
+        }
+      },
+      "PublicAssetDescriptorDto": {
+        "type": "object",
+        "properties": {
+          "assetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "width": {
+            "type": "number",
+            "nullable": true
+          },
+          "height": {
+            "type": "number",
+            "nullable": true
+          },
+          "resolverPath": {
+            "type": "string",
+            "example": "/api/v1/public/publications/team-roadmap/assets/00000000-0000-4000-8000-000000000000"
+          }
+        },
+        "required": ["assetId", "mimeType", "width", "height", "resolverPath"]
+      },
+      "PublicPublicationDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "seoTitle": {
+            "type": "string"
+          },
+          "seoDescription": {
+            "type": "string",
+            "nullable": true
+          },
+          "schemaVersion": {
+            "type": "number"
+          },
+          "contentJson": {
+            "type": "object"
+          },
+          "assets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicAssetDescriptorDto"
+            }
+          },
+          "cover": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PublicAssetDescriptorDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "title",
+          "seoTitle",
+          "seoDescription",
+          "schemaVersion",
+          "contentJson",
+          "assets",
+          "cover"
+        ]
       }
     }
   }

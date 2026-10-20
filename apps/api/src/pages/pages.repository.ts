@@ -110,6 +110,14 @@ export abstract class PagesRepository {
   /** Живая страница без фильтра по владельцу. Только после проверки прав. */
   abstract findLiveById(id: string): Promise<PageRecord | null>;
 
+  /** Current cover for a live page, read by the publication use case. */
+  abstract findLivePublicationCover(id: string): Promise<{ coverAssetId: string | null } | null>;
+
+  /** Title and cover read after snapshot creation in the publication transaction. */
+  abstract findLivePublicationMetadata(
+    id: string,
+  ): Promise<{ coverAssetId: string | null; title: string } | null>;
+
   /** Блокирует живую страницу до конца текущей транзакции. */
   abstract lockLivePageForUpdate(id: string): Promise<boolean>;
 
@@ -157,6 +165,12 @@ export abstract class PagesRepository {
 
   /** Помечает страницу и её живое поддерево. `0` — страницы нет, она чужая или удалена. */
   abstract markSubtreeDeleted(id: string, ownerId: string, deletedAt: Date): Promise<number>;
+
+  /** Живые id поддерева до soft delete; порядок стабилен для транзакционных writes. */
+  abstract findLiveSubtreeIds(id: string): Promise<string[]>;
+
+  /** Живые id страниц проекта до lifecycle update. */
+  abstract findLiveIdsByProject(projectId: string): Promise<string[]>;
 
   /** Удалённая страница владельца. `null`, когда она жива, чужая или не существует. */
   abstract findDeletedForOwner(id: string, ownerId: string): Promise<DeletedPageRecord | null>;
@@ -236,6 +250,22 @@ export class PrismaPagesRepository extends PagesRepository {
 
   findLiveById(id: string): Promise<PageRecord | null> {
     return this.client.page.findFirst({ select: PAGE_FIELDS, where: { deletedAt: null, id } });
+  }
+
+  findLivePublicationCover(id: string): Promise<{ coverAssetId: string | null } | null> {
+    return this.client.page.findFirst({
+      select: { coverAssetId: true },
+      where: { deletedAt: null, id },
+    });
+  }
+
+  findLivePublicationMetadata(
+    id: string,
+  ): Promise<{ coverAssetId: string | null; title: string } | null> {
+    return this.client.page.findFirst({
+      select: { coverAssetId: true, title: true },
+      where: { deletedAt: null, id },
+    });
   }
 
   async lockLivePageForUpdate(id: string): Promise<boolean> {
@@ -386,6 +416,33 @@ export class PrismaPagesRepository extends PagesRepository {
           END
       WHERE "id" IN (SELECT "id" FROM subtree)
     `;
+  }
+
+  async findLiveSubtreeIds(id: string): Promise<string[]> {
+    const rows = await this.client.$queryRaw<{ id: string }[]>`
+      WITH RECURSIVE subtree AS (
+        SELECT "id", "parentPageId"
+        FROM "Page"
+        WHERE "id" = ${id}::uuid AND "deletedAt" IS NULL
+        UNION ALL
+        SELECT child."id", child."parentPageId"
+        FROM "Page" child
+        JOIN subtree parent ON child."parentPageId" = parent."id"
+        WHERE child."deletedAt" IS NULL
+      )
+      SELECT "id" FROM subtree ORDER BY "id" ASC
+    `;
+    return rows.map(({ id: pageId }) => pageId);
+  }
+
+  findLiveIdsByProject(projectId: string): Promise<string[]> {
+    return this.client.page
+      .findMany({
+        orderBy: { id: 'asc' },
+        select: { id: true },
+        where: { deletedAt: null, projectId },
+      })
+      .then((rows) => rows.map(({ id }) => id));
   }
 
   findDeletedForOwner(id: string, ownerId: string): Promise<DeletedPageRecord | null> {
