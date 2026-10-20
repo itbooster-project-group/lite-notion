@@ -13,6 +13,7 @@ import { PurgeProjectUseCase } from '../projects/use-cases/purge-project.use-cas
 import { PurgeProjectsTrashUseCase } from '../projects/use-cases/purge-projects-trash.use-case';
 import { RestoreProjectUseCase } from '../projects/use-cases/restore-project.use-case';
 import { SoftDeleteProjectUseCase } from '../projects/use-cases/soft-delete-project.use-case';
+import { PublicationsRepository } from '../publications/publications.repository';
 import type { TransactionScope } from './transaction';
 import { InMemoryTransactionRunner } from './transaction.in-memory';
 
@@ -78,11 +79,16 @@ function emptyResultFor(method: string): unknown {
     return 0;
   }
 
-  if (method.startsWith('findSelfDeleted') || method.startsWith('findDeletedIds')) {
+  if (
+    method.startsWith('findSelfDeleted') ||
+    method.startsWith('findDeletedIds') ||
+    method.startsWith('findLive') ||
+    method.startsWith('findPublished')
+  ) {
     return [];
   }
 
-  if (method.startsWith('mark') || method.startsWith('clear')) {
+  if (method.startsWith('mark') || method.startsWith('clear') || method.startsWith('create')) {
     return method.startsWith('mark') ? 0 : undefined;
   }
 
@@ -127,12 +133,13 @@ const cases: Case[] = [
   },
   {
     name: 'SoftDeletePageUseCase',
-    repositories: 2,
-    run: (transactions, [pages, permissions]) =>
+    repositories: 3,
+    run: (transactions, [pages, permissions, publications]) =>
       new SoftDeletePageUseCase(
         transactions,
         pages as PagesRepository,
         permissions as PagePermissionsRepository,
+        publications as PublicationsRepository,
       ).execute(RECORD_ID, OWNER_ID),
   },
   {
@@ -163,12 +170,13 @@ const cases: Case[] = [
   },
   {
     name: 'SoftDeleteProjectUseCase',
-    repositories: 2,
-    run: (transactions, [projects, pages]) =>
+    repositories: 3,
+    run: (transactions, [projects, pages, publications]) =>
       new SoftDeleteProjectUseCase(
         transactions,
         projects as ProjectsRepository,
         pages as PagesRepository,
+        publications as PublicationsRepository,
       ).execute(RECORD_ID, OWNER_ID),
   },
   {

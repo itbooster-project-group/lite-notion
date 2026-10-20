@@ -15,6 +15,8 @@ import { InMemoryPagesRepository, type StoredPage } from '../pages/pages.reposit
 import { PagesService } from '../pages/pages.service';
 import { CreatePageUseCase } from '../pages/use-cases/create-page.use-case';
 import { SoftDeletePageUseCase } from '../pages/use-cases/soft-delete-page.use-case';
+import { PublicationsRepository } from '../publications/publications.repository';
+import { emptyPublicationsRepository } from '../testing/publications-repository.fake';
 import { UsersService } from '../users/users.service';
 import { ProjectNotFoundError } from './errors';
 import { ProjectsRepository } from './projects.repository';
@@ -75,6 +77,7 @@ describe('ProjectsService: корзина', () => {
         },
         SoftDeletePageUseCase,
         SoftDeleteProjectUseCase,
+        { provide: PublicationsRepository, useValue: emptyPublicationsRepository() },
         { provide: PagesRepository, useValue: pages },
         {
           provide: PageDocumentRepository,

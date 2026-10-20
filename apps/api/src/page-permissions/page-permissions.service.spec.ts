@@ -1,18 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PageNotFoundError, PageRoleInsufficientError } from '../pages/errors';
-import type { UsersService } from '../users/users.service';
 import { PageRole } from './constants';
 import type { PagePermissionsRepository } from './page-permissions.repository';
 import { PagePermissionsService } from './page-permissions.service';
 
 function serviceResolving(role: PageRole | null): PagePermissionsService {
-  return new PagePermissionsService(
-    {
-      findAccessiblePages: vi.fn(async () => []),
-      resolveRole: vi.fn(async () => role),
-    } as unknown as PagePermissionsRepository,
-    { findByEmail: vi.fn(async () => null) } as unknown as UsersService,
-  );
+  return new PagePermissionsService({
+    findAccessiblePages: vi.fn(async () => []),
+    resolveRole: vi.fn(async () => role),
+  } as unknown as PagePermissionsRepository);
 }
 
 describe('PagePermissionsService.requireRole', () => {

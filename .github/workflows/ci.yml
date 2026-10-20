@@ -75,6 +75,8 @@ jobs:
       DATABASE_CONNECTION_TIMEOUT_MS: 5000
       DATABASE_URL: postgresql://lite_notion:lite_notion@localhost:5432/lite_notion?schema=public
       INTERNAL_SERVICE_TOKEN: local-development-only-change-me-before-deploy
+      PUBLICATION_REVALIDATION_URL: ''
+      PUBLICATION_REVALIDATION_TOKEN: ''
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
       REFRESH_TOKEN_TTL_S: ${{ secrets.REFRESH_TOKEN_TTL_S }}
       BCRYPT_ROUNDS: ${{ secrets.BCRYPT_ROUNDS }}

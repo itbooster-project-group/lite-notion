@@ -11,7 +11,7 @@ import { S3ObjectStorage } from './storage/s3-object-storage';
 
 @Module({
   controllers: [AssetsController, PageAssetsController, UserAvatarController],
-  exports: [AssetsUseCases],
+  exports: [AssetsUseCases, OBJECT_STORAGE],
   imports: [DatabaseModule, PagePermissionsModule],
   providers: [
     AssetsUseCases,

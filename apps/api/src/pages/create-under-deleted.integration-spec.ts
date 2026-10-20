@@ -10,6 +10,7 @@ import { ProjectNotFoundError } from '../projects/errors';
 import { PrismaProjectsRepository } from '../projects/projects.repository';
 import { PurgeProjectUseCase } from '../projects/use-cases/purge-project.use-case';
 import { SoftDeleteProjectUseCase } from '../projects/use-cases/soft-delete-project.use-case';
+import { PrismaPublicationsRepository } from '../publications/publications.repository';
 import { TIPTAP_SCHEMA_VERSION } from './constants';
 import { PageParentNotFoundError, PageRestoreProjectDeletedError } from './errors';
 import { PrismaPageDocumentRepository } from './page-document/page-document.repository';
@@ -64,7 +65,8 @@ describe('гонки вокруг мягкого удаления', () => {
     const transactions = new PrismaTransactionRunner(prisma as unknown as PrismaService);
     const permissions = new PrismaPagePermissionsRepository(prisma as unknown as PrismaService);
 
-    softDeleteProject = new SoftDeleteProjectUseCase(transactions, projects, pages);
+    const publications = new PrismaPublicationsRepository(prisma as unknown as PrismaService);
+    softDeleteProject = new SoftDeleteProjectUseCase(transactions, projects, pages, publications);
     purgeProject = new PurgeProjectUseCase(transactions, projects, pages);
     createPageUseCase = new CreatePageUseCase(
       transactions,
@@ -73,7 +75,12 @@ describe('гонки вокруг мягкого удаления', () => {
       documents,
       permissions,
     );
-    softDeletePageUseCase = new SoftDeletePageUseCase(transactions, pages, permissions);
+    softDeletePageUseCase = new SoftDeletePageUseCase(
+      transactions,
+      pages,
+      permissions,
+      publications,
+    );
     movePageUseCase = new MovePageUseCase(transactions, pages, permissions);
     restorePageUseCase = new RestorePageUseCase(transactions, pages, projects);
 

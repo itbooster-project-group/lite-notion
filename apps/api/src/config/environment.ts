@@ -48,6 +48,27 @@ function optionalNumber(value: unknown): number | undefined {
   return Number(value);
 }
 
+function optionalString(value: unknown): string | undefined {
+  if (typeof value !== 'string' || value.trim() === '') return undefined;
+  return value;
+}
+
+function isHttpUrl(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      url.hostname.length > 0 &&
+      url.username === '' &&
+      url.password === '' &&
+      url.hash === ''
+    );
+  } catch {
+    return false;
+  }
+}
+
 function IsHttpOrigin(validationOptions?: ValidationOptions): PropertyDecorator {
   return ValidateBy(
     {
@@ -82,6 +103,30 @@ export class EnvironmentConfig {
   @Min(1)
   @Max(60_000)
   COLLABORATION_TIMEOUT_MS!: number;
+
+  @Transform(({ value }) => optionalString(value), { toClassOnly: true })
+  @IsOptional()
+  @ValidateBy({
+    name: 'isHttpUrl',
+    validator: {
+      defaultMessage: () =>
+        '$property must be an absolute HTTP(S) URL without credentials or fragment',
+      validate: isHttpUrl,
+    },
+  })
+  PUBLICATION_REVALIDATION_URL?: string;
+
+  @Transform(({ value }) => optionalString(value), { toClassOnly: true })
+  @IsOptional()
+  @IsString()
+  PUBLICATION_REVALIDATION_TOKEN?: string;
+
+  @Transform(({ value }) => optionalNumber(value), { toClassOnly: true })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5_000)
+  PUBLICATION_REVALIDATION_TIMEOUT_MS?: number;
 
   @ValidateBy({
     name: 'isPostgreSqlUrl',
@@ -274,6 +319,9 @@ export function validateEnvironment(
     ACCESS_TOKEN_TTL_S: environment.ACCESS_TOKEN_TTL_S,
     BCRYPT_ROUNDS: environment.BCRYPT_ROUNDS,
     CORS_ORIGIN: environment.CORS_ORIGIN,
+    PUBLICATION_REVALIDATION_URL: environment.PUBLICATION_REVALIDATION_URL,
+    PUBLICATION_REVALIDATION_TOKEN: environment.PUBLICATION_REVALIDATION_TOKEN,
+    PUBLICATION_REVALIDATION_TIMEOUT_MS: environment.PUBLICATION_REVALIDATION_TIMEOUT_MS,
     ASSETS_GC_BATCH_SIZE: environment.ASSETS_GC_BATCH_SIZE,
     ASSETS_GC_ENABLED: environment.ASSETS_GC_ENABLED,
     ASSETS_GC_INTERVAL_SECONDS: environment.ASSETS_GC_INTERVAL_SECONDS,
@@ -314,6 +362,15 @@ export function validateEnvironment(
     );
 
     throw new Error(`Environment validation failed: ${messages.join('; ')}`);
+  }
+
+  if (
+    (validatedEnvironment.PUBLICATION_REVALIDATION_URL === undefined) !==
+    (validatedEnvironment.PUBLICATION_REVALIDATION_TOKEN === undefined)
+  ) {
+    throw new Error(
+      'Environment validation failed: PUBLICATION_REVALIDATION_URL and PUBLICATION_REVALIDATION_TOKEN must be configured together',
+    );
   }
 
   const storageKeys = [

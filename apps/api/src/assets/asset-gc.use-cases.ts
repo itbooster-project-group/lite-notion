@@ -129,13 +129,25 @@ export class AssetGcUseCases {
           }
           if (current.status === 'deleted') return current.storageKey;
 
-          const [references, covers, avatars] = await Promise.all([
-            tx.pageAsset.count({ where: { assetId } }),
-            tx.page.count({ where: { coverAssetId: assetId } }),
-            tx.userProfile.count({ where: { avatarAssetId: assetId } }),
-          ]);
-          // #52 adds its active snapshot reference to this retention check.
-          if (references + covers + avatars > 0)
+          const [references, covers, avatars, snapshotReferences, publicationCovers] =
+            await Promise.all([
+              tx.pageAsset.count({ where: { assetId } }),
+              tx.page.count({ where: { coverAssetId: assetId } }),
+              tx.userProfile.count({ where: { avatarAssetId: assetId } }),
+              tx.snapshotAsset.count({
+                where: {
+                  assetId,
+                  snapshot: { publication: { is: { status: 'published' } } },
+                },
+              }),
+              tx.documentRendering.count({
+                where: {
+                  coverAssetId: assetId,
+                  snapshot: { publication: { is: { status: 'published' } } },
+                },
+              }),
+            ]);
+          if (references + covers + avatars + snapshotReferences + publicationCovers > 0)
             throw new ConflictException('Asset is still in use');
           if (current.status === 'ready') {
             for (const pageId of pageIds) {

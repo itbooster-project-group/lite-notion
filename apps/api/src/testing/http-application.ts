@@ -30,6 +30,7 @@ import {
   InMemoryProjectsRepository,
   type StoredProject,
 } from '../projects/projects.repository.in-memory';
+import { PublicationsRepository } from '../publications/publications.repository';
 import { UsersService } from '../users/users.service';
 
 const TEST_SESSION_ID = '99999999-9999-9999-9999-999999999999';
@@ -68,6 +69,12 @@ export async function createHttpTestContext(): Promise<HttpTestContext> {
   const permissions = new InMemoryPagePermissionsRepository(pageStore, projectStore);
 
   const transactions = new InMemoryTransactionRunner();
+  const publications = {
+    bind: () => publications,
+    createRevalidation: async () => undefined,
+    findPublishedPageSlugs: async () => [],
+    markPublishedUnpublished: async () => undefined,
+  };
 
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(PrismaService)
@@ -84,6 +91,8 @@ export async function createHttpTestContext(): Promise<HttpTestContext> {
     .useValue(projects)
     .overrideProvider(PagePermissionsRepository)
     .useValue(permissions)
+    .overrideProvider(PublicationsRepository)
+    .useValue(publications)
     // Справочник пользователей общий с репозиторием разрешений: выдача ищет по email
     // ровно тех, кого тест туда положил.
     .overrideProvider(UsersService)

@@ -90,6 +90,12 @@ enum AssetStatus {
   deleted
 }
 
+enum PagePublicationStatus {
+  draft
+  published
+  unpublished
+}
+
 /// Контейнер верхнего уровня для дерева страниц. Пара (id, ownerId) — составной
 /// ключ-кандидат: он существует только затем, чтобы на него мог сослаться composite
 /// FK со стороны Page и база сама держала «проект страницы принадлежит её владельцу».
@@ -140,6 +146,7 @@ model Page {
   children        Page[]               @relation("PageTree")
   document        PageDocument?
   snapshots       DocumentSnapshot[]
+  publication     PagePublication?
   permissions     PagePermission[]
   coverAssetId    String?              @db.Uuid
   coverAsset      Asset?               @relation("PageCover", fields: [coverAssetId], references: [id], onDelete: Restrict)
@@ -211,11 +218,13 @@ model Asset {
   updatedAt    DateTime    @updatedAt
   deletedAt    DateTime?
 
-  uploadedBy User             @relation("AssetUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
-  grants     PageAssetGrant[]
-  pageAssets PageAsset[]
-  pageCovers Page[]           @relation("PageCover")
-  avatars    UserProfile[]    @relation("ProfileAvatar")
+  uploadedBy         User                @relation("AssetUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+  grants             PageAssetGrant[]
+  pageAssets         PageAsset[]
+  pageCovers         Page[]              @relation("PageCover")
+  snapshotReferences SnapshotAsset[]
+  publicationCovers  DocumentRendering[] @relation("PublicationRenderingCover")
+  avatars            UserProfile[]       @relation("ProfileAvatar")
 
   @@index([uploadedById, deletedAt])
   @@index([status, createdAt])
@@ -284,12 +293,79 @@ model DocumentSnapshot {
   reason                SnapshotReason
   createdAt             DateTime       @default(now())
 
-  page      Page  @relation(fields: [pageId], references: [id], onDelete: Cascade)
-  createdBy User? @relation("DocumentSnapshotCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  page        Page               @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  createdBy   User?              @relation("DocumentSnapshotCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  rendering   DocumentRendering?
+  assets      SnapshotAsset[]
+  publication PagePublication?
 
   @@unique([pageId, revision])
   @@unique([id, pageId])
   @@index([pageId, revision(sort: Desc)])
   @@index([pageId, sourceStorageRevision(sort: Desc)])
   @@index([createdById])
+}
+
+/// Immutable read-optimized projection of a snapshot. It never replaces Yjs as source of truth.
+model DocumentRendering {
+  snapshotId          String   @id @db.Uuid
+  tiptapSchemaVersion Int
+  contentJson         Json
+  pageTitle           String   @db.VarChar(255)
+  coverAssetId        String?  @db.Uuid
+  generatedAt         DateTime @default(now())
+
+  snapshot   DocumentSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  coverAsset Asset?           @relation("PublicationRenderingCover", fields: [coverAssetId], references: [id], onDelete: Restrict)
+
+  @@index([coverAssetId])
+}
+
+/// Immutable references extracted from the same captured Yjs state as the snapshot.
+model SnapshotAsset {
+  snapshotId String   @db.Uuid
+  assetId    String   @db.Uuid
+  nodeId     String   @db.VarChar(255)
+  createdAt  DateTime @default(now())
+
+  snapshot DocumentSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  asset    Asset            @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@id([snapshotId, assetId, nodeId])
+  @@index([assetId])
+}
+
+/// Current publication pointer and mutable publication metadata for a page.
+model PagePublication {
+  id             String                @id @default(uuid()) @db.Uuid
+  pageId         String                @unique @db.Uuid
+  snapshotId     String?               @db.Uuid
+  slug           String                @unique @db.VarChar(100)
+  status         PagePublicationStatus @default(draft)
+  seoTitle       String?               @db.VarChar(255)
+  seoDescription String?               @db.Text
+  publishedAt    DateTime?
+  updatedAt      DateTime              @updatedAt
+
+  page     Page              @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  snapshot DocumentSnapshot? @relation(fields: [snapshotId, pageId], references: [id, pageId], onDelete: Cascade)
+
+  @@unique([snapshotId, pageId])
+  @@index([status, snapshotId])
+}
+
+/// Durable post-commit route invalidation. Deliberately has no page FK so hard purge
+/// cannot discard pending invalidations.
+model PublicationRevalidation {
+  id            String    @id @default(uuid()) @db.Uuid
+  paths         String[]  @db.Text
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime  @default(now())
+  leaseToken    String?   @db.Uuid
+  leaseUntil    DateTime?
+  deliveredAt   DateTime?
+  lastErrorCode String?   @db.VarChar(100)
+  createdAt     DateTime  @default(now())
+
+  @@index([deliveredAt, nextAttemptAt, leaseUntil])
 }

@@ -35,6 +35,11 @@ export interface ApplicationConfig {
   jwtSecret: string;
   nodeEnvironment: NodeEnvironment;
   port: number;
+  publicationRevalidation: {
+    url: string;
+    token: string;
+    timeoutMs: number;
+  } | null;
   refreshTokenTtlS: number;
 }
 
@@ -82,6 +87,15 @@ export function createApplicationConfig(environment: Record<string, unknown>): A
     jwtSecret: validatedEnvironment.JWT_SECRET,
     nodeEnvironment: validatedEnvironment.NODE_ENV,
     port: validatedEnvironment.PORT,
+    publicationRevalidation:
+      validatedEnvironment.PUBLICATION_REVALIDATION_URL &&
+      validatedEnvironment.PUBLICATION_REVALIDATION_TOKEN
+        ? {
+            token: validatedEnvironment.PUBLICATION_REVALIDATION_TOKEN,
+            timeoutMs: validatedEnvironment.PUBLICATION_REVALIDATION_TIMEOUT_MS ?? 5_000,
+            url: validatedEnvironment.PUBLICATION_REVALIDATION_URL,
+          }
+        : null,
     refreshTokenTtlS: validatedEnvironment.REFRESH_TOKEN_TTL_S,
   };
 }

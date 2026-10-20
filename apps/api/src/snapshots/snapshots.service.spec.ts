@@ -6,7 +6,6 @@ import { PagePermissionsRepository } from '../page-permissions/page-permissions.
 import { PagePermissionsService } from '../page-permissions/page-permissions.service';
 import { PageNotFoundError, PageRoleInsufficientError } from '../pages/errors';
 import type { PagesRepository } from '../pages/pages.repository';
-import type { UsersService } from '../users/users.service';
 import { type InsertSnapshotInput, SnapshotsRepository } from './snapshots.repository';
 import { SnapshotsService } from './snapshots.service';
 import type { SnapshotMetadata } from './types/snapshot-metadata';
@@ -89,9 +88,7 @@ function createService() {
       async (userId: string, pageId: string) => roles.get(`${userId}:${pageId}`) ?? null,
     ),
   } as unknown as PagePermissionsRepository;
-  const permissions = new PagePermissionsService(permissionRepository, {
-    findByEmail: vi.fn(async () => null),
-  } as unknown as UsersService);
+  const permissions = new PagePermissionsService(permissionRepository);
   const pages = {
     bind: vi.fn(() => pages),
     lockLivePageForUpdate: vi.fn(async (pageId: string) => livePages.has(pageId)),

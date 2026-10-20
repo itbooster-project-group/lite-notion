@@ -23,7 +23,6 @@ import { PagePermissionsService } from '../../page-permissions/page-permissions.
 import { PrismaSnapshotsRepository } from '../../snapshots/snapshots.repository';
 import { CreateCurrentManualSnapshotUseCase } from '../../snapshots/use-cases/create-current-manual-snapshot.use-case';
 import { CreateSnapshotManualUseCase } from '../../snapshots/use-cases/create-snapshot-manual.use-case';
-import type { UsersService } from '../../users/users.service';
 import { PrismaPagesRepository } from '../pages.repository';
 import { PrismaPageDocumentRepository } from './page-document.repository';
 import { ProjectionRetryScheduler } from './projection-retry.scheduler';
@@ -285,7 +284,6 @@ describe('PageDocument provenance on PostgreSQL', () => {
 
     const permissions = new PagePermissionsService(
       new PrismaPagePermissionsRepository(prisma as unknown as DatabaseClient),
-      {} as UsersService,
     );
     const config = { assets: { readUrlTtlSeconds: 60 } } as unknown as ApplicationConfig;
     const assets = new AssetsUseCases(
@@ -844,7 +842,7 @@ describe('PageDocument provenance on PostgreSQL', () => {
 
     const pages = new PrismaPagesRepository(client);
     const permissionsRepository = new PrismaPagePermissionsRepository(client);
-    const permissions = new PagePermissionsService(permissionsRepository, {} as UsersService);
+    const permissions = new PagePermissionsService(permissionsRepository);
     const snapshotsRepository = new PrismaSnapshotsRepository(client);
     const createSnapshot = new CreateSnapshotManualUseCase(
       permissionsRepository,

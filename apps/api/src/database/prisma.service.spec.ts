@@ -31,6 +31,7 @@ const config: ApplicationConfig = {
   jwtSecret: 'test-jwt-secret-value-at-least-32-chars',
   nodeEnvironment: NodeEnvironment.Test,
   port: 3001,
+  publicationRevalidation: null,
   refreshTokenTtlS: 2592000,
 };
 
