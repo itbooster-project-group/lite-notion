@@ -118,6 +118,8 @@ Frontend использует следующие публичные переме
 | `NEXT_PUBLIC_COLLABORATION_URL` | `ws://localhost:8080/collaboration` | Gateway WebSocket URL для Yjs document transport |
 | `NEXT_PUBLIC_API_MOCKING` | `disabled` | Значение `enabled` включает MSW browser worker только в development |
 
+Публичные публикации доступны по `/p/:slug`. Настройка server-only outbox receipt и opt-in E2E fixture описаны в [документации Web publications](docs/web-publications.md).
+
 Collaboration runtime использует следующие переменные окружения:
 
 | Переменная | Значение в `.env.example` | Ограничения |

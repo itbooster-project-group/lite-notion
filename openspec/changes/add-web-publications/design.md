@@ -1,0 +1,110 @@
+## Context
+
+Сверено на `main` после merge #101 (`bc15366`). Backend, Prisma schema и миграции уже содержат publication, rendering, asset resolver и revalidation outbox; Web уже содержит Orval client/MSW, страницу workspace, TipTap schema v2 и базовую строковую функцию static rendering. `README.md` и статусная вводная `docs/database-schema-v2.md` частично предшествуют #101 и утверждают, что часть backend функций ещё планируется; для этого OpenSpec фактическим контрактом являются текущие controllers, DTO, services, generated client и Prisma schema. Issue ссылается на `docs/database-schema.md`, но актуальный файл — `docs/database-schema-v2.md`. Важные реальные ограничения и контракты перечислены в таблице ниже. Мотивация и scope — в `proposal.md`, наблюдаемые требования — в `specs/**/spec.md`.
+
+### Проверенные backend contracts
+
+| Операция | Endpoint и тело | Ответ/доступ/ошибки и семантика |
+| --- | --- | --- |
+| Состояние | `GET /api/v1/pages/:pageId/publication` | Bearer JWT, эффективная роль editor или owner; DTO `{status, slug, seoTitle, seoDescription, publishedAt, publicPath}`. Успех 200. Отсутствующая publication выдаёт 404 `publication_not_found`; неизвестная/удалённая страница имеет отдельный page not found, недостаточная роль даёт 403. |
+| Первый Publish | `POST /api/v1/pages/:pageId/publication/publish`, `{slug}` | Editor/owner; 200 management DTO. Slug нормализуется backend, 400 для invalid/reserved, 409 `publication_slug_conflict`, `publication_state_conflict`, `publication_asset_unavailable`, 422 для projection/schema ошибки, 503 при недоступном capture. Допускается отсутствие записи или `draft`; published/unpublished требуют другую операцию. Повтор Publish в published конфликтует. |
+| Republish | `POST /api/v1/pages/:pageId/publication/republish`, `{slug?}` | Editor/owner; создаёт новый immutable snapshot и возвращает 200 DTO. Принимает существующую published/unpublished запись; несуществующая/draft даёт 409. Slug optional в backend, но UI изменяет его только через отдельный PATCH. Повторный вызов создаёт очередной snapshot. |
+| Unpublish | `POST /api/v1/pages/:pageId/publication/unpublish`, без тела | Editor/owner; 200 DTO. Published переводится в unpublished; повтор для unpublished идемпотентен и не создаёт повторную смену состояния. Нет записи — 404, draft — 409. |
+| Metadata и slug | `PATCH /api/v1/pages/:pageId/publication`, необязательные `slug`, `seoTitle`, `seoDescription` | Editor/owner; 200 DTO. Требуется хотя бы одно поле; для отсутствующей записи slug обязателен и создаётся draft. 400 validation, 409 `publication_slug_conflict`. Обновляет только metadata/slug, не создаёт snapshot. |
+| Public read | `GET /api/v1/public/publications/:slug` | Анонимно; 200 `{title, seoTitle, seoDescription, schemaVersion, contentJson, assets, cover}`. У неизвестной, unpublished, удалённой или невалидной publication общий 404. Ответ `Cache-Control: no-store`; live document не декодируется. |
+| Public asset | `GET /api/v1/public/publications/:slug/assets/:assetId` | Анонимно; 302 `Location` на signed object URL, `Cache-Control: private, no-store, max-age=0`, `Referrer-Policy: no-referrer`; safe 404 вне ready assets текущего snapshot/cover. Signed URL живёт 60 секунд. |
+
+Generated Orval endpoints и DTO уже находятся в `apps/web/src/shared/api/generated`, но publication management exports пока не включены в `shared/api/index.ts`. Web не содержит publication feature и route `/p/[slug]`. Backend public DTO уже содержит snapshot `title`, SEO и cover descriptor, а media asset descriptors содержат относительный `resolverPath`; это достаточный read contract. Для management использовать generated functions/hooks из public API; для SSR — только type-only generated model import, потому что generated public endpoint module включает React Query.
+
+## Goals / Non-Goals
+
+**Goals:**
+
+- Один согласованный PR #53: publication management UI, public SSR, static content rendering, images/cover и подключение текущего backend outbox.
+- Не смешивать изменения live страницы с content/cover/title опубликованного snapshot.
+- Сохранить SSR независимым от интерактивного editor runtime и не вводить вторую TipTap schema.
+- Не сохранять public HTML в долгоживущем cache.
+
+**Non-Goals:**
+
+- Менять Prisma schema, backend publication state machine, asset resolver, storage или outbox.
+- Добавлять публикационные права, freshness detection или вычислять live-vs-published diff на клиенте.
+- Делать canonical/absolute site URL, пока Web не имеет отдельной доверенной site-origin конфигурации.
+- Добавлять editor collaboration, public editor, comments, analytics, password/domain controls, advanced SEO или history UI.
+
+## Decisions
+
+### 1. Использовать существующие endpoints и draft как безопасную стадию первого Publish
+
+Management state загружается только для страницы с существующим `canManagePage` capability. Единственное состояние «не публиковалась» — exact `404` плюс `message === 'publication_not_found'` от management endpoint после editor permission check. Любой другой 404/401/403/error показывается как ошибка/недоступность, не как отсутствие публикации. Backend остаётся авторизатором каждой команды.
+
+Первый Publish требует slug и SEO поля в форме, но backend принимает SEO на отдельном PATCH. UI сначала выполняет PATCH с обязательным slug, который создаёт/обновляет `draft`, затем POST Publish. Backend publish persistence обновляет snapshot, slug/status/publishedAt и сохраняет уже существующие draft SEO поля. Если второй вызов упал, ничего публичного не опубликовано; UI сообщает, что настройки draft сохранены, и оставляет retry. Это минимально использует текущий контракт и избегает изменения backend DTO/use-case. Одновременная передача SEO через Publish DTO не нужна при такой восстановимой последовательности.
+
+После первого publish, slug и SEO сохраняются одним PATCH; PATCH не создаёт snapshot. Republish вызывает отдельный POST без `slug`, чтобы metadata не превращалась незаметно в новую content version. Для `unpublished` UI предлагает повторную публикацию через backend Republish, так как текущий `PublishPageUseCase` принимает только отсутствующую/draft запись.
+
+Разрешённые переходы соответствуют текущим use-cases: отсутствующая запись → `draft` через PATCH либо сразу → `published` через Publish; `draft` → `published` через Publish; `published` → `published` через Republish; `published` → `unpublished` через Unpublish; `unpublished` → `published` через Republish; `unpublished` → `unpublished` через идемпотентный Unpublish. `draft` → `unpublished` и Publish для уже published/unpublished записи завершаются state conflict. PATCH metadata сохраняет текущий статус. UI выбирает endpoint по загруженному backend status и перечитывает состояние при конфликте; он не эмулирует переход локально.
+
+### 2. Положить controls в существующую composition страницы, без permissions layer
+
+Добавить feature `features/publication-management` (форма/confirmation и операции), подключённую в `pages/workspace` рядом с заголовком страницы или editor actions. Она получает page ID и уже вычисленный `PageCapabilities`; `canManagePage` — единственный frontend gate для owner/editor. Не вводить собственные роли или скрытый cache authorization. В качестве management API boundary экспортировать generated types/functions/hooks через `shared/api/index.ts`. SSR loader не импортирует этот barrel или generated public endpoint module; он берёт только generated model types type-only. TanStack Query хранит только management DTO; при успехе данные ответа записываются/инвалидируются по существующему query key, ошибки после permission revoke инвалидируют query и не закрывают editor.
+
+Slug/SEO управляются одной формой с React Hook Form/Zod и существующими shadcn wrappers. Backend `400` и точный `409 publication_slug_conflict` преобразуются в понятные field errors; не делается client-side проверка uniqueness. Для первого Publish PATCH создаёт draft и POST публикует его; операции сериализуются одним pending guard на странице. Unpublish использует существующий confirmation component/pattern с фокусом и блокировкой отмены во время запроса. Public URL на API остаётся относительным `publicPath`; кнопки open/copy собирают абсолютную ссылку в браузере через текущий origin Web, не используя CORS origin/API origin.
+
+Mutation responses делятся на подтверждённое backend rejection и неопределённый transport outcome. Доменные 4xx с ожидаемым API error code показываются как отказ команды; network failure/timeout/abort без ответа и 5xx переводят операцию в `uncertain`, после чего UI выполняет один GET management status. Если GET показывает требуемое состояние и операция проверяема (первый Publish: `published` с запрошенным slug; Unpublish: `unpublished`; metadata PATCH: все изменяемые поля совпали), UI синхронизируется с backend. Если GET показывает прежнее состояние или сам недоступен, UI не говорит, что команда точно провалилась, и предлагает ручное обновление статуса. После неопределённого первого Publish новый POST не запускается автоматически; сохранённый draft можно повторить только явным действием пользователя после сверки состояния.
+
+У Republish нет operation ID или snapshot ID в management DTO, поэтому `status: published` не доказывает создание нового immutable snapshot. Backend при каждом успешном `PublicationVersionPersistence.persist()` обновляет `publishedAt`; при неопределённом результате UI сравнивает значение до команды и после GET. `published` с изменившимся `publishedAt` подтверждает, что новая версия была активирована; неизменившийся timestamp, даже при `published`, не доказывает отказ и оставляет uncertain state. UI не делает повторный Republish и предлагает обновить status безопасным GET. Это сравнение использует серверный timestamp, не локальный editor state.
+
+### 3. Использовать существующую schema-нормализацию и ограничить SSR imports
+
+Сейчас `entities/page-document/lib/static-rendering.ts` использует `@tiptap/static-renderer/pm/html-string`, но транзитивно импортирует `model/editor-schema.ts`, который в одном модуле объявляет базовые schema extensions и импортирует Collaboration, Awareness/Caret и Yjs. Корневой `entities/page-document/index.ts` также экспортирует editor/session функции. Публичный route не должен использовать эти entrypoints.
+
+Сначала использовать уже существующие version check, нормализацию content/media и shared extensions из `entities/page-document`. Если импорт `editor-schema.ts` подтягивает collaboration runtime, минимально отделить только базовую schema-композицию, нужную renderer, сохранив те же extension definitions и normalization functions; не переписывать `renderPageDocumentToHTML` и не создавать вторую нормализацию. Публичная композиция импортирует ограниченную static entrypoint, не editor barrel, `features/page-editing`, widget editor или NodeViews. Это узкая граница импортов, не новая schema и не новый FSD layer.
+
+Static mappings используют реальные поддерживаемые schema v2 extensions и существующие normalizers для links, asset/external images, video и YouTube. Установленный `@tiptap/static-renderer/pm/react` строит React elements из extensions/JSON без DOM API; production build должен подтвердить совместимость с Server Components. Для asset node преобразуется только presentation prop `src`; исходный `contentJson` не изменяется. Доступ к asset ID проверяется по descriptors текущего DTO. Unknown/malformed node обрабатывается существующими правилами нормализации, сохраняя безопасных соседей. Unsupported schema version блокирует rendering целиком. React renderer не требует ручного HTML и `dangerouslySetInnerHTML`; существующий строковый `renderPageDocumentToHTML` остаётся без переписывания.
+
+### 4. Загружать public DTO отдельным анонимным server transport
+
+Добавить root App Router entrypoint `/p/[slug]` и thin adapter на отдельный `pages/publication` screen. Корневой layout не монтирует client auth/query providers; `AppProviders` остаётся внутри auth/private route layouts. Public route поэтому не загружает `SessionProvider`, authenticated workspace shell или editor runtime. Текущий `apiFetch` не подходит: он читает module-level auth state, добавляет `Authorization` при наличии access token, а `skipAuthRefresh` отключает только refresh; по умолчанию transport также использует credentials `include`. Generated public endpoint module содержит React Query imports. Поэтому SSR использует небольшой native server `fetch` helper, без импорта `apiFetch` или generated endpoint/hook module: `cache: 'no-store'`, только `Accept`, без копирования auth/cookie headers и без credentials. URL строится из `NEXT_PUBLIC_API_BASE_URL` и известного public route. `PublicPublicationDto` и asset descriptor берутся type-only из generated model; ручные DTO не вводятся. React `cache` допустим только для совместного чтения `generateMetadata` и body в пределах одного SSR запроса, не как persistent cache.
+
+`generateMetadata` и route body получают один memoized loader и одинаковый outcome. Валидный DTO даёт metadata из `seoTitle`/`seoDescription` и heading из snapshot `title`; canonical исключён, так как нет доверенного frontend site origin. Backend 404 и полученный 200 с неполным/невалидным DTO (включая неподдерживаемый `schemaVersion` и небезопасный resolver descriptor) дают один safe not-found без live/private metadata. Network error и 5xx не маскируются как 404: loader пробрасывает нейтральную ошибку в общий error boundary/500, тело и metadata не показывают backend response. Структурная проверка ограничена полями, нужными SSR; типы остаются generated.
+
+Единый loader для `generateMetadata` и body сохраняет одинаковую классификацию. Для not-found metadata возвращается нейтральный title/description либо framework not-found metadata, без значения slug, backend message или private data; body вызывает `notFound()`. Network/5xx приводят к общей ошибке сервера, не к 404.
+
+### 5. Разрешать resolver URL относительно API origin и применять CSP к public route
+
+Каждый public DTO asset descriptor содержит относительный `resolverPath`; ожидаемый endpoint строго `/api/v1/public/publications/:slug/assets/:assetId`. До построения URL проверяются точный path pattern, текущий slug, UUID asset ID, отсутствие query/hash и origin после разрешения. Renderer сопоставляет image `source.assetId` только с `assets`; cover берётся только из `cover`. Для `src` применяется `new URL(resolverPath, NEXT_PUBLIC_API_BASE_URL)` с проверкой origin, path и параметров. Это работает при разных Web/API origins; `window.location`, forwarded host и произвольный `Host` не участвуют. API resolver сначала проверяет членство в текущей publication, затем отвечает 302 на короткоживущий signed object URL с `Cache-Control: private, no-store, max-age=0` и `Referrer-Policy: no-referrer`. CSP должна покрывать и configured API origin для начального image request, и фактический storage origin после 302. Текущая policy уже разрешает `https:` для изображений; сохранить это правило, добавить к нему только точный configured API origin при необходимости для HTTP dev/API origin и не строить CSP из request headers. Не включать API origin только в `connect-src`: browser запросов к API нет, но `<img>` сначала обращается к resolver. Runtime smoke test должен подтвердить, что конечный `Location` использует ожидаемый HTTPS storage origin и не блокируется CSP. Signed URL никогда не сохраняется в DTO, snapshot JSON или HTML.
+
+На `/p/:slug` применить динамический SSR, `fetch cache: 'no-store'` и response `Cache-Control: private, no-store, max-age=0`. Существующую CSP политику применить к public route с минимально нужным exact configured API source в `img-src` для resolver; сохранить действующее правило HTTPS для конечного storage redirect, не добавляя произвольный host из public request. `connect-src` не расширять для server-side fetch. Существующие frame/media ограничения сохраняются.
+
+### 6. Не использовать revalidatePath для динамического no-store SSR; принимать outbox event только для ACK
+
+`revalidatePath` не решает runtime задачу для этого route: SSR динамический, backend fetch использует `no-store`, а HTML получает `private, no-store`; Next Full Route Cache не содержит публичную страницу для инвалидирования. Поэтому Web не вызывает `revalidatePath` и не делает cache/token/allowlist endpoint ради invalidation.
+
+У backend есть конкретная операционная причина принимать event: scheduler при отсутствующей паре API URL/token пишет warning и не claim-ит события, так что недоставленные записи остаются pending и накапливаются с каждым publication change. Сохранить тонкий `POST /api/internal/revalidate` как authenticated outbox receipt endpoint только для ACK: проверить server-only bearer token, форму `{eventId, paths}` и что все paths соответствуют `/p/:slug`, затем вернуть 204; не вызывать `revalidatePath`, не использовать request Host, не хранить event state и не добавлять очередь. Duplicate после remote success/lost ACK просто повторно получает 204; backend lease token защищает ACK своей стороны.
+
+Endpoint снимает pending backlog при настроенной доставке, но не ограничивает общий рост таблицы: текущий backend помечает записи `deliveredAt`, не удаляя delivered rows, и не имеет retention cleanup. Это существующее backend операционное ограничение за границей Web #53; план фиксирует его как runtime/release risk, не обещает bounded storage и не добавляет cleanup/schema к Web PR. Развёртывание API должно либо настроить endpoint/token, либо принять и мониторить backlog; пользовательская свежесть SSR не зависит от доставки. Outbox остаётся eventual-consistent для этого ACK, но не cache consistency. Уже отданный HTML и signed URL нельзя мгновенно отозвать; backend URL остаётся действительным до TTL 60 секунд.
+
+### 7. Сохранить существующие тестовые средства
+
+Unit/RTL тесты размещаются рядом с feature/renderer и используют generated MSW handlers. Public route data fetch, exact `publication_not_found` mapping, no-store and resolver URL construction проверяются на SSR helpers. Архитектурная проверка запрещает public route/page modules импортировать editor/collaboration APIs; production build trace для public route дополнительно проверяется на отсутствие `@tiptap/react`, Hocuspocus, Yjs/Awareness и Collaboration extensions. E2E расширяет текущий Playwright setup с тестовой страницей/аккаунтом: publish → anonymous open → live edit remains unchanged → republish → slug change → unpublish/404. Не добавлять test framework.
+
+## Risks / Trade-offs
+
+- [PATCH draft и Publish — два запроса] → Сбой второго шага оставляет только безопасный draft; UI явно сообщает о сохранённых настройках и позволяет повторить. Один PR проверяет этот partial-success flow.
+- [Permission может быть отозвана между вызовами] → Каждая backend операция повторно проверяет эффективные permissions; Publish откажет, draft останется непубличным, UI переинвалидирует management query.
+- [Schema module содержит editor dependency] → Явная static entrypoint, единое базовое schema определение и source/build-boundary тесты удерживают collaboration runtime вне public route.
+- [Outbox не настроен либо pending delivery задержана] → Новые SSR запросы всё равно читают backend благодаря no-store. Pending rows накапливаются; Web endpoint ACK снижает pending backlog только при включённой доставке, а отсутствие backend retention оставляет общий рост строк как отдельный backend operational risk. Уже открытый HTML и signed URL до 60 секунд мгновенно отозвать нельзя.
+- [Storage redirect не разрешён CSP] → Production build сам не подтверждает S3 host; deployment smoke test проверяет реальный 302 Location и конечный image load под CSP. В policy не добавляется произвольный HTTP Host.
+- [Ошибка или изменение descriptor contract] → Публичный renderer fail-closed для отсутствующего descriptor/404 и не строит storage URL самостоятельно; generated DTO и MSW регенерируются из OpenAPI.
+- [External https media в старом contentJson] → Сохраняется текущая allowlist/normalization schema; renderer не вводит `dangerouslySetInnerHTML`, links и media проходят существующую URL валидацию.
+- [E2E зависит от окружения] → Использовать текущий opt-in Playwright harness и документировать test fixture requirements; unit/RTL и build-boundary проверки остаются в CI.
+
+## Migration Plan
+
+Схема БД/миграции не меняются. Сначала подключаются generated API exports и management flow; затем минимально ограничивается schema-safe import boundary и добавляется route renderer; далее подключаются anonymous transport, public SSR route, CSP/no-store и outbox receipt handler; после этого выполняются unit/RTL/E2E, production build и repository checks. Rollback — обычный rollback Web PR; API endpoint может оставаться выключенным, но тогда pending outbox backlog растёт.
+
+Для доставки/ACK outbox настроить один и тот же server-only `PUBLICATION_REVALIDATION_TOKEN` в API и Web, а `PUBLICATION_REVALIDATION_URL` API направить на `/api/internal/revalidate`. Это не cache revalidation: endpoint только подтверждает receipt. Если пара не настроена, API scheduler не claim-ит события; SSR остаётся корректным из-за no-store, но pending rows накапливаются. Отдельно проверить runtime retention delivered rows: Web endpoint не решает накопление общей таблицы.
+
+## Open Questions
+
+Нет вопросов, меняющих scope или выбранные контракты. Текущая конфигурация не имеет доверенного frontend site origin, поэтому canonical URL сознательно не генерируется.
