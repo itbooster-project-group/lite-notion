@@ -58,7 +58,7 @@ Backend MUST получать collaborative document через существу
 
 ### Requirement: Publication persistence атомарна и конкурентные команды сериализованы
 
-Snapshot, rendering, snapshot asset refs, publication pointer и revalidation event MUST фиксироваться одной DB транзакцией. До успешного commit предыдущая публикация MUST оставаться публичной; при ошибке не должно оставаться новой опубликованной версии, publication без готового rendering или смешения snapshot и rendering. Write commands MUST повторно проверить эффективное право и активный lifecycle непосредственно в транзакции перед записью. Операции одной страницы MUST быть сериализованы существующим owner lock владельца страницы. Grant/revoke permissions MUST использовать тот же owner key, включая grant/revoke на ancestor, от которого наследуется роль. Новая lock abstraction допустима только после доказательства live-PostgreSQL тестом недостаточности текущего механизма.
+Snapshot, rendering, snapshot asset refs, publication pointer и revalidation event MUST фиксироваться одной DB транзакцией, открываемой соответствующим write use-case. `PublishPageUseCase` и `RepublishPageUseCase` сами MUST выполнять operation-specific permission checks, state transition decisions, transaction orchestration и mapping slug errors. Shared persistence helper MAY сохранять общие snapshot-derived rows только в переданный `TransactionScope`; он MUST NOT выбирать publish-сценарий, авторизовывать пользователя, проверять state transitions или открывать транзакцию. До успешного commit предыдущая публикация MUST оставаться публичной; при ошибке не должно оставаться новой опубликованной версии, publication без готового rendering или смешения snapshot и rendering. Write commands MUST повторно проверить эффективное право и активный lifecycle непосредственно в транзакции перед записью. Операции одной страницы MUST быть сериализованы существующим owner lock владельца страницы. Grant/revoke permissions MUST использовать тот же owner key, включая grant/revoke на ancestor, от которого наследуется роль. Новая lock abstraction допустима только после доказательства live-PostgreSQL тестом недостаточности текущего механизма.
 
 #### Scenario: Ошибка после вставки snapshot откатывает pipeline
 - **WHEN** вставка rendering, refs, publication или revalidation event завершается ошибкой
@@ -148,6 +148,10 @@ Backend MUST предоставлять authenticated API для чтения pu
 - **WHEN** клиент вызывает first-publish для существующей unpublished publication
 - **THEN** API возвращает `409 publication_state_conflict` и сохраняет существующий slug/snapshot/status
 
+#### Scenario: Другая unique constraint ошибка не маскируется под slug conflict
+- **WHEN** запись publication нарушает unique constraint, отличный от `PagePublication.slug`
+- **THEN** ошибка не преобразуется в `409 publication_slug_conflict`, а HTTP response не раскрывает Prisma или SQL details
+
 #### Scenario: Удалённая страница получает управляющую команду
 - **WHEN** publish, republish или metadata update выполняется для soft-deleted page/project
 - **THEN** команда отклоняется как not found и не меняет publication
@@ -218,7 +222,7 @@ Rendering MUST фиксировать `pageTitle` и `coverAssetId` в publicati
 
 ### Requirement: Public asset access проверяет текущую publication
 
-Object storage MUST оставаться private. `content_json` MUST NOT сохранять permanent URL, resolver URL или signed URL. Public read MUST возвращать safe asset descriptors с `resolverPath` вида `/api/v1/public/publications/${slug}/assets/${assetId}` для refs из immutable content JSON. SSR #53 MUST разрешить этот path относительно настроенного `NEXT_PUBLIC_API_BASE_URL`, который MUST быть absolute `http(s)` API origin без path/query/fragment; итоговый URL использует API origin и path, а не frontend origin. SSR MUST NOT использовать request `Host`, `X-Forwarded-Host` или иной непроверенный origin. Это поддерживает разные frontend/API origins. Resolver MUST отвечать только `302 Found` с пустым body и `Location` на signed URL, если asset входит в current published snapshot либо cover current rendering, asset ready, а page/project active. Для отказа используется одинаковый safe 404 без `Location`. Одного `asset_id` MUST быть недостаточно. Resolver MUST выставлять `Cache-Control: private, no-store, max-age=0` и `Referrer-Policy: no-referrer`; signed URL MUST иметь короткий TTL. Уже выданная signed URL может оставаться доступной до истечения TTL.
+Object storage MUST оставаться private. `content_json` MUST NOT сохранять permanent URL, resolver URL или signed URL. Public read MUST возвращать safe asset descriptors с `resolverPath` вида `/api/v1/public/publications/${slug}/assets/${assetId}` для refs из immutable content JSON. SSR #53 MUST разрешить этот path относительно настроенного `NEXT_PUBLIC_API_BASE_URL`, который MUST быть absolute `http(s)` API origin без path/query/fragment; итоговый URL использует API origin и path, а не frontend origin. SSR MUST NOT использовать request `Host`, `X-Forwarded-Host` или иной непроверенный origin. Это поддерживает разные frontend/API origins. Resolver MUST отвечать только `302 Found` с пустым body и `Location` на signed URL, если asset входит в current published snapshot либо cover current rendering, asset ready, а page/project active. Проверка current publication, membership, readiness и lifecycle является точкой авторизации запроса. Для отказа используется одинаковый safe 404 без `Location`. Одного `asset_id` MUST быть недостаточно. Resolver MUST выставлять `Cache-Control: private, no-store, max-age=0` и `Referrer-Policy: no-referrer`; signed URL MUST иметь TTL 60 секунд. Уже выданная signed URL может оставаться доступной до истечения TTL.
 
 #### Scenario: Текущий snapshot image разрешён
 - **WHEN** asset входит в `SnapshotAsset` текущего published snapshot и имеет ready status
@@ -252,6 +256,10 @@ Object storage MUST оставаться private. `content_json` MUST NOT сох
 - **WHEN** publication снята после выдачи короткоживущей signed URL
 - **THEN** новые resolver запросы запрещены, а ранее выданная URL прекращает действовать после своего TTL
 
+#### Scenario: Разрешённый resolver завершается одновременно с unpublish
+- **WHEN** resolver успел проверить current publication, asset и lifecycle до commit unpublish, но завершает signing после commit
+- **THEN** этот уже начатый запрос может вернуть 302 с URL, TTL которой отсчитывается при signing; проверка resolver-запроса, начатого после commit, возвращает safe 404, и транзакция или дополнительная блокировка вокруг object storage не используется
+
 ### Requirement: Soft delete прекращает публичный доступ без автоматического restore
 
 Soft delete page/project MUST сделать текущую publication публично недоступной и инициировать invalidation affected routes после commit. Restore страницы или проекта MUST NOT автоматически возобновлять publication. Publish, republish и metadata update для удалённого lifecycle MUST быть запрещены. Исторические snapshots не удаляются этим поведением.
@@ -270,7 +278,7 @@ Soft delete page/project MUST сделать текущую publication публ
 
 ### Requirement: Revalidation выполняется после commit и допускает retry
 
-Каждая успешная операция publish, republish, unpublish, slug/SEO update и lifecycle unpublish MUST после commit инициировать invalidation frontend path `/p/${slug}`. При смене slug MUST инвалидироваться оба пути `/p/${oldSlug}` и `/p/${newSlug}`; soft delete invalidates все affected `/p/${slug}`. Ошибка внешней доставки MUST NOT откатывать committed publication. Повторная доставка MUST быть безопасной и MUST только инвалидировать routes без записи старого content в cache. Outbox delivery eventual-consistent: до доставки unpublish/soft delete stale HTML во внешнем cache может оставаться доступным. До готовности надёжной стратегии revoke frontend #53 MUST NOT сохранять public HTML в долгоживущем Next.js cache; backend public API MUST использовать no-store.
+Каждая успешная операция publish, republish, unpublish, slug/SEO update и lifecycle unpublish MUST после commit инициировать invalidation frontend path `/p/${slug}`. При смене slug MUST инвалидироваться оба пути `/p/${oldSlug}` и `/p/${newSlug}`; soft delete invalidates все affected `/p/${slug}`. Ошибка внешней доставки MUST NOT откатывать committed publication. Повторная доставка MUST быть безопасной и MUST только инвалидировать routes без записи старого content в cache. Outbox delivery eventual-consistent: до доставки unpublish/soft delete stale HTML во внешнем cache может оставаться доступным. До готовности надёжной стратегии revoke frontend #53 MUST NOT сохранять public HTML в долгоживущем Next.js cache; backend public API MUST использовать no-store. Worker MUST claim через `FOR UPDATE SKIP LOCKED`, использовать PostgreSQL clock для создания и истечения 30-секундной lease и ограничивать каждую delivery attempt 10 секундами, включая HTTP timeout до 5 секунд и bounded ACK/failure transaction. Conditional ACK/failure MUST требовать совпадающий lease token и ещё не истёкший lease; позднее завершение не меняет outbox row даже если replacement claim ещё не состоялся.
 
 #### Scenario: Revalidation после commit
 - **WHEN** publication transaction успешно committed
@@ -311,6 +319,10 @@ Soft delete page/project MUST сделать текущую publication публ
 #### Scenario: Frontend принял event перед падением worker
 - **WHEN** frontend обработал invalidation, но API process упал до записи deliveredAt
 - **THEN** event доставляется повторно после lease expiry, idempotent invalidation не возвращает старое содержимое в cache, а поздний ACK первого worker отвергается по несовпадающему lease token
+
+#### Scenario: Worker завершает attempt после lease expiry
+- **WHEN** ACK или failure update приходит после `leaseUntil`, до или после того, как другой worker сделал reclaim
+- **THEN** conditional update не меняет событие; late worker не может подтвердить или освободить истёкшую lease, а event остаётся доступным для повторного claim
 
 #### Scenario: Unpublish ожидает отложенную revalidation
 - **WHEN** unpublish или soft delete committed, но endpoint недоступен или не настроен

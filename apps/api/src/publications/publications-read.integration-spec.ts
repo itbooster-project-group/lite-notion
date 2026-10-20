@@ -99,7 +99,7 @@ describe('public publication read and asset resolver on PostgreSQL', () => {
     return id;
   }
 
-  it('exposes only the current snapshot assets and returns uniform not-found after unpublish or deletion', async () => {
+  it('exposes only current snapshot assets and allows an already authorized resolver to finish across unpublish', async () => {
     pageId = randomUUID();
     await prisma.page.create({
       data: {
@@ -224,6 +224,36 @@ describe('public publication read and asset resolver on PostgreSQL', () => {
     expect(await service.resolveAsset('public-read-test', currentAssetId)).toContain(
       'signed?sig=secret',
     );
+    expect(storage.signedReadUrl).toHaveBeenCalledWith(`assets/${currentAssetId}`, 60);
+
+    let signalSigning!: () => void;
+    let releaseSigning!: () => void;
+    const signing = new Promise<void>((resolve) => {
+      signalSigning = resolve;
+    });
+    const signingGate = new Promise<void>((resolve) => {
+      releaseSigning = resolve;
+    });
+    storage.signedReadUrl = async () => {
+      signalSigning();
+      await signingGate;
+      return 'https://private-storage.example/in-flight-signed?sig=secret';
+    };
+    const inFlightResolution = service.resolveAsset('public-read-test', currentAssetId);
+    await signing;
+    await prisma.pagePublication.update({
+      data: { status: 'unpublished' },
+      where: { pageId },
+    });
+    releaseSigning();
+    await expect(inFlightResolution).resolves.toContain('in-flight-signed');
+    await expect(service.resolveAsset('public-read-test', currentAssetId)).resolves.toBeNull();
+    await prisma.pagePublication.update({
+      data: { status: 'published' },
+      where: { pageId },
+    });
+    storage.signedReadUrl = async () => 'https://private-storage.example/signed?sig=secret';
+
     await expect(service.resolveAsset('public-read-test', previousAssetId)).resolves.toBeNull();
     await expect(service.resolveAsset('public-read-test', unrelatedAssetId)).resolves.toBeNull();
     await expect(assetGc.delete(ownerId, currentAssetId)).rejects.toBeInstanceOf(ConflictException);

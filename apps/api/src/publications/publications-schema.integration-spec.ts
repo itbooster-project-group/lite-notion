@@ -180,20 +180,13 @@ describe('publication database invariants on PostgreSQL', () => {
       data: { paths: ['/p/lease-test'] },
     });
     revalidationIds.push(event.id);
-    const now = new Date();
     const [first, second] = await Promise.all([
       transactions.run(
-        (scope) =>
-          publications
-            .bind(scope)
-            .claimRevalidation(now, randomUUID(), new Date(now.getTime() + 30_000)),
+        (scope) => publications.bind(scope).claimRevalidation(randomUUID(), 30_000),
         { maxWaitMs: 500, timeoutMs: 1_000 },
       ),
       transactions.run(
-        (scope) =>
-          publications
-            .bind(scope)
-            .claimRevalidation(now, randomUUID(), new Date(now.getTime() + 30_000)),
+        (scope) => publications.bind(scope).claimRevalidation(randomUUID(), 30_000),
         { maxWaitMs: 500, timeoutMs: 1_000 },
       ),
     ]);
@@ -203,13 +196,31 @@ describe('publication database invariants on PostgreSQL', () => {
     if (!activeLease) throw new Error('Expected one claimed event');
 
     await prisma.publicationRevalidation.update({
-      data: { leaseUntil: new Date(Date.now() - 1) },
+      data: { leaseUntil: new Date('2000-01-01T00:00:00.000Z') },
       where: { id: event.id },
     });
+    const expiredAt = new Date();
+    await expect(
+      transactions.run((scope) =>
+        publications
+          .bind(scope)
+          .acknowledgeRevalidation(event.id, activeLease.leaseToken, expiredAt),
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      transactions.run((scope) =>
+        publications
+          .bind(scope)
+          .rescheduleRevalidation(
+            event.id,
+            activeLease.leaseToken,
+            new Date(expiredAt.getTime() + 1_000),
+            'late_failure',
+          ),
+      ),
+    ).resolves.toBe(false);
     const replacement = await transactions.run((scope) =>
-      publications
-        .bind(scope)
-        .claimRevalidation(new Date(), randomUUID(), new Date(Date.now() + 30_000)),
+      publications.bind(scope).claimRevalidation(randomUUID(), 30_000),
     );
     expect(replacement).not.toBeNull();
     if (!replacement) throw new Error('Expected expired lease to be reclaimed');

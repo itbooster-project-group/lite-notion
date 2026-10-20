@@ -26,9 +26,11 @@ import {
   PublicationAssetUnavailableError,
   PublicationSlugConflictError,
 } from './publication-errors';
-import { PublicationPipeline } from './publication-pipeline';
+import { PublicationVersionPersistence } from './publication-version.persistence';
 import { PrismaPublicationsRepository } from './publications.repository';
 import { PublicationsReadService } from './publications-read.service';
+import { PublishPageUseCase } from './use-cases/publish-page.use-case';
+import { RepublishPageUseCase } from './use-cases/republish-page.use-case';
 import { UnpublishPageUseCase } from './use-cases/unpublish-page.use-case';
 
 function textState(value: string): Uint8Array<ArrayBuffer> {
@@ -58,14 +60,15 @@ function imageState(assetId: string): Uint8Array<ArrayBuffer> {
   return state;
 }
 
-describe('publication pipeline on PostgreSQL', () => {
+describe('publication publish and republish use cases on PostgreSQL', () => {
   let prisma: PrismaClient;
   let ownerId: string;
   let editorId: string;
   let projectId: string;
   let pageId: string;
   let captured!: CapturedDocumentState;
-  let pipeline: PublicationPipeline;
+  let publishPage: PublishPageUseCase;
+  let republishPage: RepublishPageUseCase;
   let captureClient: DocumentCaptureClient;
   let snapshotCreator: CreateSnapshotInternalUseCase;
   let permissionsRepository: PrismaPagePermissionsRepository;
@@ -115,14 +118,7 @@ describe('publication pipeline on PostgreSQL', () => {
       },
     } as unknown as DocumentCaptureClient;
     snapshotCreator = new CreateSnapshotInternalUseCase(transactions, pages, snapshots);
-    pipeline = new PublicationPipeline(
-      captureClient,
-      transactions,
-      pages,
-      permissionsRepository,
-      publications,
-      snapshotCreator,
-    );
+    ({ publishPage, republishPage } = createUseCases(snapshotCreator));
     read = new PublicationsReadService(
       prisma as unknown as PrismaService,
       { signedReadUrl: async () => 'https://storage.example/signed' } as unknown as ObjectStorage,
@@ -177,6 +173,29 @@ describe('publication pipeline on PostgreSQL', () => {
     return pageId;
   }
 
+  function createUseCases(creator: CreateSnapshotInternalUseCase) {
+    const pages = new PrismaPagesRepository(prisma as unknown as DatabaseClient);
+    const persistence = new PublicationVersionPersistence(creator, publications);
+    return {
+      publishPage: new PublishPageUseCase(
+        captureClient,
+        transactions,
+        pages,
+        permissionsRepository,
+        publications,
+        persistence,
+      ),
+      republishPage: new RepublishPageUseCase(
+        captureClient,
+        transactions,
+        pages,
+        permissionsRepository,
+        publications,
+        persistence,
+      ),
+    };
+  }
+
   async function grantEditor(pageId: string): Promise<void> {
     await prisma.pagePermission.create({
       data: { grantedById: ownerId, pageId, role: 'EDITOR', userId: editorId },
@@ -193,7 +212,7 @@ describe('publication pipeline on PostgreSQL', () => {
       editorId,
     );
     await expect(
-      pipeline.publishFirst({ actorId: editorId, pageId, slug: `denied-${randomUUID()}` }),
+      publishPage.execute({ actorId: editorId, pageId, slug: `denied-${randomUUID()}` }),
     ).rejects.toBeInstanceOf(PageNotFoundError);
     expect(await prisma.pagePublication.findUnique({ where: { pageId } })).toBeNull();
   }
@@ -231,15 +250,8 @@ describe('publication pipeline on PostgreSQL', () => {
       tiptapSchemaVersion: 1,
       yjsState: textState(page.title),
     };
-    const serializedPipeline = new PublicationPipeline(
-      captureClient,
-      transactions,
-      new PrismaPagesRepository(prisma as unknown as DatabaseClient),
-      permissionsRepository,
-      publications,
-      pausedCreator,
-    );
-    const publishPromise = serializedPipeline.publishFirst({
+    const { publishPage: serializedPublish } = createUseCases(pausedCreator);
+    const publishPromise = serializedPublish.execute({
       actorId: editorId,
       pageId,
       slug: `serialized-${randomUUID()}`,
@@ -282,7 +294,7 @@ describe('publication pipeline on PostgreSQL', () => {
     const bytes = textState('captured body');
     captured = { storageRevision: 7n, tiptapSchemaVersion: 1, yjsState: bytes };
 
-    const result = await pipeline.publishFirst({
+    const result = await publishPage.execute({
       actorId: ownerId,
       pageId: id,
       slug: 'pipeline-first',
@@ -338,7 +350,7 @@ describe('publication pipeline on PostgreSQL', () => {
     `);
 
     await expect(
-      pipeline.publishFirst({ actorId: ownerId, pageId: id, slug: 'rendering-rollback' }),
+      publishPage.execute({ actorId: ownerId, pageId: id, slug: 'rendering-rollback' }),
     ).rejects.toThrow();
 
     expect(await prisma.documentSnapshot.count({ where: { pageId: id } })).toBe(0);
@@ -355,7 +367,7 @@ describe('publication pipeline on PostgreSQL', () => {
     captured = { storageRevision: 12n, tiptapSchemaVersion: 99, yjsState: new Uint8Array() };
 
     await expect(
-      pipeline.publishFirst({ actorId: ownerId, pageId: id, slug: 'unsupported-schema' }),
+      publishPage.execute({ actorId: ownerId, pageId: id, slug: 'unsupported-schema' }),
     ).rejects.toBeInstanceOf(DocumentProjectionError);
 
     expect(await prisma.documentSnapshot.count({ where: { pageId: id } })).toBe(0);
@@ -366,7 +378,7 @@ describe('publication pipeline on PostgreSQL', () => {
     const id = await createPage('Stable title');
     const firstBytes = textState('first captured body');
     captured = { storageRevision: 8n, tiptapSchemaVersion: 1, yjsState: firstBytes };
-    const first = await pipeline.publishFirst({
+    const first = await publishPage.execute({
       actorId: ownerId,
       pageId: id,
       slug: 'pipeline-first',
@@ -383,7 +395,7 @@ describe('publication pipeline on PostgreSQL', () => {
 
     const secondBytes = textState('republished body');
     captured = { storageRevision: 10n, tiptapSchemaVersion: 1, yjsState: secondBytes };
-    const second = await pipeline.republish({ actorId: ownerId, pageId: id });
+    const second = await republishPage.execute({ actorId: ownerId, pageId: id });
     snapshotIds.push(second.snapshot.id);
 
     const [previous, secondSnapshot, current] = await Promise.all([
@@ -518,7 +530,7 @@ describe('publication pipeline on PostgreSQL', () => {
     captured = { storageRevision: 21n, tiptapSchemaVersion: 2, yjsState: imageState(assetId) };
 
     await expect(
-      pipeline.publishFirst({ actorId: ownerId, pageId: id, slug: 'gc-wins-publish' }),
+      publishPage.execute({ actorId: ownerId, pageId: id, slug: 'gc-wins-publish' }),
     ).rejects.toBeInstanceOf(PublicationAssetUnavailableError);
     expect(await prisma.documentSnapshot.count({ where: { pageId: id } })).toBe(0);
     expect(await prisma.pagePublication.findUnique({ where: { pageId: id } })).toBeNull();
@@ -534,12 +546,12 @@ describe('publication pipeline on PostgreSQL', () => {
     };
 
     const outcomes = await Promise.allSettled([
-      pipeline.publishFirst({
+      publishPage.execute({
         actorId: ownerId,
         pageId: firstPageId,
         slug: 'concurrent-shared-slug',
       }),
-      pipeline.publishFirst({
+      publishPage.execute({
         actorId: ownerId,
         pageId: secondPageId,
         slug: 'concurrent-shared-slug',
@@ -587,20 +599,13 @@ describe('publication pipeline on PostgreSQL', () => {
         return snapshotCreator.execute(input, scope);
       },
     } as unknown as CreateSnapshotInternalUseCase;
-    const pausedPipeline = new PublicationPipeline(
-      captureClient,
-      transactions,
-      new PrismaPagesRepository(prisma as unknown as DatabaseClient),
-      permissionsRepository,
-      publications,
-      pausedCreator,
-    );
+    const { publishPage: pausedPublish } = createUseCases(pausedCreator);
     captured = {
       storageRevision: 40n,
       tiptapSchemaVersion: 1,
       yjsState: textState('deleted after publish'),
     };
-    const publish = pausedPipeline.publishFirst({
+    const publish = pausedPublish.execute({
       actorId: ownerId,
       pageId: id,
       slug: 'publish-delete-race',
@@ -643,7 +648,7 @@ describe('publication pipeline on PostgreSQL', () => {
     };
 
     await expect(
-      pipeline.publishFirst({ actorId: ownerId, pageId: id, slug: 'delete-first-race' }),
+      publishPage.execute({ actorId: ownerId, pageId: id, slug: 'delete-first-race' }),
     ).rejects.toBeInstanceOf(PageNotFoundError);
     expect(await prisma.documentSnapshot.count({ where: { pageId: id } })).toBe(0);
     expect(await prisma.pagePublication.findUnique({ where: { pageId: id } })).toBeNull();
@@ -656,7 +661,7 @@ describe('publication pipeline on PostgreSQL', () => {
       tiptapSchemaVersion: 1,
       yjsState: textState('first version'),
     };
-    const first = await pipeline.publishFirst({
+    const first = await publishPage.execute({
       actorId: ownerId,
       pageId: id,
       slug: 'unpublish-race',
@@ -681,16 +686,9 @@ describe('publication pipeline on PostgreSQL', () => {
         return snapshotCreator.execute(input, scope);
       },
     } as unknown as CreateSnapshotInternalUseCase;
-    const pausedPipeline = new PublicationPipeline(
-      captureClient,
-      transactions,
-      new PrismaPagesRepository(prisma as unknown as DatabaseClient),
-      permissionsRepository,
-      publications,
-      pausedCreator,
-    );
+    const { republishPage: pausedRepublish } = createUseCases(pausedCreator);
     captured = { storageRevision: 51n, tiptapSchemaVersion: 1, yjsState: textState('republished') };
-    const republish = pausedPipeline.republish({ actorId: ownerId, pageId: id });
+    const republish = pausedRepublish.execute({ actorId: ownerId, pageId: id });
     await entered;
     const unpublish = new UnpublishPageUseCase(
       transactions,

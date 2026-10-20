@@ -13,7 +13,7 @@
 
 ## 3. Publish pipeline
 
-- [x] 3.1 Реализовать отдельные publish/republish use-cases: предварительная permission/lifecycle проверка, `DocumentCaptureClient`, один `projectDocument` вызов и затем DB transaction с owner lock владельца страницы плюс повторными permission/lifecycle checks.
+- [x] 3.1 Реализовать отдельные publish/republish use-cases, которые сами выполняют preflight permission/lifecycle проверки, `DocumentCaptureClient`, один `projectDocument` вызов, state decision, transaction orchestration и повторные permission/lifecycle checks; shared helper не выбирает сценарий и не открывает transaction.
 - [x] 3.2 Соблюсти lock order `ownerLock → PageDocument → Asset rows sorted → Page`: serialized cover id и eligibility прочитать/проверить под locks; reuse `CreateSnapshotInternalUseCase.execute(..., scope)`, затем зафиксировать title после Page row lock и атомарно записать rendering/refs/publication/outbox.
 - [x] 3.3 Добавить PostgreSQL concurrency tests для direct и inherited permission revocation в обе очередности с publish; проверить, что owner lock закрывает гонку после focused grant/revoke use-case conversion и не требует второй lock.
 - [x] 3.4 Проверить exact `sourceStorageRevision`, совпадение captured bytes/JSON/refs, live edits после capture и rollback при capture/projection/schema/asset/rendering errors; добавить конкурентные rename-title/cover tests, подтвердив serialized immutable metadata и отсутствие deadlock.
@@ -30,21 +30,29 @@
 
 - [x] 5.1 Добавить явно `@Public()` read route по slug через узкий cross-table read query; вернуть snapshot title/SEO/schema/content и descriptors, не раскрывая приватных данных.
 - [x] 5.2 Зафиксировать SSR mapping contract: content_json refs остаются asset IDs; API возвращает `resolverPath`, #53 разрешает его относительно настроенного absolute `http(s)` `NEXT_PUBLIC_API_BASE_URL` (API origin без path/query/fragment), не используя request Host; missing descriptor не используется как URL; rendering никогда не сохраняет resolver/signed URLs.
-- [x] 5.3 Добавить public resolver с точным `302 Found`, пустым body, `Location` на signed URL и `Cache-Control: private, no-store, max-age=0` + `Referrer-Policy: no-referrer`; проверять current snapshot/cover, ready state и lifecycle до signing.
+- [x] 5.3 Добавить public resolver с точным `302 Found`, пустым body, `Location` на signed URL и `Cache-Control: private, no-store, max-age=0` + `Referrer-Policy: no-referrer`; проверять current snapshot/cover, ready state и lifecycle до signing. Зафиксировать query как точку авторизации: запрос, успешно проверенный до unpublish, может завершить signing после commit в пределах обычного короткого signed URL TTL.
 - [x] 5.4 Проверить anonymous security и uniform 404: private/чужой/старый snapshot asset, unpublished, deleted lifecycle, missing rendering, removed asset; response allowlist исключает Yjs, permissions, identity, storage key и uploader metadata.
 - [x] 5.5 Проверить публикационный GC concurrency на PostgreSQL: publish-first удерживает current asset, GC-first отклоняет publish; проверить live/current snapshot/current cover retention, прежнюю version, unpublish и cover/content references.
 
 ## 6. Revalidation и интеграция #53
 
-- [x] 6.1 Добавить leased `PublicationRevalidation` outbox с `FOR UPDATE SKIP LOCKED` claims, lease token/expiry, ACK/failure updates вне HTTP transaction и без page FK, чтобы pending invalidation переживал hard purge.
+- [x] 6.1 Добавить leased `PublicationRevalidation` outbox с `FOR UPDATE SKIP LOCKED` claims, DB-clock lease token/expiry, ACK/failure updates вне HTTP transaction и без page FK, чтобы pending invalidation переживал hard purge.
 - [x] 6.2 Добавить optional `PUBLICATION_REVALIDATION_URL`, `PUBLICATION_REVALIDATION_TOKEN`, timeout через environment validation/ApplicationConfig и `apps/api/.env.example`; обновить CI config validation для отсутствующих/парных значений и запретить вывод секрета.
 - [x] 6.3 Описать frontend #53 contract `POST /api/internal/revalidate` с event ID и canonical paths `/p/:slug`, idempotent revalidatePath и old+new slug; public API no-store и frontend public HTML без долгоживущего cache до подтверждённой revoke стратегии.
-- [x] 6.4 Ограничить delivery attempt 10 секундами, HTTP timeout — максимум 5 секунд, lease — фиксированные 30 секунд; проверить, что config не может превысить bound, а поздний ACK/failure с истёкшим lease token не меняет новый claim; покрыть post-commit delivery, несколько instances, expiry/process restart, duplicate после remote success/local crash, capped exponential retry, отсутствие endpoint без claim/attempt increments и отсутствие отката committed publication.
+- [x] 6.4 Ограничить delivery attempt 10 секундами, HTTP timeout — максимум 5 секунд, lease — фиксированные 30 секунд; bounded claim/finalization transactions и HTTP timeout должны суммарно укладываться в deadline. Проверить, что config не может превысить bound, а ACK/failure после lease expiry отклоняются даже до replacement claim; покрыть post-commit delivery, несколько instances, expiry/process restart, duplicate после remote success/local crash, capped exponential retry, отсутствие endpoint без claim/attempt increments и отсутствие отката committed publication.
 
 ## 7. Тестирование и завершение
 
 - [x] 7.1 Добавить unit tests для management DTO/publicPath, state errors, resolverPath + configured API base URL (разные origins, игнорирование Host), projection allowlist, configuration pair validation и scheduler bounded timeout/no-endpoint behavior; real PostgreSQL tests для constraints/FK delete policy/rollback.
-- [x] 7.2 Покрыть concurrent scenarios: publish/publish, publish/unpublish, direct/inherited revoke, page title rename, cover change, slug collision, soft delete subtree/project with multiple publications, publish/delete и publish/GC.
+- [x] 7.2 Покрыть concurrent scenarios: publish/publish, publish/unpublish, direct/inherited revoke, page title rename, cover change, slug collision, soft delete subtree/project with multiple publications, publish/delete, publish/GC и already-authorized resolver/unpublish interleaving.
 - [x] 7.3 Закрыть public acceptance scenarios: immutable captured content/revision, private/current/old asset references, exact 302 headers, SSR descriptor mapping, safe 404, no private response data, long-lived HTML cache prohibition.
-- [x] 7.4 Проверить revalidation на `/p/:slug`: commit-only event, delivery deadline строго короче lease, multiple API instances, process restart lease recovery, remote success/local crash duplicate, late ACK rejection, no endpoint, retry logs and eventual invalidation after unpublish/delete.
+- [x] 7.4 Проверить revalidation на `/p/:slug`: commit-only event, bounded HTTP + final transaction execution within the 10-second deadline and strictly shorter than lease, multiple API instances, process restart lease recovery, remote success/local crash duplicate, late ACK rejection, no endpoint, retry logs and eventual invalidation after unpublish/delete.
 - [x] 7.5 Проверить collaboration/snapshot/assets regressions и OpenAPI generation; выполнить `openspec validate add-backend-publications --strict`, relevant API tests, `pnpm lint`, `pnpm typecheck` и `pnpm build` перед завершением PR.
+
+## 8. Архитектурные замечания PR #101
+
+- [x] 8.1 Перенести публикационную orchestration, state transition decisions, permissions, transaction ownership и slug conflict mapping непосредственно в first-publish/republish use-cases; оставить общий helper только для технической записи snapshot-derived rows в переданную транзакцию. Подтвердить PostgreSQL integration tests и API suite.
+- [x] 8.2 Классифицировать Prisma `P2002` только для `PagePublication.slug` с учётом column-array, constraint-name и driver-adapter метаданных; проверить стабильный 409 для slug collision и проброс иной unique violation без SQL/Prisma деталей.
+- [x] 8.3 PostgreSQL barrier-test подтверждает resolver linearization: request, авторизованный до unpublish, может вернуть signed URL после commit; новый resolver после commit получает safe 404. Object-storage lock/transaction не вводится.
+- [x] 8.4 Подтвердить delivery bound по фактическим Prisma transaction options и HTTP timeout: attempt короче 10 секунд, lease 30 секунд назначается по DB clock, поздние ACK/failure после expiry отклоняются даже до replacement claim; retry/duplicate/restart/no endpoint сценарии проверены.
+- [x] 8.5 Повторить strict OpenSpec validation, API unit + PostgreSQL integration suites, lint, typecheck и build после замечаний PR.

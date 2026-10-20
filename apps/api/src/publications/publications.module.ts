@@ -7,8 +7,8 @@ import { PagesModule } from '../pages/pages.module';
 import { SnapshotsModule } from '../snapshots/snapshots.module';
 import { PublicPublicationsController } from './public-publications.controller';
 import { PublicationManagementService } from './publication-management.service';
-import { PublicationPipeline } from './publication-pipeline';
 import { PublicationRevalidationScheduler } from './publication-revalidation.scheduler';
+import { PublicationVersionPersistence } from './publication-version.persistence';
 import { PublicationsController } from './publications.controller';
 import { PrismaPublicationsRepository, PublicationsRepository } from './publications.repository';
 import { PublicationsReadService } from './publications-read.service';
@@ -31,8 +31,8 @@ import { UpdatePublicationMetadataUseCase } from './use-cases/update-publication
   ],
   providers: [
     PublicationManagementService,
-    PublicationPipeline,
     PublicationsReadService,
+    PublicationVersionPersistence,
     PublicationRevalidationScheduler,
     DeliverPublicationRevalidationUseCase,
     PublishPageUseCase,

@@ -8,6 +8,7 @@ import { PageNotFoundError } from '../../pages/errors';
 import { PagesRepository } from '../../pages/pages.repository';
 import { normalizePublicationSlug, publicationPath } from '../helpers';
 import { PublicationSlugConflictError } from '../publication-errors';
+import { isPublicationSlugUniqueViolation } from '../publication-unique-errors';
 import { type PublicationMetadataUpdate, PublicationsRepository } from '../publications.repository';
 
 export interface UpdatePublicationMetadataCommand {
@@ -72,12 +73,8 @@ export class UpdatePublicationMetadataUseCase {
         return updated;
       });
     } catch (error) {
-      if (isPrismaCode(error, 'P2002')) throw new PublicationSlugConflictError();
+      if (isPublicationSlugUniqueViolation(error)) throw new PublicationSlugConflictError();
       throw error;
     }
   }
-}
-
-function isPrismaCode(error: unknown, code: string): boolean {
-  return typeof error === 'object' && error !== null && 'code' in error && error.code === code;
 }

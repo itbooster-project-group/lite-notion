@@ -57,9 +57,8 @@ export abstract class PublicationsRepository {
   abstract markPublishedUnpublished(pageIds: readonly string[]): Promise<void>;
   abstract createRevalidation(paths: readonly string[]): Promise<void>;
   abstract claimRevalidation(
-    now: Date,
     token: string,
-    leaseUntil: Date,
+    leaseDurationMs: number,
   ): Promise<ClaimedRevalidation | null>;
   abstract acknowledgeRevalidation(id: string, token: string, deliveredAt: Date): Promise<boolean>;
   abstract rescheduleRevalidation(
@@ -196,24 +195,23 @@ export class PrismaPublicationsRepository extends PublicationsRepository {
   }
 
   async claimRevalidation(
-    now: Date,
     token: string,
-    leaseUntil: Date,
+    leaseDurationMs: number,
   ): Promise<ClaimedRevalidation | null> {
     const rows = await this.client.$queryRaw<ClaimedRevalidation[]>`
       WITH candidate AS (
-        SELECT "id"
+        SELECT "id", clock_timestamp() AS "claimedAt"
         FROM "PublicationRevalidation"
         WHERE "deliveredAt" IS NULL
-          AND "nextAttemptAt" <= ${now}
-          AND ("leaseUntil" IS NULL OR "leaseUntil" <= ${now})
+          AND "nextAttemptAt" <= clock_timestamp()
+          AND ("leaseUntil" IS NULL OR "leaseUntil" <= clock_timestamp())
         ORDER BY "nextAttemptAt" ASC, "createdAt" ASC, "id" ASC
         FOR UPDATE SKIP LOCKED
         LIMIT 1
       )
       UPDATE "PublicationRevalidation" AS event
       SET "leaseToken" = ${token}::uuid,
-          "leaseUntil" = ${leaseUntil},
+          "leaseUntil" = candidate."claimedAt" + (${leaseDurationMs} * INTERVAL '1 millisecond'),
           "attempts" = event."attempts" + 1
       FROM candidate
       WHERE event."id" = candidate."id"
@@ -225,11 +223,19 @@ export class PrismaPublicationsRepository extends PublicationsRepository {
   }
 
   async acknowledgeRevalidation(id: string, token: string, deliveredAt: Date): Promise<boolean> {
-    const result = await this.client.publicationRevalidation.updateMany({
-      data: { deliveredAt, lastErrorCode: null, leaseToken: null, leaseUntil: null },
-      where: { deliveredAt: null, id, leaseToken: token },
-    });
-    return result.count > 0;
+    const rows = await this.client.$queryRaw<{ id: string }[]>`
+      UPDATE "PublicationRevalidation"
+      SET "deliveredAt" = ${deliveredAt},
+          "lastErrorCode" = NULL,
+          "leaseToken" = NULL,
+          "leaseUntil" = NULL
+      WHERE "deliveredAt" IS NULL
+        AND "id" = ${id}::uuid
+        AND "leaseToken" = ${token}::uuid
+        AND "leaseUntil" > clock_timestamp()
+      RETURNING "id"
+    `;
+    return rows.length > 0;
   }
 
   async rescheduleRevalidation(
@@ -238,10 +244,18 @@ export class PrismaPublicationsRepository extends PublicationsRepository {
     nextAttemptAt: Date,
     errorCode: string,
   ): Promise<boolean> {
-    const result = await this.client.publicationRevalidation.updateMany({
-      data: { lastErrorCode: errorCode, leaseToken: null, leaseUntil: null, nextAttemptAt },
-      where: { deliveredAt: null, id, leaseToken: token },
-    });
-    return result.count > 0;
+    const rows = await this.client.$queryRaw<{ id: string }[]>`
+      UPDATE "PublicationRevalidation"
+      SET "lastErrorCode" = ${errorCode},
+          "leaseToken" = NULL,
+          "leaseUntil" = NULL,
+          "nextAttemptAt" = ${nextAttemptAt}
+      WHERE "deliveredAt" IS NULL
+        AND "id" = ${id}::uuid
+        AND "leaseToken" = ${token}::uuid
+        AND "leaseUntil" > clock_timestamp()
+      RETURNING "id"
+    `;
+    return rows.length > 0;
   }
 }

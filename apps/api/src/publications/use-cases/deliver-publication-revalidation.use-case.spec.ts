@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ApplicationConfig } from '../../config/application-config';
 import { TransactionRunner } from '../../database/transaction';
 import { PublicationsRepository } from '../publications.repository';
@@ -23,8 +23,10 @@ function config(timeoutMs = 5_000): ApplicationConfig {
 
 describe('DeliverPublicationRevalidationUseCase', () => {
   beforeEach(() => vi.unstubAllGlobals());
+  afterEach(() => vi.restoreAllMocks());
 
   it('claims and commits before HTTP, then acknowledges in a separate bounded transaction', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
     const order: string[] = [];
     const repository = {
       bind: () => repository,
@@ -65,6 +67,8 @@ describe('DeliverPublicationRevalidationUseCase', () => {
 
     expect(order).toEqual(['claim', 'commit', 'http', 'ack', 'commit']);
     expect(transactions.run).toHaveBeenCalledTimes(2);
+    expect(timeout).toHaveBeenCalledWith(5_000);
+    expect(repository.claimRevalidation).toHaveBeenCalledWith(expect.any(String), 30_000);
     expect(repository.acknowledgeRevalidation).toHaveBeenCalledWith(
       'event-id',
       'lease-token',

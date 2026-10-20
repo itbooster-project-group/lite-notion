@@ -132,8 +132,19 @@ export class PublicationsReadService {
       select: {
         snapshot: {
           select: {
-            assets: { select: { assetId: true }, where: { assetId } },
-            rendering: { select: { coverAssetId: true } },
+            assets: {
+              select: {
+                asset: { select: { status: true, storageKey: true } },
+                assetId: true,
+              },
+              where: { assetId },
+            },
+            rendering: {
+              select: {
+                coverAsset: { select: { status: true, storageKey: true } },
+                coverAssetId: true,
+              },
+            },
           },
         },
       },
@@ -145,16 +156,11 @@ export class PublicationsReadService {
     });
     const snapshot = publication?.snapshot;
     if (!snapshot?.rendering) return null;
-    const allowed =
-      snapshot.rendering.coverAssetId === assetId ||
-      snapshot.assets.some((asset) => asset.assetId === assetId);
-    if (!allowed) return null;
-
-    const asset = await this.prisma.asset.findFirst({
-      select: { storageKey: true },
-      where: { id: assetId, status: 'ready' },
-    });
-    if (!asset) return null;
+    const coverAsset =
+      snapshot.rendering.coverAssetId === assetId ? snapshot.rendering.coverAsset : null;
+    const contentAsset = snapshot.assets.find((asset) => asset.assetId === assetId)?.asset;
+    const asset = coverAsset ?? contentAsset;
+    if (asset?.status !== 'ready') return null;
     return this.storage.signedReadUrl(asset.storageKey, 60);
   }
 
