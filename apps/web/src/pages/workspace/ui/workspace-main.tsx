@@ -12,6 +12,7 @@ import {
   selectPage,
 } from '@/entities/page';
 import { PageAccessPanel } from '@/features/page-access';
+import { PublicationManagement } from '@/features/publication-management';
 import { type PageDeleteRequest, PageTree } from '@/features/workspace-management';
 import { workspacePagePath } from '@/shared/routing';
 import { ContentContainer, Heading } from '@/shared/ui';
@@ -79,7 +80,12 @@ export function WorkspaceMain({
             </Heading>
             {!page.coverAssetId ? <PageCover page={page} placement="inline" /> : null}
           </div>
-          {pageCapabilities?.canManageAccess ? <PageAccessPanel page={page} /> : null}
+          <div className="flex shrink-0 items-center gap-1">
+            {pageCapabilities?.canManagePage ? (
+              <PublicationManagement capabilities={pageCapabilities} pageId={page.id} />
+            ) : null}
+            {pageCapabilities?.canManageAccess ? <PageAccessPanel page={page} /> : null}
+          </div>
         </div>
         <CollaborativePageEditor
           capabilities={pageCapabilities ?? getPageCapabilities(page.accessRole)}
