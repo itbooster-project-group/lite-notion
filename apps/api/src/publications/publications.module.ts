@@ -3,6 +3,7 @@ import { AssetsModule } from '../assets/assets.module';
 import { DatabaseModule } from '../database/database.module';
 import { DocumentCaptureModule } from '../document-capture/document-capture.module';
 import { PagePermissionsModule } from '../page-permissions/page-permissions.module';
+import { PageDocumentModule } from '../pages/page-document/page-document.module';
 import { PagesModule } from '../pages/pages.module';
 import { SnapshotsModule } from '../snapshots/snapshots.module';
 import { PublicPublicationsController } from './public-publications.controller';
@@ -26,6 +27,7 @@ import { UpdatePublicationMetadataUseCase } from './use-cases/update-publication
     DatabaseModule,
     DocumentCaptureModule,
     PagePermissionsModule,
+    PageDocumentModule,
     forwardRef(() => PagesModule),
     SnapshotsModule,
   ],

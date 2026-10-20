@@ -37,6 +37,10 @@ export class InMemoryPageDocumentRepository extends PageDocumentRepository {
         };
   }
 
+  async lockForPublication(pageId: string): Promise<boolean> {
+    return this.documents.has(pageId);
+  }
+
   async insertEmpty(pageId: string, tiptapSchemaVersion: number): Promise<void> {
     if (this.failInsert) {
       throw new Error('document insert failed');

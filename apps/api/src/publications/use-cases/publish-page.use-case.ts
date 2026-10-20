@@ -1,12 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { AssetsRepository } from '../../assets/assets.repository';
 import { ownerLock } from '../../common/helpers';
-import { databaseClientOf, TransactionRunner } from '../../database/transaction';
+import { TransactionRunner } from '../../database/transaction';
 import { DocumentCaptureClient } from '../../document-capture/document-capture.client';
 import { projectDocument } from '../../document-projection/document-projection';
 import { PageRole } from '../../page-permissions/constants';
 import { assertRole } from '../../page-permissions/helpers';
 import { PagePermissionsRepository } from '../../page-permissions/page-permissions.repository';
 import { PageNotFoundError } from '../../pages/errors';
+import { PageDocumentRepository } from '../../pages/page-document/page-document.repository';
 import { PagesRepository } from '../../pages/pages.repository';
 import { normalizePublicationSlug, publicationPath } from '../helpers';
 import {
@@ -30,6 +32,8 @@ export class PublishPageUseCase {
     @Inject(DocumentCaptureClient) private readonly capture: DocumentCaptureClient,
     @Inject(TransactionRunner) private readonly transactions: TransactionRunner,
     @Inject(PagesRepository) private readonly pages: PagesRepository,
+    @Inject(PageDocumentRepository) private readonly pageDocuments: PageDocumentRepository,
+    @Inject(AssetsRepository) private readonly assets: AssetsRepository,
     @Inject(PagePermissionsRepository) private readonly permissions: PagePermissionsRepository,
     @Inject(PublicationsRepository) private readonly publications: PublicationsRepository,
     @Inject(PublicationVersionPersistence)
@@ -65,47 +69,25 @@ export class PublishPageUseCase {
           PageRole.EDITOR,
         );
 
-        const db = databaseClientOf(scope);
-        const lockedDocument = await db.$queryRaw<{ pageId: string }[]>`
-          SELECT document."pageId"
-          FROM "PageDocument" document
-          JOIN "Page" page ON page."id" = document."pageId"
-          JOIN "Project" project ON project."id" = page."projectId"
-          WHERE document."pageId" = ${command.pageId}::uuid
-            AND page."deletedAt" IS NULL AND project."deletedAt" IS NULL
-          FOR UPDATE OF document
-        `;
-        if (lockedDocument.length === 0) throw new PageNotFoundError();
+        const documents = this.pageDocuments.bind(scope);
+        if (!(await documents.lockForPublication(command.pageId))) throw new PageNotFoundError();
 
-        const currentPage = await db.page.findFirst({
-          select: { coverAssetId: true },
-          where: { deletedAt: null, id: command.pageId, project: { deletedAt: null } },
-        });
+        const pages = this.pages.bind(scope);
+        const currentPage = await pages.findLivePublicationCover(command.pageId);
         if (!currentPage) throw new PageNotFoundError();
         const coverAssetId = currentPage.coverAssetId;
-        const lockedAssetIds = [
-          ...new Set([...assetIds, ...(coverAssetId ? [coverAssetId] : [])]),
-        ].sort();
+        const lockedAssetIds = [...new Set([...assetIds, ...(coverAssetId ? [coverAssetId] : [])])];
         if (lockedAssetIds.length > 0) {
-          await db.$queryRaw`
-            SELECT "id" FROM "Asset"
-            WHERE "id" = ANY(${lockedAssetIds}::uuid[])
-            ORDER BY "id" ASC FOR UPDATE
-          `;
-          const [assets, grants] = await Promise.all([
-            db.asset.findMany({
-              select: { id: true, status: true },
-              where: { id: { in: lockedAssetIds } },
-            }),
-            db.pageAssetGrant.findMany({
-              select: { assetId: true },
-              where: { assetId: { in: lockedAssetIds }, pageId: command.pageId },
-            }),
+          const assets = this.assets.bind(scope);
+          await assets.lockForPublication(lockedAssetIds);
+          const [availableAssets, grantedAssetIds] = await Promise.all([
+            assets.findPublicationAssets(lockedAssetIds),
+            assets.findPublicationGrants(command.pageId, lockedAssetIds),
           ]);
           const ready = new Set(
-            assets.filter((asset) => asset.status === 'ready').map(({ id }) => id),
+            availableAssets.filter((asset) => asset.status === 'ready').map(({ id }) => id),
           );
-          const granted = new Set(grants.map(({ assetId }) => assetId));
+          const granted = new Set(grantedAssetIds);
           if (
             ready.size !== lockedAssetIds.length ||
             lockedAssetIds.some((assetId) => !granted.has(assetId))
@@ -126,10 +108,7 @@ export class PublishPageUseCase {
           captured,
           pageId: command.pageId,
         });
-        const pageAfterLock = await db.page.findFirst({
-          select: { coverAssetId: true, title: true },
-          where: { deletedAt: null, id: command.pageId, project: { deletedAt: null } },
-        });
+        const pageAfterLock = await pages.findLivePublicationMetadata(command.pageId);
         if (!pageAfterLock) throw new PageNotFoundError();
         if (pageAfterLock.coverAssetId !== coverAssetId) throw new PublicationStateConflictError();
 

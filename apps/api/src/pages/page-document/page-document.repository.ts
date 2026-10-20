@@ -34,6 +34,9 @@ export abstract class PageDocumentRepository {
 
   abstract find(pageId: string): Promise<PageDocumentRecord | null>;
 
+  /** Locks the persisted document row for a publication capture transaction. */
+  abstract lockForPublication(pageId: string): Promise<boolean>;
+
   /**
    * Пустой документ создаваемой страницы. Владелец не проверяется: строка страницы
    * вставлена той же транзакцией строкой выше.
@@ -64,6 +67,16 @@ export class PrismaPageDocumentRepository extends PageDocumentRepository {
       select: DOCUMENT_FIELDS,
       where: { page: { deletedAt: null }, pageId },
     });
+  }
+
+  async lockForPublication(pageId: string): Promise<boolean> {
+    const rows = await this.client.$queryRaw<{ pageId: string }[]>`
+      SELECT "pageId"
+      FROM "PageDocument"
+      WHERE "pageId" = ${pageId}::uuid
+      FOR UPDATE
+    `;
+    return rows.length > 0;
   }
 
   async insertEmpty(pageId: string, tiptapSchemaVersion: number): Promise<void> {

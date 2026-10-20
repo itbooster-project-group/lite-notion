@@ -96,6 +96,18 @@ export class InMemoryPagesRepository extends PagesRepository {
     return page === undefined || page.deletedAt !== null ? null : this.toRecord(page);
   }
 
+  async findLivePublicationCover(id: string): Promise<{ coverAssetId: string | null } | null> {
+    const page = this.findLivePublicationPage(id);
+    return page === null ? null : { coverAssetId: page.coverAssetId ?? null };
+  }
+
+  async findLivePublicationMetadata(
+    id: string,
+  ): Promise<{ coverAssetId: string | null; title: string } | null> {
+    const page = this.findLivePublicationPage(id);
+    return page === null ? null : { coverAssetId: page.coverAssetId ?? null, title: page.title };
+  }
+
   async lockLivePageForUpdate(id: string): Promise<boolean> {
     return (await this.findLiveById(id)) !== null;
   }
@@ -226,6 +238,11 @@ export class InMemoryPagesRepository extends PagesRepository {
           page.parentPageId === parentPageId,
       )
       .sort(compareSiblings);
+  }
+
+  private findLivePublicationPage(id: string): StoredPage | null {
+    const page = this.pages.get(id);
+    return page === undefined || page.deletedAt !== null ? null : page;
   }
 
   private visible(): StoredPage[] {

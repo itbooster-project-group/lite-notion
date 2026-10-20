@@ -3,6 +3,7 @@ import { ConflictException } from '@nestjs/common';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { AssetGcUseCases } from '../assets/asset-gc.use-cases';
+import { PrismaAssetsRepository } from '../assets/assets.repository';
 import { AssetsUseCases } from '../assets/assets.use-cases';
 import type { ObjectStorage } from '../assets/storage/object-storage';
 import type { ApplicationConfig } from '../config/application-config';
@@ -18,6 +19,7 @@ import { PrismaPagePermissionsRepository } from '../page-permissions/page-permis
 import { PagePermissionsService } from '../page-permissions/page-permissions.service';
 import { RevokePagePermissionUseCase } from '../page-permissions/use-cases/revoke-page-permission.use-case';
 import { PageNotFoundError } from '../pages/errors';
+import { PrismaPageDocumentRepository } from '../pages/page-document/page-document.repository';
 import { PrismaPagesRepository } from '../pages/pages.repository';
 import { SoftDeletePageUseCase } from '../pages/use-cases/soft-delete-page.use-case';
 import { PrismaSnapshotsRepository } from '../snapshots/snapshots.repository';
@@ -175,12 +177,16 @@ describe('publication publish and republish use cases on PostgreSQL', () => {
 
   function createUseCases(creator: CreateSnapshotInternalUseCase) {
     const pages = new PrismaPagesRepository(prisma as unknown as DatabaseClient);
+    const pageDocuments = new PrismaPageDocumentRepository(prisma as unknown as DatabaseClient);
+    const assets = new PrismaAssetsRepository(prisma as unknown as DatabaseClient);
     const persistence = new PublicationVersionPersistence(creator, publications);
     return {
       publishPage: new PublishPageUseCase(
         captureClient,
         transactions,
         pages,
+        pageDocuments,
+        assets,
         permissionsRepository,
         publications,
         persistence,
@@ -189,6 +195,8 @@ describe('publication publish and republish use cases on PostgreSQL', () => {
         captureClient,
         transactions,
         pages,
+        pageDocuments,
+        assets,
         permissionsRepository,
         publications,
         persistence,

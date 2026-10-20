@@ -110,6 +110,14 @@ export abstract class PagesRepository {
   /** Живая страница без фильтра по владельцу. Только после проверки прав. */
   abstract findLiveById(id: string): Promise<PageRecord | null>;
 
+  /** Current cover for a live page, read by the publication use case. */
+  abstract findLivePublicationCover(id: string): Promise<{ coverAssetId: string | null } | null>;
+
+  /** Title and cover read after snapshot creation in the publication transaction. */
+  abstract findLivePublicationMetadata(
+    id: string,
+  ): Promise<{ coverAssetId: string | null; title: string } | null>;
+
   /** Блокирует живую страницу до конца текущей транзакции. */
   abstract lockLivePageForUpdate(id: string): Promise<boolean>;
 
@@ -242,6 +250,22 @@ export class PrismaPagesRepository extends PagesRepository {
 
   findLiveById(id: string): Promise<PageRecord | null> {
     return this.client.page.findFirst({ select: PAGE_FIELDS, where: { deletedAt: null, id } });
+  }
+
+  findLivePublicationCover(id: string): Promise<{ coverAssetId: string | null } | null> {
+    return this.client.page.findFirst({
+      select: { coverAssetId: true },
+      where: { deletedAt: null, id },
+    });
+  }
+
+  findLivePublicationMetadata(
+    id: string,
+  ): Promise<{ coverAssetId: string | null; title: string } | null> {
+    return this.client.page.findFirst({
+      select: { coverAssetId: true, title: true },
+      where: { deletedAt: null, id },
+    });
   }
 
   async lockLivePageForUpdate(id: string): Promise<boolean> {
