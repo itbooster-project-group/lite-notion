@@ -74,4 +74,12 @@ describe('page editor architecture boundaries', () => {
     expect(pageDocumentApi).not.toContain('model/editor-schema');
     expect(pageDocumentApi).not.toContain('@tiptap/extension-collaboration');
   });
+
+  it('оставляет publication management feature независимой от pages', () => {
+    const publicationManagementSources = readSources(
+      resolve(SOURCE_ROOT, 'features/publication-management'),
+    );
+
+    expect(publicationManagementSources).not.toMatch(/from ['"](?:@\/pages\/|(?:\.\.\/)+pages\/)/);
+  });
 });
