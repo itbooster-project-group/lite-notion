@@ -4,7 +4,6 @@ import type { ReactNode } from 'react';
 
 import '@/app/styles/globals.css';
 
-import { AppProviders } from '@/app/bootstrap';
 import { cn } from '@/shared/lib/cn';
 
 const inter = Inter({ subsets: ['latin', 'cyrillic'], variable: '--font-sans' });
@@ -21,9 +20,7 @@ type RootLayoutProps = Readonly<{
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="ru" className={cn('font-sans', inter.variable)} suppressHydrationWarning>
-      <body>
-        <AppProviders>{children}</AppProviders>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

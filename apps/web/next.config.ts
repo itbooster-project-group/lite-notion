@@ -4,6 +4,8 @@ import {
   PAGE_DOCUMENT_CONTENT_SECURITY_POLICY,
   PAGE_DOCUMENT_REFERRER_POLICY,
   PAGE_DOCUMENT_SECURITY_HEADER_SOURCE,
+  PUBLICATION_CONTENT_SECURITY_POLICY,
+  PUBLICATION_SECURITY_HEADER_SOURCE,
 } from './src/app/page-document-security-headers';
 
 const lanDevHost = process.env.NODE_ENV === 'development' ? process.env.LAN_HOST : undefined;
@@ -28,6 +30,23 @@ const nextConfig: NextConfig = {
           },
         ],
         source: PAGE_DOCUMENT_SECURITY_HEADER_SOURCE,
+      },
+      {
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'private, no-store, max-age=0',
+          },
+          {
+            key: 'Content-Security-Policy',
+            value: PUBLICATION_CONTENT_SECURITY_POLICY,
+          },
+          {
+            key: 'Referrer-Policy',
+            value: PAGE_DOCUMENT_REFERRER_POLICY,
+          },
+        ],
+        source: PUBLICATION_SECURITY_HEADER_SOURCE,
       },
     ];
   },

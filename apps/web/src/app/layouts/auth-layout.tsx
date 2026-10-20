@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 
+import { AppProviders } from '@/app/bootstrap';
 import { AuthRoute } from '@/app/routing';
 
 type AuthLayoutProps = Readonly<{
@@ -7,5 +8,9 @@ type AuthLayoutProps = Readonly<{
 }>;
 
 export function AuthLayout({ children }: AuthLayoutProps) {
-  return <AuthRoute>{children}</AuthRoute>;
+  return (
+    <AppProviders>
+      <AuthRoute>{children}</AuthRoute>
+    </AppProviders>
+  );
 }
