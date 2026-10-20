@@ -2,11 +2,11 @@ import { Extension } from '@tiptap/core';
 import { Fragment, type Node as ProseMirrorNode, Slice } from '@tiptap/pm/model';
 import { Plugin } from '@tiptap/pm/state';
 
-import { isPageDocumentNodeId } from '../lib/media-validation';
 import {
   claimUniquePageDocumentNodeId,
   isPageDocumentMediaNodeType,
-} from '../lib/node-id-lifecycle';
+  isPageDocumentNodeId,
+} from '@/entities/page-document';
 
 function collectNodeIds(document: ProseMirrorNode): Set<string> {
   const nodeIds = new Set<string>();

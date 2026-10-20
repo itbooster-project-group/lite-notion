@@ -2,7 +2,7 @@ import type { JSONContent } from '@tiptap/core';
 import { yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror';
 import * as Y from 'yjs';
 
-import { getPageDocumentSchema } from '../model/editor-schema';
+import { getPageDocumentSchema } from '../model/page-document-schema';
 import { PAGE_CONTENT_YJS_FIELD } from '../model/schema-version';
 
 export function getPageDocumentContentFragment(document: Y.Doc): Y.XmlFragment {

@@ -1,9 +1,8 @@
 import { Editor } from '@tiptap/core';
 import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
-import { createPageDocumentEditorExtensions } from '@/entities/page-document';
-
 import { canRunPageEditorCommand, runPageEditorCommand } from './editor-commands';
+import { createPageDocumentEditorExtensions } from './page-document-editor-extensions';
 
 describe('page editor commands', () => {
   it('форматирует Yjs-backed content без отдельной JSON-копии', () => {

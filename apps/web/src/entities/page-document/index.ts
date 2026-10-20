@@ -20,10 +20,14 @@ export {
   type PageDocumentYoutubeAttributes,
 } from './lib/media-validation';
 export {
+  claimUniquePageDocumentNodeId,
   collectPageDocumentNodeIds,
+  isPageDocumentMediaNodeType,
   preparePageDocumentContentForInsertion,
 } from './lib/node-id-lifecycle';
 export {
+  isValidPageDocumentForStaticRendering,
+  normalizePageDocumentForStaticRendering,
   type PageDocumentStaticRenderingInput,
   renderPageDocumentToHTML,
   UnsupportedPageDocumentStaticRenderingSchemaError,
@@ -35,13 +39,12 @@ export {
   pageDocumentToJSON,
 } from './lib/yjs-state';
 export {
-  createPageDocumentEditorExtensions,
   createPageDocumentSchemaExtensions,
   getPageDocumentSchema,
   PageDocumentImage,
   PageDocumentVideo,
   PageDocumentYoutube,
-} from './model/editor-schema';
+} from './model/page-document-schema';
 export {
   isSupportedPageDocumentSchemaVersion,
   PAGE_CONTENT_YJS_FIELD,

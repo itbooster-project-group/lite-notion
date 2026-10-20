@@ -28,3 +28,17 @@ export const PAGE_DOCUMENT_CONTENT_SECURITY_POLICY = [
 export const PAGE_DOCUMENT_REFERRER_POLICY = 'strict-origin-when-cross-origin';
 
 export const PAGE_DOCUMENT_SECURITY_HEADER_SOURCE = '/pages/:path*';
+
+const publicationApiImageOrigin = (() => {
+  const origin = cspOrigin(configuredApiOrigin);
+  return origin?.startsWith('http://') ? origin : undefined;
+})();
+
+export const PUBLICATION_CONTENT_SECURITY_POLICY = [
+  `img-src 'self' https:${publicationApiImageOrigin ? ` ${publicationApiImageOrigin}` : ''}`,
+  "media-src 'self' https:",
+  'frame-src https://www.youtube-nocookie.com',
+  "object-src 'none'",
+].join('; ');
+
+export const PUBLICATION_SECURITY_HEADER_SOURCE = '/p/:path*';

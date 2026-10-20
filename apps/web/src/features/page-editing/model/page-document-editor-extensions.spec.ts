@@ -1,14 +1,15 @@
 import { Editor, type JSONContent } from '@tiptap/core';
 import { afterEach, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
+import {
+  createPageDocumentSchemaExtensions,
+  PAGE_CONTENT_YJS_FIELD,
+  PAGE_DOCUMENT_SCHEMA_VERSION,
+  renderPageDocumentToHTML,
+} from '@/entities/page-document';
 import type { CollaborationProvider } from '@/shared/collaboration';
 import { getPresenceColor } from '@/shared/lib/presence-color';
-import { renderPageDocumentToHTML } from '../lib/static-rendering';
-import {
-  createPageDocumentEditorExtensions,
-  createPageDocumentSchemaExtensions,
-} from './editor-schema';
-import { PAGE_CONTENT_YJS_FIELD, PAGE_DOCUMENT_SCHEMA_VERSION } from './schema-version';
+import { createPageDocumentEditorExtensions } from './page-document-editor-extensions';
 
 const NODE_ID = '11111111-1111-4111-8111-111111111111';
 const editors: Editor[] = [];

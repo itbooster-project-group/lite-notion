@@ -166,7 +166,20 @@ export function normalizePageDocumentLink(value: string): string | undefined {
 }
 
 export function normalizePageDocumentImageUrl(value: string): string | undefined {
-  return normalizeHttpsUrl(value)?.href;
+  const httpsUrl = normalizeHttpsUrl(value);
+  if (httpsUrl) return httpsUrl.href;
+
+  try {
+    const url = new URL(value.trim());
+    const isLoopback =
+      url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]';
+    if (url.protocol !== 'http:' || !isLoopback || !url.hostname || url.username || url.password) {
+      return undefined;
+    }
+    return url.href;
+  } catch {
+    return undefined;
+  }
 }
 
 export function normalizePageDocumentVideoUrl(value: string): string | undefined {

@@ -56,4 +56,30 @@ describe('page editor architecture boundaries', () => {
     expect(workspaceMainSource).not.toMatch(/from ['"]@\/features\/page-editing/);
     expect(workspaceMainSource).toContain('CollaborativePageEditor');
   });
+
+  it('публичная публикация использует только static-safe page-document API', () => {
+    const publicationSources = [
+      readSources(resolve(SOURCE_ROOT, 'pages/publication')),
+      readSources(resolve(APP_ROOT, 'p')),
+    ].join('\n');
+
+    expect(publicationSources).toMatch(/from ['"]@\/entities\/page-document['"]/);
+    expect(publicationSources).not.toMatch(
+      /from ['"]@\/features\/page-editing|@\/widgets\/page-editor/,
+    );
+    const pageDocumentApi = readFileSync(
+      resolve(SOURCE_ROOT, 'entities/page-document/index.ts'),
+      'utf8',
+    );
+    expect(pageDocumentApi).not.toContain('model/editor-schema');
+    expect(pageDocumentApi).not.toContain('@tiptap/extension-collaboration');
+  });
+
+  it('оставляет publication management feature независимой от pages', () => {
+    const publicationManagementSources = readSources(
+      resolve(SOURCE_ROOT, 'features/publication-management'),
+    );
+
+    expect(publicationManagementSources).not.toMatch(/from ['"](?:@\/pages\/|(?:\.\.\/)+pages\/)/);
+  });
 });

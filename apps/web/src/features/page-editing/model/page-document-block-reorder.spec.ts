@@ -1,9 +1,8 @@
 import { Editor } from '@tiptap/core';
 import { afterEach, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
-import { createPageDocumentEditorExtensions } from '@/entities/page-document';
-
 import { canMovePageDocumentBlock, movePageDocumentBlock } from './page-document-block-reorder';
+import { createPageDocumentEditorExtensions } from './page-document-editor-extensions';
 
 const editors: Editor[] = [];
 const documents: Y.Doc[] = [];

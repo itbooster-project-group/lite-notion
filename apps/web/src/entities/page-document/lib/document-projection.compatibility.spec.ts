@@ -7,7 +7,7 @@ import {
   DOCUMENT_PROJECTION_SCHEMA_VERSION,
   documentProjectionSchema,
 } from '../../../../../api/src/document-projection/document-projection.schema';
-import { getPageDocumentSchema } from '../model/editor-schema';
+import { getPageDocumentSchema } from '../model/page-document-schema';
 import { PAGE_DOCUMENT_SCHEMA_VERSION } from '../model/schema-version';
 import { decodePageDocumentState, pageDocumentToJSON } from './yjs-state';
 

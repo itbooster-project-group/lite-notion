@@ -77,6 +77,19 @@ static_resources:
                               "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthzPerRoute
                               disabled: true
 
+                        # Public publication reads and asset redirects are anonymous.
+                        # Keep this method-limited so future writes remain protected.
+                        - match:
+                            prefix: "/api/v1/public/publications/"
+                            headers:
+                              - name: ":method"
+                                string_match: { exact: GET }
+                          route: { cluster: api }
+                          typed_per_filter_config:
+                            envoy.filters.http.ext_authz:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthzPerRoute
+                              disabled: true
+
                         # Остальной публичный API закрыт по умолчанию.
                         - match: { prefix: "/api/v1/" }
                           route: { cluster: api }

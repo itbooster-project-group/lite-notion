@@ -1,7 +1,10 @@
 import type { JSONContent } from '@tiptap/core';
 import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
 
-import { createPageDocumentSchemaExtensions } from '../model/editor-schema';
+import {
+  createPageDocumentSchemaExtensions,
+  getPageDocumentSchema,
+} from '../model/page-document-schema';
 import { isSupportedPageDocumentSchemaVersion } from '../model/schema-version';
 import {
   normalizePageDocumentImageUrl,
@@ -67,7 +70,13 @@ function normalizeNode(
     const resolvedUrl = attrs.source
       ? normalizePageDocumentImageUrl(assetUrls[attrs.source.assetId] ?? '')
       : undefined;
-    return { attrs: { ...attrs, ...(resolvedUrl ? { src: resolvedUrl } : {}) }, type: 'image' };
+    return {
+      attrs: {
+        ...attrs,
+        src: attrs.source ? (resolvedUrl ?? null) : attrs.src,
+      },
+      type: 'image',
+    };
   }
   if (node.type === 'youtube') {
     const attrs = normalizePersistedPageDocumentYoutubeAttributes(node.attrs);
@@ -98,13 +107,27 @@ function normalizeNode(
   };
 }
 
-function normalizePageDocumentV1Content(
+export function normalizePageDocumentForStaticRendering(
   content: JSONContent,
   assetUrls?: Readonly<Record<string, string>>,
 ): JSONContent {
   if (content.type !== 'doc') return { type: 'doc' };
 
   return normalizeNode(content, assetUrls) ?? { type: 'doc' };
+}
+
+export function isValidPageDocumentForStaticRendering(
+  content: JSONContent,
+  assetUrls?: Readonly<Record<string, string>>,
+): boolean {
+  try {
+    getPageDocumentSchema()
+      .nodeFromJSON(normalizePageDocumentForStaticRendering(content, assetUrls))
+      .check();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function renderPageDocumentToHTML({
@@ -117,7 +140,7 @@ export function renderPageDocumentToHTML({
   }
 
   return renderToHTMLString({
-    content: normalizePageDocumentV1Content(content, assetUrls),
+    content: normalizePageDocumentForStaticRendering(content, assetUrls),
     extensions: createPageDocumentSchemaExtensions(),
   });
 }

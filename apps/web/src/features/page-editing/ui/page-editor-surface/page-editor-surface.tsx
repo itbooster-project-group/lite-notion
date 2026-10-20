@@ -4,10 +4,10 @@ import type { Editor } from '@tiptap/core';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import type * as Y from 'yjs';
-import { createPageDocumentEditorExtensions } from '@/entities/page-document';
 import { cn } from '@/shared/lib/cn';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/shared/ui';
 import { shouldShowPageEditorBubbleMenu } from '../../model/bubble-menu';
+import { createPageDocumentEditorExtensions } from '../../model/page-document-editor-extensions';
 import {
   createPageDocumentRelativeSelection,
   type PageDocumentRelativeSelection,

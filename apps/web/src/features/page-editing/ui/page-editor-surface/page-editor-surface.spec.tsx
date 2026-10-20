@@ -5,9 +5,10 @@ import { Editor } from '@tiptap/core';
 import { HttpResponse, http } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
-import { createPageDocumentEditorExtensions, pageDocumentToJSON } from '@/entities/page-document';
+import { pageDocumentToJSON } from '@/entities/page-document';
 import { server } from '@/shared/api/mocks/server';
 import type { CollaborationProvider } from '@/shared/collaboration';
+import { createPageDocumentEditorExtensions } from '../../model/page-document-editor-extensions';
 import { PageEditorSurface } from './page-editor-surface';
 
 const documents: Y.Doc[] = [];

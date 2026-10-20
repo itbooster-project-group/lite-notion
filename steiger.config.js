@@ -24,4 +24,11 @@ export default defineConfig([
       'fsd/insignificant-slice': 'off',
     },
   },
+  // This feature is intentionally hosted only by the workspace page.
+  {
+    files: ['./apps/web/src/features/publication-management/**'],
+    rules: {
+      'fsd/insignificant-slice': 'off',
+    },
+  },
 ]);

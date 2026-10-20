@@ -8,6 +8,7 @@ import {
   DocumentLoadError,
   DocumentSizeLimitExceededError,
   DocumentStoreSkippedError,
+  documentTiptapSchemaVersion,
   PageDocumentPersistence,
 } from './persistence.js';
 
@@ -106,6 +107,39 @@ describe('PageDocumentPersistence', () => {
     ];
     expect(calledPageId).toBe(pageId);
     expect(state.byteLength).toBeGreaterThan(0);
+  });
+
+  it('uses the upgraded schema version returned by API on the next save', async () => {
+    const replaceDocument = vi.fn(
+      async (
+        _pageId: string,
+        yjsState: Uint8Array,
+        _expectedRevision: bigint,
+        _schemaVersion: number,
+      ) => ({
+        accepted: true,
+        document: { pageId, storageRevision: 1n, tiptapSchemaVersion: 2, yjsState },
+      }),
+    );
+    const service = persistenceWith({
+      readDocumentRecord: vi.fn(async () => ({
+        pageId,
+        storageRevision: 0n,
+        tiptapSchemaVersion: 1,
+        yjsState: new Uint8Array(),
+      })),
+      replaceDocument,
+    });
+    const document = await service.load(documentName);
+    document.getText('body').insert(0, 'current schema content');
+
+    await service.store(documentName, document);
+    expect(documentTiptapSchemaVersion(document)).toBe(2);
+
+    document.getText('body').insert(0, ' next');
+    await service.store(documentName, document);
+
+    expect(replaceDocument.mock.calls.map(([, , , version]) => version)).toEqual([1, 2]);
   });
 
   it('отказ API при сохранении даёт DocumentStoreSkippedError', async () => {

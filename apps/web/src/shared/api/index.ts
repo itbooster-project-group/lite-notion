@@ -61,14 +61,22 @@ export type {
   PagePermissionDto,
   PageTreeNodeDto,
   ProjectDto,
+  PublicAssetDescriptorDto,
+  PublicationManagementDto,
+  PublicationManagementDtoStatus,
+  PublicPublicationDto,
+  PublicPublicationDtoContentJson,
+  PublishPageDto,
   PurgeConfirmationResponseDto,
   PurgePageParams,
   PurgeProjectParams,
   RegisterDto,
   RenamePageDto,
+  RepublishPageDto,
   RestorePageDto,
   SetAccessModeDto,
   SetAssetReferenceDto,
+  UpdatePublicationMetadataDto,
   UserProfileDto,
 } from './generated/model';
 export {
@@ -128,6 +136,23 @@ export {
   usePurgeProject,
   useRestoreProject,
 } from './generated/projects/projects';
+export {
+  getGetPagePublicationQueryKey,
+  getPagePublication,
+  getPublishPageMutationOptions,
+  getRepublishPageMutationOptions,
+  getUnpublishPageMutationOptions,
+  getUpdatePagePublicationMetadataMutationOptions,
+  publishPage,
+  republishPage,
+  unpublishPage,
+  updatePagePublicationMetadata,
+  useGetPagePublication,
+  usePublishPage,
+  useRepublishPage,
+  useUnpublishPage,
+  useUpdatePagePublicationMetadata,
+} from './generated/publications/publications';
 
 export async function startBrowserMocking() {
   const browserMocks = await import('./mocks/browser');

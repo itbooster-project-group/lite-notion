@@ -10,6 +10,7 @@ export {
   createPageDocumentSessionFromState,
 } from './model/in-memory-page-document-session';
 export { insertPageDocumentContent } from './model/insert-page-document-content';
+export { createPageDocumentEditorExtensions } from './model/page-document-editor-extensions';
 export type {
   PageDocumentEditorCollaboration,
   PageDocumentPresence,
