@@ -78,7 +78,7 @@ describe('internal page document HTTP contract', () => {
     });
   });
 
-  it('инкрементирует storageRevision и не трогает tiptapSchemaVersion', async () => {
+  it('инкрементирует storageRevision и не понижает текущую tiptapSchemaVersion', async () => {
     const revisionBefore = context.documents.documents.get(pageId)?.storageRevision ?? 0;
 
     await write(randomBytes(32).toString('base64')).expect(200);
@@ -87,6 +87,19 @@ describe('internal page document HTTP contract', () => {
 
     expect(after?.storageRevision).toBe(revisionBefore + 1);
     expect(after?.tiptapSchemaVersion).toBe(TIPTAP_SCHEMA_VERSION);
+  });
+
+  it('upgrades a legacy schema version when the current editor persists a change', async () => {
+    const legacyDocument = context.documents.documents.get(pageId);
+    if (!legacyDocument) throw new Error('Expected the page document to exist');
+    legacyDocument.tiptapSchemaVersion = 1;
+
+    const response = await write(randomBytes(32).toString('base64')).expect(200);
+
+    expect(response.body.tiptapSchemaVersion).toBe(TIPTAP_SCHEMA_VERSION);
+    expect(context.documents.documents.get(pageId)?.tiptapSchemaVersion).toBe(
+      TIPTAP_SCHEMA_VERSION,
+    );
   });
 
   it('не перезаписывает документ при устаревшей expected revision', async () => {

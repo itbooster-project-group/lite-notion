@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { TIPTAP_SCHEMA_VERSION } from '../../../database/constants';
 import { PageNotFoundError } from '../../errors';
 import type { Bytes } from '../../pages.repository';
 import { type PageDocumentRecord, PageDocumentRepository } from '../page-document.repository';
@@ -17,11 +18,12 @@ export class PersistPageDocumentStateUseCase {
     expectedStorageRevision: bigint,
     tiptapSchemaVersion: number,
   ): Promise<{ accepted: boolean; document: PageDocumentRecord }> {
+    const persistedSchemaVersion = Math.max(tiptapSchemaVersion, TIPTAP_SCHEMA_VERSION);
     const document = await this.documents.replaceYjsState(
       pageId,
       yjsState,
       expectedStorageRevision,
-      tiptapSchemaVersion,
+      persistedSchemaVersion,
     );
 
     if (document === null) {

@@ -14,6 +14,8 @@
 | Public read | `GET /api/v1/public/publications/:slug` | Анонимно; 200 `{title, seoTitle, seoDescription, schemaVersion, contentJson, assets, cover}`. У неизвестной, unpublished, удалённой или невалидной publication общий 404. Ответ `Cache-Control: no-store`; live document не декодируется. |
 | Public asset | `GET /api/v1/public/publications/:slug/assets/:assetId` | Анонимно; 302 `Location` на signed object URL, `Cache-Control: private, no-store, max-age=0`, `Referrer-Policy: no-referrer`; safe 404 вне ready assets текущего snapshot/cover. Signed URL живёт 60 секунд. |
 
+Маркер `@Public` в API не отключает Envoy `ext_authz`. Поэтому gateway явно пропускает без auth только `GET /api/v1/public/publications/…` к API; правило расположено до общего защищённого `/api/v1/` маршрута и ограничено методом GET. Остальные методы и API paths по-прежнему проходят авторизацию.
+
 Generated Orval endpoints и DTO уже находятся в `apps/web/src/shared/api/generated`, но publication management exports пока не включены в `shared/api/index.ts`. Web не содержит publication feature и route `/p/[slug]`. Backend public DTO уже содержит snapshot `title`, SEO и cover descriptor, а media asset descriptors содержат относительный `resolverPath`; это достаточный read contract. Для management использовать generated functions/hooks из public API; для SSR — только type-only generated model import, потому что generated public endpoint module включает React Query.
 
 ## Goals / Non-Goals
@@ -33,6 +35,10 @@ Generated Orval endpoints и DTO уже находятся в `apps/web/src/shar
 - Добавлять editor collaboration, public editor, comments, analytics, password/domain controls, advanced SEO или history UI.
 
 ## Decisions
+
+### 0. Обновлять schema provenance при записи legacy-документа
+
+Схема v2 добавляет asset-backed image через атрибут `source`. Legacy page остаётся размеченной v1 даже после редактирования текущим v2 редактором, потому что collaboration persistence передаёт версию, полученную при загрузке. Тогда capture содержит v2-атрибут, а publication projection корректно отклоняет его как несовместимое содержимое v1. API при каждом принятом document write сохраняет вместе с Yjs bytes версию `max(incomingVersion, currentApiVersion)`. Это атомарно обновляет state и provenance в существующем `PageDocument` write; таблицы и миграции не меняются. Версия выше поддерживаемой API сохраняется как есть, чтобы старый сервер не маркировал данные будущей схемой как текущие. Текущий v2 schema сохраняет совместимость с legacy v1 content, поэтому повышение версии при записи не меняет его отображение.
 
 ### 1. Использовать существующие endpoints и draft как безопасную стадию первого Publish
 

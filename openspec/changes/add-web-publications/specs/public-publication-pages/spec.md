@@ -6,11 +6,15 @@
 
 ### Requirement: Public route читает только backend publication read model
 
-Путь `/p/[slug]` MUST быть доступен без authentication и получать title, SEO, schemaVersion, contentJson, assets и cover только из `GET /api/v1/public/publications/:slug`. Server transport MUST быть анонимным: он MUST NOT читать module-level auth state и MUST NOT пересылать пользовательские `Authorization` или `Cookie` headers; он MUST использовать `cache: 'no-store'` и не использовать `apiFetch`. Для типов MUST использовать generated `PublicPublicationDto`/asset DTO через type-only imports; generated endpoint module с React Query MUST NOT входить в server dependency graph. Маршрут MUST NOT читать private pages API, live page metadata, Y.Doc, `PAGE_DOCUMENTS`, Hocuspocus или локальный editor state. Успешный SSR MUST использовать immutable backend rendering и MUST NOT гидрировать редактор.
+Путь `/p/[slug]` MUST быть доступен без authentication и получать title, SEO, schemaVersion, contentJson, assets и cover только из `GET /api/v1/public/publications/:slug`. Gateway MUST обходить `ext_authz` только для `GET /api/v1/public/publications/…`; прочие методы и пути `/api/v1/` MUST оставаться за авторизацией. Server transport MUST быть анонимным: он MUST NOT читать module-level auth state и MUST NOT пересылать пользовательские `Authorization` или `Cookie` headers; он MUST использовать `cache: 'no-store'` и не использовать `apiFetch`. Для типов MUST использовать generated `PublicPublicationDto`/asset DTO через type-only imports; generated endpoint module с React Query MUST NOT входить в server dependency graph. Маршрут MUST NOT читать private pages API, live page metadata, Y.Doc, `PAGE_DOCUMENTS`, Hocuspocus или локальный editor state. Успешный SSR MUST использовать immutable backend rendering и MUST NOT гидрировать редактор.
 
 #### Scenario: Анонимный посетитель открывает опубликованную страницу
 - **WHEN** public API возвращает валидную publication по slug
 - **THEN** сервер возвращает страницу с snapshot title/content и SEO без access token и без editor runtime
+
+#### Scenario: Анонимный public GET проходит через gateway
+- **WHEN** анонимный запрос `GET /api/v1/public/publications/:slug` или `GET /api/v1/public/publications/:slug/assets/:assetId` проходит через Envoy
+- **THEN** gateway направляет запрос в API без `ext_authz`, а остальные методы и пути `/api/v1/` продолжают требовать авторизацию
 
 #### Scenario: Live document изменён после Publish
 - **WHEN** редактор меняет live document, но не выполняет Republish
@@ -19,6 +23,18 @@
 #### Scenario: Republish переключил snapshot
 - **WHEN** Republish backend успешно переключил current snapshot
 - **THEN** последующий SSR получает новое immutable rendering из public API
+
+### Requirement: Schema provenance соответствует текущей записи документа
+
+При принятом API write текущим collaboration/editor runtime backend MUST сохранять рядом с Yjs state актуальную schema version, если входящая version legacy ниже текущей версии API. Incoming version, которая выше версии API, MUST сохраняться без понижения. Обновление schema version и Yjs bytes MUST происходить одной операцией записи, без migration отдельной строки. Это позволяет текущему редактору добавлять schema-v2 media в legacy page и затем публиковать captured state.
+
+#### Scenario: Текущий редактор добавляет asset image в legacy page
+- **WHEN** документ с сохранённой schema version 1 изменён редактором текущей schema version 2 и persisted Yjs state содержит image `source` с asset ID
+- **THEN** API сохраняет state с schema version 2; повторный capture и projection принимают asset image при валидных asset/grant, и Republish может продолжить обычные проверки
+
+#### Scenario: API получает state с будущей schema version
+- **WHEN** incoming document write заявляет schema version выше текущей API
+- **THEN** API не понижает версию до своей текущей и publication projection продолжает fail closed для неподдерживаемой версии
 
 ### Requirement: Static renderer отображает поддерживаемую TipTap schema безопасно
 

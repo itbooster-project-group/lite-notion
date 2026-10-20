@@ -26,6 +26,7 @@ import { CreateSnapshotManualUseCase } from '../../snapshots/use-cases/create-sn
 import { PrismaPagesRepository } from '../pages.repository';
 import { PrismaPageDocumentRepository } from './page-document.repository';
 import { ProjectionRetryScheduler } from './projection-retry.scheduler';
+import { PersistPageDocumentStateUseCase } from './use-cases/persist-page-document-state.use-case';
 import { ProjectPageAssetsUseCase } from './use-cases/project-page-assets.use-case';
 
 describe('PageDocument provenance on PostgreSQL', () => {
@@ -308,6 +309,52 @@ describe('PageDocument provenance on PostgreSQL', () => {
       expiresInSeconds: 60,
     });
     expect(await prisma.pageAsset.count({ where: { pageId, assetId } })).toBe(1);
+  });
+
+  it('persists a v2 asset image on a legacy page with current schema provenance', async () => {
+    const pageId = await createPage();
+    const assetId = randomUUID();
+    assetIds.push(assetId);
+    await prisma.asset.create({
+      data: {
+        id: assetId,
+        checksum: `image-${assetId}`,
+        mimeType: 'image/png',
+        originalName: 'image.png',
+        sizeBytes: 8n,
+        status: 'ready',
+        storageKey: `assets/${assetId}/${randomUUID()}`,
+        uploadedById: ownerId,
+      },
+    });
+    await prisma.pageAssetGrant.create({ data: { assetId, pageId } });
+
+    const ydoc = new Y.Doc();
+    const image = new Y.XmlElement('image');
+    image.setAttribute('nodeId', randomUUID());
+    image.setAttribute('source', { type: 'asset', assetId } as unknown as string);
+    image.setAttribute('alt', 'Diagram');
+    image.setAttribute('decorative', false as unknown as string);
+    image.setAttribute('alignment', 'center');
+    image.setAttribute('widthPercent', 100 as unknown as string);
+    ydoc.getXmlFragment('default').insert(0, [image]);
+    const yjsState = Uint8Array.from(Y.encodeStateAsUpdate(ydoc));
+    ydoc.destroy();
+
+    const repository = new PrismaPageDocumentRepository(prisma as unknown as DatabaseClient);
+    const projection = new ProjectPageAssetsUseCase(prisma as unknown as PrismaService);
+    const persist = new PersistPageDocumentStateUseCase(repository, projection);
+    const result = await persist.execute(pageId, yjsState, 0n, 1);
+
+    expect(result.document.tiptapSchemaVersion).toBe(2);
+    expect(result.document.storageRevision).toBe(1n);
+    expect(await prisma.pageAsset.findMany({ where: { pageId, assetId } })).toHaveLength(1);
+    expect(await prisma.pageAssetProjection.findUniqueOrThrow({ where: { pageId } })).toMatchObject(
+      {
+        sourceStorageRevision: 1n,
+        lastErrorCode: null,
+      },
+    );
   });
 
   it('allows an editor to upload immediately on a new page before any rebuild', async () => {

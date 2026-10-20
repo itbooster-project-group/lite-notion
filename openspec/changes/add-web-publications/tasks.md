@@ -1,8 +1,9 @@
 ## 1. Сверка API и подготовка Web contract
 
 - [x] 1.1 Сверить generated publication endpoints/DTO с текущим `apps/api/openapi.json`; экспортировать используемые management/publication functions, hooks и DTO через `apps/web/src/shared/api/index.ts`, не дублируя типы вручную.
-- [x] 1.2 Зафиксировать обработку точного `404 publication_not_found`, других 404, 401/403, 400 validation и 409 slug/state/asset errors; обновить generated MSW handlers/fixtures только через существующую `pnpm api:generate`, если контракт действительно менялся.
-- [x] 1.3 Проверить request/response и повторяемость GET, Publish, Republish, PATCH metadata, Unpublish, public read и asset resolver; подтверждено: SEO первого Publish можно сохранить текущим PATCH-created draft до POST без backend/OpenAPI/schema изменения.
+- [x] 1.2 Зафиксировать обработку exact `404 publication_not_found`, других 404, 401/403, 400 validation и 409 slug/state/asset errors; пропустить через Envoy без `ext_authz` только `GET /api/v1/public/publications/…`, оставив прочие API routes защищёнными; обновлять generated MSW handlers/fixtures только при фактическом изменении контракта.
+- [x] 1.3 Проверить request/response и повторяемость GET, Publish, Republish, PATCH metadata, Unpublish, public read и asset resolver; подтверждено: SEO первого Publish можно сохранить текущим PATCH-created draft до POST без изменения OpenAPI/DTO.
+- [x] 1.4 При persist document state сохранять не ниже текущей API schema version, не понижая будущую incoming version; проверить legacy page с v2 asset image на API и PostgreSQL integration уровнях без изменения БД-схемы.
 
 **Зависимости:** нет.
 

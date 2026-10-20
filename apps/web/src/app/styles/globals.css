@@ -48,6 +48,30 @@
   @apply list-decimal;
 }
 
+.public-document-content :where(ul[data-type="taskList"]) {
+  @apply list-none pl-0;
+}
+
+.public-document-content :where(li[data-type="taskItem"]) {
+  @apply my-2 flex items-start gap-2;
+}
+
+.public-document-content :where(li[data-type="taskItem"] > label) {
+  @apply mt-1.5 flex shrink-0;
+}
+
+.public-document-content :where(li[data-type="taskItem"] > div) {
+  @apply min-w-0 flex-1;
+}
+
+.public-document-content :where(li[data-type="taskItem"] > div > :first-child) {
+  @apply mt-0;
+}
+
+.public-document-content :where(li[data-type="taskItem"] > div > :last-child) {
+  @apply mb-0;
+}
+
 .public-document-content :where(a) {
   @apply underline underline-offset-4;
 }
