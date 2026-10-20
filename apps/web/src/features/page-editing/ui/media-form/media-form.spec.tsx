@@ -2,9 +2,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { Editor } from '@tiptap/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
-import { createPageDocumentEditorExtensions } from '@/entities/page-document';
 import * as api from '@/shared/api';
 import { AssetUploadError } from '@/shared/api';
+import { createPageDocumentEditorExtensions } from '../../model/page-document-editor-extensions';
 
 import { ImageForm } from './image-form';
 import { VideoForm } from './video-form';

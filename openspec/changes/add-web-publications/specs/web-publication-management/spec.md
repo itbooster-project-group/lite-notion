@@ -28,6 +28,10 @@ Web MUST получать publication state через `GET /api/v1/pages/:pageI
 - **WHEN** backend management DTO не содержит достоверного признака сравнения live revision с publication snapshot
 - **THEN** UI не показывает индикатор «есть неопубликованные изменения» и не выводит его из локального dirty state, autosave, Yjs update или сравнения JSON
 
+#### Scenario: Переход к другой странице изолирует publication state
+- **WHEN** пользователь переходит со страницы A с загруженной publication, открытым feedback или незавершённой publication mutation на страницу B
+- **THEN** форма, ссылка, feedback и pending state страницы A не отображаются для B; query key включает page ID, а поздний ответ mutation A обновляет только cache A
+
 ### Requirement: Первый Publish сохраняет настройки без частичной публичной публикации
 
 Web MUST использовать существующие контракты: `PATCH /api/v1/pages/:pageId/publication` сохраняет slug/SEO и при отсутствии записи создаёт `draft` (slug обязателен), затем `POST /api/v1/pages/:pageId/publication/publish` с `{ slug }` создаёт опубликованный snapshot. Draft MUST оставаться недоступным по public API. Неуспешный Publish MUST сохранять draft-настройки для retry, но MUST NOT показывать успешную публикацию.

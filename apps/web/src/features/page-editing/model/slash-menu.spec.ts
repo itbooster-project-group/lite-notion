@@ -1,7 +1,7 @@
 import { Editor } from '@tiptap/core';
 import { afterEach, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
-import { createPageDocumentEditorExtensions } from '@/entities/page-document';
+import { createPageDocumentEditorExtensions } from './page-document-editor-extensions';
 
 import {
   filterPageEditorSlashCommands,

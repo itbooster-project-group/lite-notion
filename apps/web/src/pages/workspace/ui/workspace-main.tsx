@@ -19,7 +19,7 @@ import { CollaborativePageEditor } from './collaborative-page-editor';
 import { PageCover } from './page-cover';
 import { PublicationManagement } from './publication-management';
 
-type WorkspaceMainProps = Readonly<{
+export type WorkspaceMainProps = Readonly<{
   activePageId: string | undefined;
   activePage: NormalizedPage | undefined;
   pageCapabilities: PageCapabilities | undefined;
@@ -82,7 +82,11 @@ export function WorkspaceMain({
           </div>
           <div className="flex shrink-0 items-center gap-1">
             {pageCapabilities?.canManagePage ? (
-              <PublicationManagement capabilities={pageCapabilities} pageId={page.id} />
+              <PublicationManagement
+                capabilities={pageCapabilities}
+                key={page.id}
+                pageId={page.id}
+              />
             ) : null}
             {pageCapabilities?.canManageAccess ? <PageAccessPanel page={page} /> : null}
           </div>

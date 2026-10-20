@@ -62,11 +62,12 @@ describe('useAssetReadUrl', () => {
       api.getAssetReadUrlQueryKey('asset-1', 'page:page-1', 'user-1'),
     );
 
+    const callsBeforeImageError = read.mock.calls.length;
     act(() => {
       result.current.onImageError();
       result.current.onImageError();
     });
-    await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(read.mock.calls.length).toBe(callsBeforeImageError + 1));
     expect(read).toHaveBeenCalledWith('asset-1', { pageId: 'page-1' });
     queryClient.clear();
   });
@@ -94,23 +95,26 @@ describe('useAssetReadUrl', () => {
   });
 
   it('refreshes once when the image first fails, even if the signed URL changes', async () => {
-    const read = mockReadUrls('asset-cycle', [
-      'https://cdn.example.com/old.jpg',
-      'https://cdn.example.com/new.jpg',
-    ]);
+    let imageFailed = false;
+    const read = vi.spyOn(api, 'createAssetReadUrl').mockImplementation(async () => ({
+      url: imageFailed ? 'https://cdn.example.com/new.jpg' : 'https://cdn.example.com/old.jpg',
+      expiresInSeconds: 300,
+    }));
     const { queryClient, wrapper } = createWrapper();
     const { result } = renderHook(
       () => useAssetReadUrl('asset-cycle', 'user-1', { id: 'page-1', kind: 'page' }),
-      { wrapper },
+      { reactStrictMode: true, wrapper },
     );
     await waitFor(() => expect(result.current.src).toBe('https://cdn.example.com/old.jpg'));
 
+    const callsBeforeImageError = read.mock.calls.length;
+    imageFailed = true;
     act(() => result.current.onImageError());
     await waitFor(() => expect(result.current.src).toBe('https://cdn.example.com/new.jpg'));
     act(() => result.current.onImageError());
 
     await waitFor(() => expect(result.current.state).toBe('unavailable'));
-    expect(read).toHaveBeenCalledTimes(2);
+    expect(read).toHaveBeenCalledTimes(callsBeforeImageError + 1);
     queryClient.clear();
   });
 

@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { Editor } from '@tiptap/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
-import { createPageDocumentEditorExtensions } from '@/entities/page-document';
+import { createPageDocumentEditorExtensions } from '../../model/page-document-editor-extensions';
 
 import { createPageDocumentRelativeSelection } from '../../model/page-document-relative-selection';
 import { LinkForm } from './link-form';

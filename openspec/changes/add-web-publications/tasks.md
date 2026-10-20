@@ -10,10 +10,11 @@
 
 ## 2. Publication management feature и UI
 
-- [x] 2.1 Добавить компактную publication management feature в текущую composition редактора; получать статус только для `canManagePage`, использовать существующие PageCapabilities, generated API, TanStack Query, React Hook Form/Zod и shadcn wrappers.
+- [x] 2.1 Добавить компактное route-specific publication management в `pages/workspace/ui` и orchestration hook в `pages/workspace/model`, так как composition имеет одного потребителя; получать статус только для `canManagePage`, использовать существующие PageCapabilities, generated API, TanStack Query, React Hook Form/Zod и shadcn wrappers.
 - [x] 2.2 Реализовать `not published`/draft, `published`, `unpublished`, pending/error/uncertain отображение, первый Publish через PATCH draft → POST publish, явный Republish, отдельный metadata PATCH, Unpublish confirmation и URL open/copy из publicPath + browser Web origin.
 - [x] 2.3 Обеспечить pending guard, доступные labels/focus/keyboard interactions, field errors для slug/SEO, retry только после сверки состояния, query update/invalidation и сохранение editor/input при permission/network failures. Для неизвестного результата перечитывать status один раз; прежний status не считать доказательством отказа.
 - [x] 2.4 Добавить RTL tests для первого publish/draft partial success, backend status/DTO, retry и Unpublish, metadata-only slug/SEO, conflicts, validation, permission denial, pending/error states, URL copy и неопределённых результатов. Проверить Publish timeout после commit, timeout до подтверждения, Unpublish подтверждение через GET, Republish confirmation только по изменившемуся backend `publishedAt` и uncertain state при прежнем timestamp, отсутствие автоматического retry, metadata GET reconciliation и query invalidation; не выводить unpublished changes indicator без backend signal.
+- [x] 2.5 Изолировать локальное состояние management по `pageId` через keyed composition; добавить RTL tests навигации A→B с сохранённой publication/feedback и незавершённым mutation, убедиться, что поздний ответ A не меняет UI B и query key остаётся page-specific.
 
 **Зависимости:** этап 1.
 
@@ -21,8 +22,8 @@
 
 ## 3. Schema-safe static presentation
 
-- [x] 3.1 Проверить транзитивные imports существующей schema, normalizers и static renderer; если collaboration import блокирует SSR boundary, вынести только нужную базовую schema-композицию, сохранив существующие extensions и нормализацию без переписывания `renderPageDocumentToHTML`.
-- [x] 3.2 Добавить явную static-safe entrypoint и React static-rendering mapping на уже установленном `@tiptap/static-renderer/pm/react`; переиспользовать существующие mappings/normalizers и presentation из #49, без NodeViews, HTML string injection или собственного renderer framework.
+- [x] 3.1 Проверить транзитивные imports существующей schema, normalizers и static renderer; оставить базовую schema-композицию static-safe в public API `entities/page-document`, а Collaboration/Yjs editor extension composition держать в `features/page-editing` без переписывания `renderPageDocumentToHTML`.
+- [x] 3.2 Использовать public `entities/page-document` API и React static-rendering mapping на уже установленном `@tiptap/static-renderer/pm/react`; переиспользовать существующие mappings/normalizers и presentation из #49, без NodeViews, HTML string injection или собственного renderer framework.
 - [x] 3.3 Реализовать безопасную нормализацию JSON для supported nodes/marks, fallback неизвестных/invalid nodes и отказ от rendering неподдерживаемой schema version.
 - [x] 3.4 Добавить unit tests для schema-v2 nodes/marks, image/cover/media, legacy external media, URL sanitization, unsupported nodes/version и React Server Component rendering.
 
@@ -67,7 +68,7 @@
 
 ## 7. E2E, документация и repository checks
 
-- [x] 7.1 Расширить существующий Playwright harness end-to-end сценарием publish → anonymous open → live edit remains unchanged → republish → slug change/old path 404 → unpublish/404 → republish after unpublish. Fixture-dependent SEO, permission-denied и conflict cases остаются частью исполнения сценария в настроенном окружении.
+- [x] 7.1 Расширить существующий Playwright harness сценарием publish snapshot A → anonymous open → live edit B и подтверждение записи B в Yjs state через existing internal document read → anonymous open до Republish всё ещё показывает A → republish показывает B → slug change/old path 404 → unpublish/404 → republish after unpublish. Internal service token используется только Node test runner; fixture-dependent SEO, permission-denied и conflict cases остаются частью исполнения сценария в настроенном окружении.
 - [ ] 7.2 Запустить end-to-end сценарий на disposable page с настроенными credentials; проверить SEO, permission-denied и conflict cases, где это позволяет fixture.
 - [x] 7.3 Проверить snapshot asset/image/cover rendering и прежнюю доступность активных SnapshotAsset после изменений live document существующими API integration tests либо уже доступным API/storage fixture; не добавлять второй test framework. `pnpm --filter @lite-notion/api exec vitest run --config vitest.integration.config.mts src/publications/publications-read.integration-spec.ts` прошёл на локальной PostgreSQL.
 - [x] 7.4 Использовать узкую source-boundary проверку и production build/dependency trace существующими средствами: public route не должен тянуть `@tiptap/react`, generated React Query endpoint module, Hocuspocus, Yjs, Awareness или Collaboration; не создавать отдельный dependency-trace framework.

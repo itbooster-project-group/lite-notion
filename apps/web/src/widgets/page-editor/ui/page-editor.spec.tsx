@@ -3,12 +3,10 @@ import { Editor } from '@tiptap/core';
 import { StrictMode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
-import {
-  createPageDocumentEditorExtensions,
-  PAGE_DOCUMENT_SCHEMA_VERSION,
-} from '@/entities/page-document';
+import { PAGE_DOCUMENT_SCHEMA_VERSION } from '@/entities/page-document';
 import {
   createInMemoryPageDocumentSession,
+  createPageDocumentEditorExtensions,
   type PageDocumentSession,
 } from '@/features/page-editing';
 

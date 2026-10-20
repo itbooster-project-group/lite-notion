@@ -24,7 +24,7 @@ Backend #52 уже отделяет immutable опубликованный snaps
 
 ## Impact
 
-- Web: `apps/web/app`, `apps/web/src/pages/workspace`, новый publication-management feature и public publication page composition, безопасная граница `entities/page-document`, shared API exports, public response headers.
+- Web: `apps/web/app`, route-specific publication management в `apps/web/src/pages/workspace`, public publication page composition, static-safe public API `entities/page-document`, editor-specific collaboration composition в `features/page-editing`, shared API exports, public response headers.
 - Generated API: использовать сгенерированные management endpoints/hooks и DTO через существующий `shared/api` public API; для anonymous SSR импортировать только generated DTO как type-only, не импортируя endpoint module с React Query и не копируя контракты вручную. MSW обновлять только если генерация/контракт потребуют этого.
 - Backend: существующие endpoints из `apps/api/src/publications` и PostgreSQL outbox остаются источниками истины; схема БД и backend не меняются.
 - Конфигурация/документация: описать server-only `PUBLICATION_REVALIDATION_TOKEN` для Web и соответствующий URL в API; CI тестирует ACK endpoint с тестовым токеном, deployment secrets не коммитятся. Backend не удаляет доставленные outbox rows, поэтому ACK снимает pending backlog, но не задаёт retention общей таблицы.

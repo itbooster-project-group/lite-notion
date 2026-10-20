@@ -1,9 +1,8 @@
-import { Editor } from '@tiptap/core';
 import { afterEach, describe, expect, it } from 'vitest';
+import { prosemirrorToYXmlFragment } from 'y-prosemirror';
 import * as Y from 'yjs';
+import { getPageDocumentSchema, PAGE_CONTENT_YJS_FIELD } from '@/entities/page-document';
 
-import { createPageDocumentEditorExtensions } from '../model/editor-schema';
-import { PAGE_CONTENT_YJS_FIELD } from '../model/schema-version';
 import {
   decodePageDocumentState,
   encodePageDocumentState,
@@ -11,17 +10,12 @@ import {
   pageDocumentToJSON,
 } from './yjs-state';
 
-const editors: Editor[] = [];
 const documents: Y.Doc[] = [];
 
 afterEach(() => {
-  for (const editor of editors) {
-    editor.destroy();
-  }
   for (const document of documents) {
     document.destroy();
   }
-  editors.length = 0;
   documents.length = 0;
 });
 
@@ -39,17 +33,20 @@ describe('page document Yjs state', () => {
 
   it('читает populated content из canonical field после round-trip', () => {
     const source = new Y.Doc();
-    const editor = new Editor({ extensions: createPageDocumentEditorExtensions(source) });
+    const schema = getPageDocumentSchema();
+    const content = schema.nodeFromJSON({
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Содержимое страницы' }] }],
+    });
+    prosemirrorToYXmlFragment(content, getPageDocumentContentFragment(source));
     documents.push(source);
-    editors.push(editor);
-    editor.commands.setContent('<p>Содержимое страницы</p>');
 
     const restored = decodePageDocumentState(encodePageDocumentState(source));
     documents.push(restored);
 
     expect(restored.getXmlFragment(PAGE_CONTENT_YJS_FIELD).length).toBeGreaterThan(0);
     expect(restored.getXmlFragment('prosemirror').length).toBe(0);
-    expect(pageDocumentToJSON(restored)).toEqual(editor.getJSON());
+    expect(pageDocumentToJSON(restored)).toEqual(content.toJSON());
   });
 
   it('отклоняет corrupted Yjs update', () => {

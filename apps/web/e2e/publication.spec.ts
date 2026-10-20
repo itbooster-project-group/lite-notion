@@ -1,23 +1,32 @@
 import { expect, test } from '@playwright/test';
+import * as Y from 'yjs';
+import { pageDocumentToJSON } from '../src/entities/page-document';
 
 const pageId = process.env.PLAYWRIGHT_PUBLICATION_DISPOSABLE_PAGE_ID;
 const email = process.env.PLAYWRIGHT_USER_A_EMAIL;
 const password = process.env.PLAYWRIGHT_USER_A_PASSWORD;
+const internalApiOrigin = process.env.PLAYWRIGHT_INTERNAL_API_ORIGIN;
+const internalServiceToken = process.env.PLAYWRIGHT_INTERNAL_SERVICE_TOKEN;
 const canRunPublicationE2E = Boolean(
-  pageId && email && password && process.env.PLAYWRIGHT_PUBLICATION_E2E_ENABLED === '1',
+  pageId &&
+    email &&
+    password &&
+    internalApiOrigin &&
+    internalServiceToken &&
+    process.env.PLAYWRIGHT_PUBLICATION_E2E_ENABLED === '1',
 );
 
 test.describe('publication flow', () => {
   test.skip(
     !canRunPublicationE2E,
-    'A disposable unpublished page, editor credentials, and PLAYWRIGHT_PUBLICATION_E2E_ENABLED=1 are required',
+    'A disposable page, editor credentials, internal document-read fixture, and PLAYWRIGHT_PUBLICATION_E2E_ENABLED=1 are required',
   );
 
   test('publishes, keeps snapshot stable, republishes, changes slug, unpublishes, and republishes', async ({
     browser,
     page,
   }) => {
-    if (!pageId || !email || !password) {
+    if (!pageId || !email || !password || !internalApiOrigin || !internalServiceToken) {
       throw new Error('Publication E2E fixture is incomplete');
     }
 
@@ -31,6 +40,16 @@ test.describe('publication flow', () => {
       page.getByRole('button', { name: 'Войти' }).click(),
     ]);
     await page.goto(`/pages/${pageId}`);
+
+    const editor = page.locator('[data-page-editor-content]');
+    await expect(editor).toBeVisible();
+    await expect(page.locator('[data-collaboration-status="connected"]')).toBeVisible();
+    const contentA = `publication-e2e-A-${firstSlug}`;
+    await editor.click();
+    await page.keyboard.press('ControlOrMeta+End');
+    await page.keyboard.type(` ${contentA}`);
+    await expect(editor).toContainText(contentA);
+    await waitForPersistedContent(pageId, contentA, internalApiOrigin, internalServiceToken);
 
     await page.getByRole('button', { name: 'Публикация' }).click();
     await page.getByLabel('Адрес публикации').fill(firstSlug);
@@ -48,19 +67,27 @@ test.describe('publication flow', () => {
     await expect(publicPage.locator('article')).toBeVisible();
     await expect(publicPage).toHaveTitle('Publication E2E title');
     const originalPublicText = await publicPage.locator('article').innerText();
+    await expect(publicPage.locator('article')).toContainText(contentA);
 
-    const editor = page.locator('[data-page-editor-content]');
+    const contentB = `publication-e2e-B-${firstSlug}`;
     await editor.click();
     await page.keyboard.press('ControlOrMeta+End');
-    await page.keyboard.type(' Unpublished change');
-    await expect(editor).toContainText('Unpublished change');
+    await page.keyboard.type(` ${contentB}`);
+    await expect(editor).toContainText(contentB);
+    await waitForPersistedContent(pageId, contentB, internalApiOrigin, internalServiceToken);
+
+    await publicPage.goto(`/p/${firstSlug}`);
+    await expect(publicPage.locator('article')).toContainText(contentA);
+    await expect(publicPage.locator('article')).not.toContainText(contentB);
+
     await page.getByRole('button', { name: 'Публикация' }).click();
     await page.getByRole('button', { name: 'Republish' }).click();
     await expect(page.getByText('Новая опубликованная версия создана.')).toBeVisible();
 
     await publicPage.goto(`/p/${firstSlug}`);
-    await expect(publicPage.locator('article')).toContainText('Unpublished change');
-    expect(originalPublicText).not.toContain('Unpublished change');
+    await expect(publicPage.locator('article')).toContainText(contentA);
+    await expect(publicPage.locator('article')).toContainText(contentB);
+    expect(originalPublicText).not.toContain(contentB);
 
     await page.goto(`/pages/${pageId}`);
     await page.getByRole('button', { name: 'Публикация' }).click();
@@ -87,3 +114,45 @@ test.describe('publication flow', () => {
     await publicContext.close();
   });
 });
+
+async function waitForPersistedContent(
+  targetPageId: string,
+  marker: string,
+  apiOrigin: string,
+  serviceToken: string,
+) {
+  const endpoint = new URL(
+    `/internal/pages/${encodeURIComponent(targetPageId)}/document`,
+    apiOrigin,
+  );
+  await expect
+    .poll(
+      async () => {
+        const response = await fetch(endpoint, {
+          headers: { 'x-internal-service-token': serviceToken },
+        });
+        if (!response.ok) return false;
+        const value: unknown = await response.json();
+        if (!isPersistedDocument(value)) return false;
+
+        const document = new Y.Doc();
+        try {
+          if (value.yjsState) Y.applyUpdate(document, Buffer.from(value.yjsState, 'base64'));
+          return JSON.stringify(pageDocumentToJSON(document)).includes(marker);
+        } finally {
+          document.destroy();
+        }
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(true);
+}
+
+function isPersistedDocument(value: unknown): value is Readonly<{ yjsState: string }> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'yjsState' in value &&
+    typeof value.yjsState === 'string'
+  );
+}

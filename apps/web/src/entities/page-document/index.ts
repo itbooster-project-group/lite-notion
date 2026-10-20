@@ -20,7 +20,9 @@ export {
   type PageDocumentYoutubeAttributes,
 } from './lib/media-validation';
 export {
+  claimUniquePageDocumentNodeId,
   collectPageDocumentNodeIds,
+  isPageDocumentMediaNodeType,
   preparePageDocumentContentForInsertion,
 } from './lib/node-id-lifecycle';
 export {
@@ -37,14 +39,11 @@ export {
   pageDocumentToJSON,
 } from './lib/yjs-state';
 export {
-  createPageDocumentEditorExtensions,
+  createPageDocumentSchemaExtensions,
+  getPageDocumentSchema,
   PageDocumentImage,
   PageDocumentVideo,
   PageDocumentYoutube,
-} from './model/editor-schema';
-export {
-  createPageDocumentSchemaExtensions,
-  getPageDocumentSchema,
 } from './model/page-document-schema';
 export {
   isSupportedPageDocumentSchemaVersion,

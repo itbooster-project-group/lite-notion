@@ -2,19 +2,14 @@ import type { Extensions } from '@tiptap/core';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import type { Doc as YDoc } from 'yjs';
+import {
+  createPageDocumentSchemaExtensions,
+  PAGE_CONTENT_YJS_FIELD,
+  type PageDocumentImage,
+} from '@/entities/page-document';
 import type { CollaborationProvider } from '@/shared/collaboration';
 import { resolvePresenceColor } from '@/shared/lib/presence-color';
 import { PageDocumentNodeIdDeconflict } from './node-id-deconflict';
-import { createPageDocumentSchemaExtensions, type PageDocumentImage } from './page-document-schema';
-import { PAGE_CONTENT_YJS_FIELD } from './schema-version';
-
-export {
-  createPageDocumentSchemaExtensions,
-  getPageDocumentSchema,
-  PageDocumentImage,
-  PageDocumentVideo,
-  PageDocumentYoutube,
-} from './page-document-schema';
 
 export function createPageDocumentEditorExtensions(
   document: YDoc,

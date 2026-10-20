@@ -1,13 +1,9 @@
 import { Editor } from '@tiptap/core';
 import { afterEach, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
-import {
-  createPageDocumentEditorExtensions,
-  getPageDocumentContentFragment,
-  pageDocumentToJSON,
-} from '@/entities/page-document';
-
+import { getPageDocumentContentFragment, pageDocumentToJSON } from '@/entities/page-document';
 import { insertPageDocumentContent } from './insert-page-document-content';
+import { createPageDocumentEditorExtensions } from './page-document-editor-extensions';
 
 const NODE_ID = '11111111-1111-4111-8111-111111111111';
 

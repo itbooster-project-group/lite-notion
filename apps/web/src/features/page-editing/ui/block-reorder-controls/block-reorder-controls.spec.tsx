@@ -3,7 +3,7 @@ import { Editor } from '@tiptap/core';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
-import { createPageDocumentEditorExtensions } from '@/entities/page-document';
+import { createPageDocumentEditorExtensions } from '../../model/page-document-editor-extensions';
 
 import { BlockReorderControls } from './block-reorder-controls';
 
