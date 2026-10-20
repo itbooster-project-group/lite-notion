@@ -1,7 +1,9 @@
 import type { JSONContent } from '@tiptap/core';
 import { cache } from 'react';
-import { isValidPageDocumentForStaticRendering } from '@/entities/page-document/lib/static-rendering';
-import { isSupportedPageDocumentSchemaVersion } from '@/entities/page-document/model/schema-version';
+import {
+  isSupportedPageDocumentSchemaVersion,
+  isValidPageDocumentForStaticRendering,
+} from '@/entities/page-document';
 import type { PublicAssetDescriptorDto, PublicPublicationDto } from '@/shared/api';
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;

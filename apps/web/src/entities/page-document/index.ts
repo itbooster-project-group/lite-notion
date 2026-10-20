@@ -24,6 +24,8 @@ export {
   preparePageDocumentContentForInsertion,
 } from './lib/node-id-lifecycle';
 export {
+  isValidPageDocumentForStaticRendering,
+  normalizePageDocumentForStaticRendering,
   type PageDocumentStaticRenderingInput,
   renderPageDocumentToHTML,
   UnsupportedPageDocumentStaticRenderingSchemaError,
@@ -36,12 +38,14 @@ export {
 } from './lib/yjs-state';
 export {
   createPageDocumentEditorExtensions,
-  createPageDocumentSchemaExtensions,
-  getPageDocumentSchema,
   PageDocumentImage,
   PageDocumentVideo,
   PageDocumentYoutube,
 } from './model/editor-schema';
+export {
+  createPageDocumentSchemaExtensions,
+  getPageDocumentSchema,
+} from './model/page-document-schema';
 export {
   isSupportedPageDocumentSchemaVersion,
   PAGE_CONTENT_YJS_FIELD,

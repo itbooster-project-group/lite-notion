@@ -2,9 +2,11 @@ import type { JSONContent } from '@tiptap/core';
 import { renderToReactElement } from '@tiptap/static-renderer/pm/react';
 import type { ReactNode } from 'react';
 import { createElement } from 'react';
-import { normalizePageDocumentForStaticRendering } from '@/entities/page-document/lib/static-rendering';
-import { createPageDocumentSchemaExtensions } from '@/entities/page-document/model/page-document-schema';
-import { isSupportedPageDocumentSchemaVersion } from '@/entities/page-document/model/schema-version';
+import {
+  createPageDocumentSchemaExtensions,
+  isSupportedPageDocumentSchemaVersion,
+  normalizePageDocumentForStaticRendering,
+} from '@/entities/page-document';
 import { PublicationImage } from './publication-image';
 
 export class UnsupportedPublicDocumentSchemaError extends Error {
