@@ -12,6 +12,7 @@ import { PageDocumentModule } from './pages/page-document/page-document.module';
 import { PagesModule } from './pages/pages.module';
 import { ProjectsModule } from './projects/projects.module';
 import { PublicationsModule } from './publications/publications.module';
+import { SearchModule } from './search/search.module';
 import { SnapshotsModule } from './snapshots/snapshots.module';
 import { TrashCleanupModule } from './trash/trash-cleanup.module';
 
@@ -32,6 +33,7 @@ import { TrashCleanupModule } from './trash/trash-cleanup.module';
     ProjectsModule,
     PublicationsModule,
     SnapshotsModule,
+    SearchModule,
     TrashCleanupModule,
     InternalModule,
   ],

@@ -54,6 +54,7 @@ const SECURED_OPERATION_IDS = [
   'restorePage',
   'restoreProject',
   'revokePagePermission',
+  'searchPages',
   'setPageAccessMode',
   'setPageCover',
   'unpublishPage',

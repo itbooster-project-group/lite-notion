@@ -13,6 +13,7 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "assets:rebuild-projection": "node --import tsx scripts/rebuild-assets-projection.ts",
+    "search:rebuild-projection": "node --import tsx scripts/rebuild-search-projection.ts",
     "openapi:generate": "node --import tsx src/generate-openapi.ts"
   },
   "devDependencies": {

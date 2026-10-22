@@ -6,6 +6,7 @@ import {
   type AccessiblePageRow,
   type PagePermissionRecord,
   PagePermissionsRepository,
+  type ResolvedPageRole,
 } from './page-permissions.repository';
 
 export interface PageAccessVerdict {
@@ -28,6 +29,10 @@ export class PagePermissionsService {
   /** Роль либо `null`. Тот же ответ получает collaboration runtime. */
   resolveRole(userId: string, pageId: string): Promise<PageRole | null> {
     return this.permissions.resolveRole(userId, pageId);
+  }
+
+  resolveRoles(userId: string, pageIds: readonly string[]): Promise<ResolvedPageRole[]> {
+    return this.permissions.resolveRoles(userId, pageIds);
   }
 
   /**

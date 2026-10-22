@@ -41,6 +41,11 @@ export class InMemoryPageDocumentRepository extends PageDocumentRepository {
     return this.documents.has(pageId);
   }
 
+  async lockForSearchProjection(pageId: string): Promise<bigint | null> {
+    const document = this.documents.get(pageId);
+    return document === undefined ? null : BigInt(document.storageRevision);
+  }
+
   async insertEmpty(pageId: string, tiptapSchemaVersion: number): Promise<void> {
     if (this.failInsert) {
       throw new Error('document insert failed');

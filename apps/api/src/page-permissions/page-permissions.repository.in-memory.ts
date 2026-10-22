@@ -6,6 +6,7 @@ import { PageRole } from './constants';
 import type {
   AccessiblePageRow,
   PagePermissionRecord,
+  ResolvedPageRole,
   UpsertPermissionInput,
 } from './page-permissions.repository';
 import { PagePermissionsRepository } from './page-permissions.repository';
@@ -74,6 +75,15 @@ export class InMemoryPagePermissionsRepository extends PagePermissionsRepository
     }
 
     return null;
+  }
+
+  async resolveRoles(userId: string, pageIds: readonly string[]): Promise<ResolvedPageRole[]> {
+    const roles: ResolvedPageRole[] = [];
+    for (const pageId of pageIds) {
+      const role = await this.resolveRole(userId, pageId);
+      if (role !== null) roles.push({ pageId, role });
+    }
+    return roles;
   }
 
   async findAccessiblePages(userId: string): Promise<AccessiblePageRow[]> {

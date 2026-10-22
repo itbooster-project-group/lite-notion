@@ -139,20 +139,21 @@ model Page {
   deletedAt     DateTime?
   deletedOrigin PageDeletionOrigin?
 
-  owner           User                 @relation("PageOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  createdBy       User                 @relation("PageCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  project         Project              @relation(fields: [projectId, ownerId], references: [id, ownerId], onDelete: Cascade)
-  parent          Page?                @relation("PageTree", fields: [parentPageId, ownerId, projectId], references: [id, ownerId, projectId], onDelete: Cascade, onUpdate: NoAction)
-  children        Page[]               @relation("PageTree")
-  document        PageDocument?
-  snapshots       DocumentSnapshot[]
-  publication     PagePublication?
-  permissions     PagePermission[]
-  coverAssetId    String?              @db.Uuid
-  coverAsset      Asset?               @relation("PageCover", fields: [coverAssetId], references: [id], onDelete: Restrict)
-  assetGrants     PageAssetGrant[]
-  assets          PageAsset[]
-  assetProjection PageAssetProjection?
+  owner            User                 @relation("PageOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdBy        User                 @relation("PageCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  project          Project              @relation(fields: [projectId, ownerId], references: [id, ownerId], onDelete: Cascade)
+  parent           Page?                @relation("PageTree", fields: [parentPageId, ownerId, projectId], references: [id, ownerId, projectId], onDelete: Cascade, onUpdate: NoAction)
+  children         Page[]               @relation("PageTree")
+  document         PageDocument?
+  searchProjection PageSearchDocument?
+  snapshots        DocumentSnapshot[]
+  publication      PagePublication?
+  permissions      PagePermission[]
+  coverAssetId     String?              @db.Uuid
+  coverAsset       Asset?               @relation("PageCover", fields: [coverAssetId], references: [id], onDelete: Restrict)
+  assetGrants      PageAssetGrant[]
+  assets           PageAsset[]
+  assetProjection  PageAssetProjection?
 
   @@unique([id, ownerId, projectId])
   @@index([ownerId, parentPageId, position])
@@ -265,6 +266,25 @@ model PageAssetProjection {
   retryAfter               DateTime?
   lastErrorCode            String?
   updatedAt                DateTime  @updatedAt
+
+  page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@index([sourceStorageRevision])
+  @@index([retryAfter])
+}
+
+/// Восстанавливаемая FTS projection persisted Y.Doc; sourceStorageRevision —
+/// watermark, а authoritative текст остаётся в PageDocument.yjsState.
+model PageSearchDocument {
+  pageId                   String                  @id @db.Uuid
+  plainText                String                  @db.Text
+  searchVector             Unsupported("tsvector")
+  sourceStorageRevision    BigInt?
+  attemptedStorageRevision BigInt?
+  attemptCount             Int                     @default(0)
+  retryAfter               DateTime?
+  lastErrorCode            String?                 @db.VarChar(100)
+  updatedAt                DateTime                @updatedAt
 
   page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
 

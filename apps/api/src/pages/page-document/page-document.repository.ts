@@ -37,6 +37,9 @@ export abstract class PageDocumentRepository {
   /** Locks the persisted document row for a publication capture transaction. */
   abstract lockForPublication(pageId: string): Promise<boolean>;
 
+  /** Locks and reads the authoritative revision before a derived projection write. */
+  abstract lockForSearchProjection(pageId: string): Promise<bigint | null>;
+
   /**
    * Пустой документ создаваемой страницы. Владелец не проверяется: строка страницы
    * вставлена той же транзакцией строкой выше.
@@ -77,6 +80,16 @@ export class PrismaPageDocumentRepository extends PageDocumentRepository {
       FOR UPDATE
     `;
     return rows.length > 0;
+  }
+
+  async lockForSearchProjection(pageId: string): Promise<bigint | null> {
+    const rows = await this.client.$queryRaw<Array<{ storageRevision: bigint }>>`
+      SELECT "storageRevision"
+      FROM "PageDocument"
+      WHERE "pageId" = ${pageId}::uuid
+      FOR UPDATE
+    `;
+    return rows[0]?.storageRevision ?? null;
   }
 
   async insertEmpty(pageId: string, tiptapSchemaVersion: number): Promise<void> {

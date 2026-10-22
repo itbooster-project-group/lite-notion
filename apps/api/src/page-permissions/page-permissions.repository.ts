@@ -14,6 +14,11 @@ export interface PageAccessChainRow {
   role: 'VIEWER' | 'EDITOR' | null;
 }
 
+export interface ResolvedPageRole {
+  pageId: string;
+  role: PageRole;
+}
+
 /** Страница чужого дерева, доступная спрашивающему, с его ролью на ней. */
 export interface AccessiblePageRow {
   id: string;
@@ -85,6 +90,9 @@ export abstract class PagePermissionsRepository {
   /** Эффективная роль либо `null`, когда доступа нет. */
   abstract resolveRole(userId: string, pageId: string): Promise<PageRole | null>;
 
+  /** Эффективные роли доступных страниц из ограниченного набора кандидатов. */
+  abstract resolveRoles(userId: string, pageIds: readonly string[]): Promise<ResolvedPageRole[]>;
+
   /** Плоский список доступных чужих страниц с ролью на каждой. */
   abstract findAccessiblePages(userId: string): Promise<AccessiblePageRow[]>;
 
@@ -117,6 +125,50 @@ export class PrismaPagePermissionsRepository extends PagePermissionsRepository {
 
   async resolveRole(userId: string, pageId: string): Promise<PageRole | null> {
     return this.decideRole(await this.readAccessChain(userId, pageId), userId);
+  }
+
+  async resolveRoles(userId: string, pageIds: readonly string[]): Promise<ResolvedPageRole[]> {
+    if (pageIds.length === 0) return [];
+
+    const rows = await this.client.$queryRaw<
+      Array<{ pageId: string; role: 'OWNER' | 'VIEWER' | 'EDITOR' }>
+    >`
+      WITH RECURSIVE chain AS (
+        SELECT page."id" AS "targetPageId", page."id", page."parentPageId",
+               page."ownerId", page."accessMode", 0 AS depth
+        FROM "Page" page
+        JOIN "Project" project
+          ON project."id" = page."projectId" AND project."deletedAt" IS NULL
+        WHERE page."id" = ANY(${[...pageIds]}::uuid[]) AND page."deletedAt" IS NULL
+        UNION ALL
+        SELECT chain."targetPageId", parent."id", parent."parentPageId",
+               parent."ownerId", parent."accessMode", chain.depth + 1
+        FROM "Page" parent
+        JOIN chain ON chain."parentPageId" = parent."id"
+        WHERE chain."accessMode" = 'INHERIT'::"PageAccessMode"
+          AND parent."deletedAt" IS NULL
+      )
+      SELECT DISTINCT ON (chain."targetPageId")
+             chain."targetPageId" AS "pageId",
+             CASE
+               WHEN chain.depth = 0 AND chain."ownerId" = ${userId}::uuid THEN 'OWNER'
+               ELSE permission."role"::text
+             END AS role
+      FROM chain
+      LEFT JOIN "PagePermission" permission
+        ON permission."pageId" = chain."id" AND permission."userId" = ${userId}::uuid
+      WHERE (chain.depth = 0 AND chain."ownerId" = ${userId}::uuid)
+         OR permission."role" IS NOT NULL
+      ORDER BY chain."targetPageId",
+               CASE WHEN chain.depth = 0 AND chain."ownerId" = ${userId}::uuid THEN -1
+                    ELSE chain.depth END ASC
+    `;
+
+    return rows.map(({ pageId, role }) => ({
+      pageId,
+      role:
+        role === 'OWNER' ? PageRole.OWNER : role === 'EDITOR' ? PageRole.EDITOR : PageRole.VIEWER,
+    }));
   }
 
   async findAccessiblePages(userId: string): Promise<AccessiblePageRow[]> {
