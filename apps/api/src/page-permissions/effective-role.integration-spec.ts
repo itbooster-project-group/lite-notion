@@ -185,4 +185,35 @@ describe('resolveEffectiveRole on PostgreSQL', () => {
 
     await expect(repository(prisma).resolveRole(actorId, leaf)).resolves.toBeNull();
   });
+
+  it('пакетное разрешение ролей совпадает с resolveRole для владельца, наследования и restricted child', async () => {
+    const root = await createPage({});
+    const inherited = await createPage({ parentPageId: root });
+    const restricted = await createPage({ parentPageId: root, restricted: true });
+    const explicitlySharedChild = await createPage({ parentPageId: restricted });
+    const inaccessible = await createPage({});
+
+    await grant(root, 'EDITOR');
+    await grant(explicitlySharedChild, 'VIEWER');
+
+    const pages = [root, inherited, restricted, explicitlySharedChild, inaccessible];
+    const repositoryInstance = repository(prisma);
+    const batch = new Map(
+      (await repositoryInstance.resolveRoles(actorId, pages)).map(({ pageId, role }) => [
+        pageId,
+        role,
+      ]),
+    );
+
+    for (const pageId of pages) {
+      expect(batch.get(pageId) ?? null).toBe(await repositoryInstance.resolveRole(actorId, pageId));
+    }
+    const ownerBatch = new Map(
+      (await repositoryInstance.resolveRoles(ownerId, pages)).map(({ pageId, role }) => [
+        pageId,
+        role,
+      ]),
+    );
+    expect(ownerBatch).toEqual(new Map(pages.map((pageId) => [pageId, PageRole.OWNER])));
+  });
 });

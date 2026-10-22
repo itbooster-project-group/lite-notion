@@ -6,3 +6,4 @@ export { getPagesMock } from './pages/pages.msw';
 export { getProjectsMock } from './projects/projects.msw';
 export { getPublicPublicationsMock } from './public-publications/public-publications.msw';
 export { getPublicationsMock } from './publications/publications.msw';
+export { getSearchMock } from './search/search.msw';

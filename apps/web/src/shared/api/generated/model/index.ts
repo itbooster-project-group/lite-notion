@@ -49,6 +49,8 @@ export * from './registerDto';
 export * from './renamePageDto';
 export * from './republishPageDto';
 export * from './restorePageDto';
+export * from './searchPagesParams';
+export * from './searchResultDto';
 export * from './setAccessModeDto';
 export * from './setAccessModeDtoAccessMode';
 export * from './setAssetReferenceDto';
