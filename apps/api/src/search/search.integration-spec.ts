@@ -7,6 +7,7 @@ import {
   type DatabaseClient,
   databaseClientOf,
   PrismaTransactionRunner,
+  type TransactionOptions,
   TransactionRunner,
   type TransactionScope,
 } from '../database/transaction';
@@ -226,6 +227,22 @@ class CountingPagePermissionsService extends PagePermissionsService {
   override resolveRoles(userId: string, pageIds: readonly string[]) {
     this.counters.permissionQueries += 1;
     return super.resolveRoles(userId, pageIds);
+  }
+}
+
+class CountingTransactionRunner extends TransactionRunner {
+  calls = 0;
+
+  constructor(private readonly delegate: TransactionRunner) {
+    super();
+  }
+
+  override run<T>(
+    operation: (scope: TransactionScope) => Promise<T>,
+    options?: TransactionOptions,
+  ): Promise<T> {
+    this.calls += 1;
+    return this.delegate.run(operation, options);
   }
 }
 
@@ -496,7 +513,7 @@ describe('page search on PostgreSQL', () => {
     ]);
   });
 
-  it('drops a body-only candidate whose revision changes before the authorized read', async () => {
+  it('keeps body results from the first snapshot when revision changes before the authorized read', async () => {
     const bodyOnly = await createPage({ title: 'unrelated title', body: 'interleavedbodymarker' });
     await indexPage(bodyOnly);
     const titleMatch = await createPage({
@@ -520,9 +537,89 @@ describe('page search on PostgreSQL', () => {
     pause.release();
 
     await expect(pendingSearch).resolves.toMatchObject([
-      { pageId: titleMatch, title: 'interleavedbodymarker current title', snippet: null },
+      { pageId: titleMatch, title: 'interleavedbodymarker current title' },
+      { pageId: bodyOnly, title: 'unrelated title' },
     ]);
   }, 15000);
+
+  it('keeps candidate batches on the snapshot established by the first body search', async () => {
+    const ids = Array.from(
+      { length: 201 },
+      (_, index) => `00000000-0000-4000-8000-${index.toString(16).padStart(12, '0')}`,
+    );
+    pageIds.push(...ids);
+    await prisma.$executeRaw`
+      INSERT INTO "Page" (
+        id, "ownerId", "projectId", "createdById", title, position, "createdAt", "updatedAt"
+      )
+      SELECT id, ${ownerId}::uuid, ${projectId}::uuid, ${ownerId}::uuid,
+             'unrelated batch snapshot title', 'a', NOW(), NOW()
+      FROM unnest(${ids}::uuid[]) AS generated(id)
+    `;
+    await prisma.$executeRaw`
+      INSERT INTO "PageDocument" (
+        "pageId", "tiptapSchemaVersion", "yjsState", "storageRevision", "createdAt", "updatedAt"
+      )
+      SELECT id, 2, ''::bytea, 0, NOW(), NOW() FROM unnest(${ids}::uuid[]) AS generated(id)
+    `;
+    await prisma.$executeRaw`
+      INSERT INTO "PageSearchDocument" (
+        "pageId", "plainText", "searchVector", "sourceStorageRevision",
+        "attemptedStorageRevision", "attemptCount", "updatedAt"
+      )
+      SELECT id, 'batchsnapshotbodymarker', to_tsvector('simple', 'batchsnapshotbodymarker'),
+             0, 0, 0, NOW()
+      FROM unnest(${ids}::uuid[]) AS generated(id)
+    `;
+
+    const concurrentClient = createPrismaClient({
+      databaseConnectionTimeoutMs: 5000,
+      databaseUrl:
+        process.env.DATABASE_URL ??
+        'postgresql://lite_notion:lite_notion@localhost:5432/lite_notion?schema=public',
+    });
+    const pause = pauseOnce();
+    const snapshotSearch = new SearchReadService(
+      new PauseAfterCandidatesRepository(prisma as unknown as DatabaseClient, pause.pause),
+      new PagePermissionsService(new PrismaPagePermissionsRepository(prisma)),
+      new PrismaTransactionRunner(prisma as unknown as PrismaService),
+    );
+
+    try {
+      const pendingSearch = snapshotSearch.searchPages(ownerId, 'batchsnapshotbodymarker', 150);
+      await pause.entered;
+      await concurrentClient.pageDocument.updateMany({
+        data: { storageRevision: 1n },
+        where: { pageId: { in: ids.slice(0, 20) } },
+      });
+      pause.release();
+
+      const results = await pendingSearch;
+      expect(results.map(({ pageId }) => pageId)).toEqual(ids.slice(0, 150));
+      expect(new Set(results.map(({ pageId }) => pageId)).size).toBe(150);
+    } finally {
+      pause.release();
+      await concurrentClient.$disconnect();
+    }
+  }, 20000);
+
+  it('returns an empty first batch from one transaction without permission or detail reads', async () => {
+    const queryCounts = { candidateQueries: 0, visibleQueries: 0 };
+    const transactions = new CountingTransactionRunner(
+      new PrismaTransactionRunner(prisma as unknown as PrismaService),
+    );
+    const emptySearch = new SearchReadService(
+      new CountingSearchRepository(prisma as unknown as DatabaseClient, queryCounts),
+      new PagePermissionsService(new PrismaPagePermissionsRepository(prisma)),
+      transactions,
+    );
+
+    await expect(
+      emptySearch.searchPages(ownerId, 'nomatchingbatchsnapshotterm', 10),
+    ).resolves.toEqual([]);
+    expect(transactions.calls).toBe(1);
+    expect(queryCounts).toEqual({ candidateQueries: 1, visibleQueries: 0 });
+  });
 
   it('keeps multilingual FTS deterministic and requires positive terms in one field', async () => {
     const russian = await createPage({ title: 'русский поиск', body: 'сохранённый текст' });
@@ -636,7 +733,7 @@ describe('page search on PostgreSQL', () => {
     }
   }, 15000);
 
-  it('does not return a candidate when access is revoked before its consistent read begins', async () => {
+  it('does not return a candidate when access is revoked before the search snapshot begins', async () => {
     const pageId = await createPage({ title: 'revokedbeforeconsistentreadmarker' });
     await grant(pageId);
     const concurrentClient = createPrismaClient({
@@ -645,25 +742,18 @@ describe('page search on PostgreSQL', () => {
         process.env.DATABASE_URL ??
         'postgresql://lite_notion:lite_notion@localhost:5432/lite_notion?schema=public',
     });
-    const pause = pauseOnce();
     const interleavedSearch = new SearchReadService(
-      new PauseAfterCandidatesRepository(prisma as unknown as DatabaseClient, pause.pause),
+      new SearchRepository(prisma as unknown as DatabaseClient),
       new PagePermissionsService(new PrismaPagePermissionsRepository(prisma)),
       new PrismaTransactionRunner(prisma as unknown as PrismaService),
     );
 
     try {
-      const pendingSearch = interleavedSearch.searchPages(
-        actorId,
-        'revokedbeforeconsistentreadmarker',
-        10,
-      );
-      await pause.entered;
       await concurrentClient.pagePermission.deleteMany({ where: { pageId, userId: actorId } });
-      pause.release();
-      await expect(pendingSearch).resolves.toEqual([]);
+      await expect(
+        interleavedSearch.searchPages(actorId, 'revokedbeforeconsistentreadmarker', 10),
+      ).resolves.toEqual([]);
     } finally {
-      pause.release();
       await concurrentClient.$disconnect();
     }
   }, 15000);

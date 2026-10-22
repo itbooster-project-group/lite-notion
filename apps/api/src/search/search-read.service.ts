@@ -21,13 +21,14 @@ export class SearchReadService {
     const query = queryInput.trim();
     if (query.length === 0) return [];
 
-    const firstBatch = await this.search.findCandidates(query, CANDIDATE_BATCH_SIZE, 0);
-    if (firstBatch.length === 0) return [];
-
     return this.transactions.run(
       async (scope) => {
         const transactionSearch = this.search.bind(scope);
         const transactionPermissions = this.permissions.bind(scope);
+        // This first read establishes the REPEATABLE READ snapshot for every batch and detail read.
+        const firstBatch = await transactionSearch.findCandidates(query, CANDIDATE_BATCH_SIZE, 0);
+        if (firstBatch.length === 0) return [];
+
         const results: SearchResultRecord[] = [];
         const seen = new Set<string>();
         let candidates = firstBatch;
