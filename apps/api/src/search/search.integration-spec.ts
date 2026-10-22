@@ -5,8 +5,9 @@ import { createPrismaClient, type PrismaClient } from '../database/client';
 import { PrismaService } from '../database/prisma.service';
 import {
   type DatabaseClient,
+  databaseClientOf,
   PrismaTransactionRunner,
-  type TransactionRunner,
+  TransactionRunner,
   type TransactionScope,
 } from '../database/transaction';
 import { PrismaPagePermissionsRepository } from '../page-permissions/page-permissions.repository';
@@ -15,11 +16,245 @@ import { PrismaPageDocumentRepository } from '../pages/page-document/page-docume
 import {
   PageSearchProjectionRepository,
   PrismaPageSearchProjectionRepository,
+  type SearchProjectionFailure,
+  type SearchProjectionFailureState,
 } from '../pages/page-document/page-search-projection.repository';
 import { SearchProjectionRetryScheduler } from '../pages/page-document/search-projection-retry.scheduler';
 import { ProjectPageSearchUseCase } from '../pages/page-document/use-cases/project-page-search.use-case';
+import type { SearchCandidate, SearchResultRecord } from './search.repository';
 import { SearchRepository } from './search.repository';
 import { SearchReadService } from './search-read.service';
+
+function pauseOnce() {
+  let signalEntered!: () => void;
+  let signalRelease!: () => void;
+  let used = false;
+  const entered = new Promise<void>((resolve) => (signalEntered = resolve));
+  const releasePromise = new Promise<void>((resolve) => (signalRelease = resolve));
+
+  return {
+    entered,
+    pause: async () => {
+      if (used) return;
+      used = true;
+      signalEntered();
+      await releasePromise;
+    },
+    release: () => signalRelease(),
+  };
+}
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((complete) => (resolve = complete));
+  return { promise, resolve };
+}
+
+interface ExplainPlanNode {
+  'Actual Rows'?: number;
+  'Actual Total Time'?: number;
+  'Group Key'?: string[];
+  'Index Name'?: string;
+  'Node Type': string;
+  'Relation Name'?: string;
+  'Rows Removed by Filter'?: number;
+  'Shared Hit Blocks'?: number;
+  'Shared Read Blocks'?: number;
+  'Sort Method'?: string;
+  Plans?: ExplainPlanNode[];
+}
+
+interface ExplainPlanEntry {
+  Plan: ExplainPlanNode;
+  'Execution Time': number;
+  'Planning Time': number;
+}
+
+function summarizePlan(rows: Array<{ 'QUERY PLAN': ExplainPlanEntry[] }>) {
+  const explain = rows[0]?.['QUERY PLAN']?.[0];
+  if (explain === undefined) throw new Error('PostgreSQL returned no EXPLAIN plan');
+
+  const nodes: ExplainPlanNode[] = [];
+  const visit = (node: ExplainPlanNode): void => {
+    nodes.push(node);
+    node.Plans?.forEach(visit);
+  };
+  visit(explain.Plan);
+
+  return {
+    planningMs: explain['Planning Time'],
+    executionMs: explain['Execution Time'],
+    nodes: nodes
+      .filter(({ 'Node Type': type }) => /Scan|Sort|Aggregate|Join|Limit/.test(type))
+      .map((node) => ({
+        type: node['Node Type'],
+        relation: node['Relation Name'],
+        index: node['Index Name'],
+        rows: node['Actual Rows'],
+        timeMs: node['Actual Total Time'],
+        rowsFiltered: node['Rows Removed by Filter'],
+        sharedHits: node['Shared Hit Blocks'],
+        sharedReads: node['Shared Read Blocks'],
+        sortMethod: node['Sort Method'],
+        groupKey: node['Group Key'],
+      })),
+  };
+}
+
+class PauseAfterCandidatesRepository extends SearchRepository {
+  constructor(
+    client: DatabaseClient,
+    private readonly pause: () => Promise<void>,
+  ) {
+    super(client);
+  }
+
+  override bind(scope: TransactionScope): SearchRepository {
+    return new PauseAfterCandidatesRepository(databaseClientOf(scope), this.pause);
+  }
+
+  override async findCandidates(
+    query: string,
+    limit: number,
+    offset: number,
+  ): Promise<SearchCandidate[]> {
+    const candidates = await super.findCandidates(query, limit, offset);
+    await this.pause();
+    return candidates;
+  }
+}
+
+class PauseOnCandidateCallRepository extends SearchRepository {
+  constructor(
+    client: DatabaseClient,
+    private readonly pauseAt: number,
+    private readonly pause: () => Promise<void>,
+    private readonly state = { calls: 0 },
+  ) {
+    super(client);
+  }
+
+  override bind(scope: TransactionScope): SearchRepository {
+    return new PauseOnCandidateCallRepository(
+      databaseClientOf(scope),
+      this.pauseAt,
+      this.pause,
+      this.state,
+    );
+  }
+
+  override async findCandidates(
+    query: string,
+    limit: number,
+    offset: number,
+  ): Promise<SearchCandidate[]> {
+    const candidates = await super.findCandidates(query, limit, offset);
+    this.state.calls += 1;
+    if (this.state.calls === this.pauseAt) await this.pause();
+    return candidates;
+  }
+}
+
+class PauseBeforeVisibleResultsRepository extends SearchRepository {
+  constructor(
+    client: DatabaseClient,
+    private readonly pause: () => Promise<void>,
+  ) {
+    super(client);
+  }
+
+  override bind(scope: TransactionScope): SearchRepository {
+    return new PauseBeforeVisibleResultsRepository(databaseClientOf(scope), this.pause);
+  }
+
+  override async findVisibleResults(
+    pageIds: readonly string[],
+    bodyMatchIds: readonly string[],
+    query: string,
+  ): Promise<SearchResultRecord[]> {
+    await this.pause();
+    return super.findVisibleResults(pageIds, bodyMatchIds, query);
+  }
+}
+
+class CountingSearchRepository extends SearchRepository {
+  constructor(
+    client: DatabaseClient,
+    private readonly counters: { candidateQueries: number; visibleQueries: number },
+  ) {
+    super(client);
+  }
+
+  override bind(scope: TransactionScope): SearchRepository {
+    return new CountingSearchRepository(databaseClientOf(scope), this.counters);
+  }
+
+  override findCandidates(
+    query: string,
+    limit: number,
+    offset: number,
+  ): Promise<SearchCandidate[]> {
+    this.counters.candidateQueries += 1;
+    return super.findCandidates(query, limit, offset);
+  }
+
+  override findVisibleResults(
+    pageIds: readonly string[],
+    bodyMatchIds: readonly string[],
+    query: string,
+  ): Promise<SearchResultRecord[]> {
+    this.counters.visibleQueries += 1;
+    return super.findVisibleResults(pageIds, bodyMatchIds, query);
+  }
+}
+
+class CountingPagePermissionsService extends PagePermissionsService {
+  constructor(
+    repository: PrismaPagePermissionsRepository,
+    private readonly counters: { permissionQueries: number },
+  ) {
+    super(repository);
+  }
+
+  override bind(scope: TransactionScope): PagePermissionsService {
+    return new CountingPagePermissionsService(
+      new PrismaPagePermissionsRepository(databaseClientOf(scope)),
+      this.counters,
+    );
+  }
+
+  override resolveRoles(userId: string, pageIds: readonly string[]) {
+    this.counters.permissionQueries += 1;
+    return super.resolveRoles(userId, pageIds);
+  }
+}
+
+class PauseProjectionStateRepository extends PageSearchProjectionRepository {
+  constructor(
+    private readonly delegate: PageSearchProjectionRepository,
+    private readonly pause: () => Promise<void>,
+  ) {
+    super();
+  }
+
+  override bind(scope: TransactionScope): PageSearchProjectionRepository {
+    return new PauseProjectionStateRepository(this.delegate.bind(scope), this.pause);
+  }
+
+  override async findFailureState(pageId: string): Promise<SearchProjectionFailureState | null> {
+    const state = await this.delegate.findFailureState(pageId);
+    await this.pause();
+    return state;
+  }
+
+  override writeSuccess(pageId: string, plainText: string, revision: bigint): Promise<boolean> {
+    return this.delegate.writeSuccess(pageId, plainText, revision);
+  }
+
+  override writeFailure(failure: SearchProjectionFailure): Promise<void> {
+    return this.delegate.writeFailure(failure);
+  }
+}
 
 function stateWithParagraphs(...paragraphs: string[]): Uint8Array<ArrayBuffer> {
   const ydoc = new Y.Doc();
@@ -126,15 +361,15 @@ describe('page search on PostgreSQL', () => {
     search = new SearchReadService(
       new SearchRepository(prisma as unknown as PrismaService),
       new PagePermissionsService(new PrismaPagePermissionsRepository(prisma)),
+      new PrismaTransactionRunner(prisma as unknown as PrismaService),
     );
   });
 
   afterEach(async () => {
-    for (const pageId of pageIds.splice(0).reverse()) {
-      await prisma.page.deleteMany({ where: { id: pageId } });
-    }
+    const ids = pageIds.splice(0);
+    if (ids.length > 0) await prisma.page.deleteMany({ where: { id: { in: ids } } });
     await prisma.project.updateMany({ data: { deletedAt: null }, where: { id: projectId } });
-  });
+  }, 60000);
 
   afterAll(async () => {
     await prisma.project.deleteMany({ where: { id: projectId } });
@@ -261,6 +496,34 @@ describe('page search on PostgreSQL', () => {
     ]);
   });
 
+  it('drops a body-only candidate whose revision changes before the authorized read', async () => {
+    const bodyOnly = await createPage({ title: 'unrelated title', body: 'interleavedbodymarker' });
+    await indexPage(bodyOnly);
+    const titleMatch = await createPage({
+      title: 'interleavedbodymarker current title',
+      body: 'interleavedbodymarker body',
+    });
+    await indexPage(titleMatch);
+
+    const pause = pauseOnce();
+    const interleavedSearch = new SearchReadService(
+      new PauseAfterCandidatesRepository(prisma as unknown as DatabaseClient, pause.pause),
+      new PagePermissionsService(new PrismaPagePermissionsRepository(prisma)),
+      new PrismaTransactionRunner(prisma as unknown as PrismaService),
+    );
+    const pendingSearch = interleavedSearch.searchPages(ownerId, 'interleavedbodymarker', 10);
+    await pause.entered;
+    await prisma.pageDocument.updateMany({
+      data: { storageRevision: 1n },
+      where: { pageId: { in: [bodyOnly, titleMatch] } },
+    });
+    pause.release();
+
+    await expect(pendingSearch).resolves.toMatchObject([
+      { pageId: titleMatch, title: 'interleavedbodymarker current title', snippet: null },
+    ]);
+  }, 15000);
+
   it('keeps multilingual FTS deterministic and requires positive terms in one field', async () => {
     const russian = await createPage({ title: 'русский поиск', body: 'сохранённый текст' });
     await indexPage(russian);
@@ -332,6 +595,173 @@ describe('page search on PostgreSQL', () => {
     const afterRevoke = await search.searchPages(actorId, 'permissionsearchtoken', 10);
     expect(afterRevoke.some(({ pageId }) => pageId === inheritedChild)).toBe(false);
   });
+
+  it('keeps permission and metadata reads on one snapshot during a concurrent revoke', async () => {
+    const pageId = await createPage({ title: 'snapshotpermissionmarker original title' });
+    await grant(pageId);
+    const concurrentClient = createPrismaClient({
+      databaseConnectionTimeoutMs: 5000,
+      databaseUrl:
+        process.env.DATABASE_URL ??
+        'postgresql://lite_notion:lite_notion@localhost:5432/lite_notion?schema=public',
+    });
+    const pause = pauseOnce();
+    const snapshotSearch = new SearchReadService(
+      new PauseBeforeVisibleResultsRepository(prisma as unknown as DatabaseClient, pause.pause),
+      new PagePermissionsService(new PrismaPagePermissionsRepository(prisma)),
+      new PrismaTransactionRunner(prisma as unknown as PrismaService),
+    );
+
+    try {
+      const pendingSearch = snapshotSearch.searchPages(actorId, 'snapshotpermissionmarker', 10);
+      await pause.entered;
+      await concurrentClient.$transaction(async (transaction) => {
+        await transaction.pagePermission.deleteMany({ where: { pageId, userId: actorId } });
+        await transaction.page.update({
+          data: { title: 'renamedafterpermissioncheck' },
+          where: { id: pageId },
+        });
+      });
+      pause.release();
+
+      await expect(pendingSearch).resolves.toMatchObject([
+        { pageId, title: 'snapshotpermissionmarker original title' },
+      ]);
+      await expect(search.searchPages(actorId, 'snapshotpermissionmarker', 10)).resolves.toEqual(
+        [],
+      );
+    } finally {
+      pause.release();
+      await concurrentClient.$disconnect();
+    }
+  }, 15000);
+
+  it('does not return a candidate when access is revoked before its consistent read begins', async () => {
+    const pageId = await createPage({ title: 'revokedbeforeconsistentreadmarker' });
+    await grant(pageId);
+    const concurrentClient = createPrismaClient({
+      databaseConnectionTimeoutMs: 5000,
+      databaseUrl:
+        process.env.DATABASE_URL ??
+        'postgresql://lite_notion:lite_notion@localhost:5432/lite_notion?schema=public',
+    });
+    const pause = pauseOnce();
+    const interleavedSearch = new SearchReadService(
+      new PauseAfterCandidatesRepository(prisma as unknown as DatabaseClient, pause.pause),
+      new PagePermissionsService(new PrismaPagePermissionsRepository(prisma)),
+      new PrismaTransactionRunner(prisma as unknown as PrismaService),
+    );
+
+    try {
+      const pendingSearch = interleavedSearch.searchPages(
+        actorId,
+        'revokedbeforeconsistentreadmarker',
+        10,
+      );
+      await pause.entered;
+      await concurrentClient.pagePermission.deleteMany({ where: { pageId, userId: actorId } });
+      pause.release();
+      await expect(pendingSearch).resolves.toEqual([]);
+    } finally {
+      pause.release();
+      await concurrentClient.$disconnect();
+    }
+  }, 15000);
+
+  it('continues past denied candidate batches with stable order and no duplicates', async () => {
+    const deniedIds = Array.from(
+      { length: 205 },
+      (_, index) => `00000000-0000-4000-8000-${index.toString(16).padStart(12, '0')}`,
+    );
+    pageIds.push(...deniedIds);
+    await prisma.page.createMany({
+      data: deniedIds.map((id) => ({
+        createdById: ownerId,
+        id,
+        ownerId,
+        position: 'a',
+        projectId,
+        title: 'batchvisibilitymarker',
+      })),
+    });
+    const firstAllowed = await createPage({
+      id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+      title: 'batchvisibilitymarker',
+    });
+    const secondAllowed = await createPage({
+      id: 'ffffffff-ffff-4fff-8fff-fffffffffff0',
+      title: 'batchvisibilitymarker',
+    });
+    await grant(firstAllowed);
+    await grant(secondAllowed);
+    const queryCounts = { candidateQueries: 0, permissionQueries: 0, visibleQueries: 0 };
+    const batchedSearch = new SearchReadService(
+      new CountingSearchRepository(prisma as unknown as DatabaseClient, queryCounts),
+      new CountingPagePermissionsService(new PrismaPagePermissionsRepository(prisma), queryCounts),
+      new PrismaTransactionRunner(prisma as unknown as PrismaService),
+    );
+
+    const firstRead = await batchedSearch.searchPages(actorId, 'batchvisibilitymarker', 2);
+    const secondRead = await batchedSearch.searchPages(actorId, 'batchvisibilitymarker', 2);
+    expect(firstRead.map(({ pageId }) => pageId)).toEqual([secondAllowed, firstAllowed]);
+    expect(secondRead).toEqual(firstRead);
+    expect(new Set(firstRead.map(({ pageId }) => pageId)).size).toBe(2);
+    expect(queryCounts).toEqual({ candidateQueries: 6, permissionQueries: 6, visibleQueries: 2 });
+    expect(
+      queryCounts.candidateQueries + queryCounts.permissionQueries + queryCounts.visibleQueries,
+    ).toBe(14);
+  }, 20000);
+
+  it('keeps one permission snapshot across batches until the next request', async () => {
+    const deniedIds = Array.from(
+      { length: 100 },
+      (_, index) => `00000000-0000-4000-8000-${index.toString(16).padStart(12, '0')}`,
+    );
+    pageIds.push(...deniedIds);
+    await prisma.page.createMany({
+      data: deniedIds.map((id) => ({
+        createdById: ownerId,
+        id,
+        ownerId,
+        position: 'a',
+        projectId,
+        title: 'batchsnapshotmarker',
+      })),
+    });
+    const accessible = await createPage({
+      id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+      title: 'batchsnapshotmarker',
+    });
+    await grant(accessible);
+    const concurrentClient = createPrismaClient({
+      databaseConnectionTimeoutMs: 5000,
+      databaseUrl:
+        process.env.DATABASE_URL ??
+        'postgresql://lite_notion:lite_notion@localhost:5432/lite_notion?schema=public',
+    });
+    const pause = pauseOnce();
+    const batchedSearch = new SearchReadService(
+      new PauseOnCandidateCallRepository(prisma as unknown as DatabaseClient, 2, pause.pause),
+      new PagePermissionsService(new PrismaPagePermissionsRepository(prisma)),
+      new PrismaTransactionRunner(prisma as unknown as PrismaService),
+    );
+
+    try {
+      const pendingSearch = batchedSearch.searchPages(actorId, 'batchsnapshotmarker', 1);
+      await pause.entered;
+      await concurrentClient.pagePermission.deleteMany({
+        where: { pageId: accessible, userId: actorId },
+      });
+      pause.release();
+      await expect(pendingSearch).resolves.toMatchObject([
+        { pageId: accessible, title: 'batchsnapshotmarker' },
+      ]);
+      await expect(search.searchPages(actorId, 'batchsnapshotmarker', 1)).resolves.toEqual([]);
+    } finally {
+      pause.release();
+      await concurrentClient.$disconnect();
+    }
+  }, 15000);
 
   it('hides soft-deleted pages and projects and makes restored content searchable again', async () => {
     const pageId = await createPage({ title: 'restoresearchtoken' });
@@ -462,6 +892,177 @@ describe('page search on PostgreSQL', () => {
     await expect(indexing).resolves.toBe('stale');
     expect(await prisma.pageSearchDocument.findUnique({ where: { pageId } })).toBeNull();
   });
+
+  it('keeps revision 16 after concurrent stale success and failure workers finish', async () => {
+    const successfulPage = await createPage({ title: 'concurrent success writer' });
+    const failedPage = await createPage({ title: 'concurrent failure writer' });
+    const initialRecords = await Promise.all(
+      [successfulPage, failedPage].map((pageId) =>
+        prisma.pageDocument.findUniqueOrThrow({ where: { pageId } }),
+      ),
+    );
+    const concurrentClient = createPrismaClient({
+      databaseConnectionTimeoutMs: 5000,
+      databaseUrl:
+        process.env.DATABASE_URL ??
+        'postgresql://lite_notion:lite_notion@localhost:5432/lite_notion?schema=public',
+    });
+    const concurrentIndexer = new ProjectPageSearchUseCase(
+      new PrismaTransactionRunner(concurrentClient as unknown as PrismaService),
+      new PrismaPageDocumentRepository(concurrentClient as unknown as DatabaseClient),
+      new PrismaPageSearchProjectionRepository(concurrentClient as unknown as DatabaseClient),
+    );
+
+    try {
+      const recordsById = new Map(initialRecords.map((record) => [record.pageId, record]));
+      for (const pageId of [successfulPage, failedPage]) {
+        const initialRecord = recordsById.get(pageId);
+        if (initialRecord === undefined) throw new Error(`Missing initial document for ${pageId}`);
+        const state15 = stateWithParagraphs(`revision fifteen ${pageId}`);
+        await prisma.pageDocument.update({
+          data: { storageRevision: 15n, yjsState: state15 },
+          where: { pageId },
+        });
+        const record15 = {
+          pageId,
+          storageRevision: 15n,
+          tiptapSchemaVersion: initialRecord.tiptapSchemaVersion,
+          yjsState: state15,
+        };
+        const pause = pauseOnce();
+        const staleWorker = new ProjectPageSearchUseCase(
+          new PrismaTransactionRunner(prisma as unknown as PrismaService),
+          new PrismaPageDocumentRepository(prisma as unknown as DatabaseClient),
+          new PauseProjectionStateRepository(
+            new PrismaPageSearchProjectionRepository(prisma as unknown as DatabaseClient),
+            pause.pause,
+          ),
+        );
+        const staleWork = staleWorker.execute({
+          ...record15,
+          ...(pageId === failedPage ? { tiptapSchemaVersion: 99 } : {}),
+        });
+        await pause.entered;
+
+        const state16 = stateWithParagraphs(`revision sixteen ${pageId}`);
+        await concurrentClient.pageDocument.update({
+          data: { storageRevision: 16n, yjsState: state16 },
+          where: { pageId },
+        });
+        await expect(
+          concurrentIndexer.execute({
+            pageId,
+            storageRevision: 16n,
+            tiptapSchemaVersion: initialRecord.tiptapSchemaVersion,
+            yjsState: state16,
+          }),
+        ).resolves.toBe('projected');
+        pause.release();
+        await expect(staleWork).resolves.toBe('stale');
+
+        const projection = await prisma.pageSearchDocument.findUniqueOrThrow({
+          where: { pageId },
+        });
+        expect(projection.sourceStorageRevision).toBe(16n);
+        expect(projection.attemptedStorageRevision).toBe(16n);
+        expect(projection.plainText).toBe(`revision sixteen ${pageId}`);
+        expect(projection.lastErrorCode).toBeNull();
+      }
+    } finally {
+      await concurrentClient.$disconnect();
+    }
+  }, 30000);
+
+  it('waits for authoritative persistence and rejects a stale projection after the row lock commits', async () => {
+    const pageId = await createPage({ title: 'locked revision writer' });
+    const record15 = await prisma.pageDocument.findUniqueOrThrow({ where: { pageId } });
+    const lockClient = createPrismaClient({
+      databaseConnectionTimeoutMs: 5000,
+      databaseUrl:
+        process.env.DATABASE_URL ??
+        'postgresql://lite_notion:lite_notion@localhost:5432/lite_notion?schema=public',
+    });
+    const workerClient = createPrismaClient({
+      databaseConnectionTimeoutMs: 5000,
+      databaseUrl:
+        process.env.DATABASE_URL ??
+        'postgresql://lite_notion:lite_notion@localhost:5432/lite_notion?schema=public',
+    });
+    const lockAcquired = deferred();
+    const releaseLock = deferred();
+    let workerTransactionStarted!: () => void;
+    const workerStarted = new Promise<void>((resolve) => (workerTransactionStarted = resolve));
+    const realRunner = new PrismaTransactionRunner(workerClient as unknown as PrismaService);
+    class ObservedTransactionRunner extends TransactionRunner {
+      override run<T>(
+        operation: (scope: TransactionScope) => Promise<T>,
+        options?: Parameters<TransactionRunner['run']>[1],
+      ): Promise<T> {
+        return realRunner.run(async (scope) => {
+          workerTransactionStarted();
+          return operation(scope);
+        }, options);
+      }
+    }
+    const waitingWorker = new ProjectPageSearchUseCase(
+      new ObservedTransactionRunner(),
+      new PrismaPageDocumentRepository(workerClient as unknown as DatabaseClient),
+      new PrismaPageSearchProjectionRepository(workerClient as unknown as DatabaseClient),
+    );
+    let blocker: Promise<void> | undefined;
+    let staleProjection: Promise<string> | undefined;
+
+    try {
+      blocker = lockClient.$transaction(async (transaction) => {
+        await transaction.$queryRaw`SELECT "pageId" FROM "PageDocument" WHERE "pageId" = ${pageId}::uuid FOR UPDATE`;
+        lockAcquired.resolve();
+        await releaseLock.promise;
+        const updated = await new PrismaPageDocumentRepository(
+          transaction as unknown as DatabaseClient,
+        ).replaceYjsState(pageId, stateWithParagraphs('authoritative revision sixteen'), 0n, 2);
+        expect(updated?.storageRevision).toBe(1n);
+      });
+      await lockAcquired.promise;
+      staleProjection = waitingWorker.execute({
+        pageId,
+        storageRevision: record15.storageRevision,
+        tiptapSchemaVersion: record15.tiptapSchemaVersion,
+        yjsState: record15.yjsState,
+      });
+      await workerStarted;
+
+      const deadline = Date.now() + 5000;
+      let observedLockWait = false;
+      while (Date.now() < deadline) {
+        const rows = await prisma.$queryRaw<Array<{ waiting: boolean }>>`
+          SELECT EXISTS (
+            SELECT 1 FROM pg_stat_activity
+            WHERE pid <> pg_backend_pid()
+              AND wait_event_type = 'Lock'
+              AND query ILIKE '%"PageDocument"%FOR UPDATE%'
+          ) AS waiting
+        `;
+        if (rows[0]?.waiting === true) {
+          observedLockWait = true;
+          break;
+        }
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+      expect(observedLockWait).toBe(true);
+      releaseLock.resolve();
+      await blocker;
+      await expect(staleProjection).resolves.toBe('stale');
+      expect(await prisma.pageSearchDocument.findUnique({ where: { pageId } })).toBeNull();
+      expect(
+        (await prisma.pageDocument.findUniqueOrThrow({ where: { pageId } })).storageRevision,
+      ).toBe(1n);
+    } finally {
+      releaseLock.resolve();
+      if (blocker !== undefined) await Promise.allSettled([blocker]);
+      if (staleProjection !== undefined) await Promise.allSettled([staleProjection]);
+      await Promise.all([lockClient.$disconnect(), workerClient.$disconnect()]);
+    }
+  }, 20000);
 
   it('retries a placeholder after retryAfter and recovers using the same indexer', async () => {
     const pageId = await createPage({ title: 'retryable projection', body: 'retry body phrase' });
@@ -610,8 +1211,8 @@ describe('page search on PostgreSQL', () => {
     );
   });
 
-  it('uses GIN indexes in title and body candidate plans on a representative dataset', async () => {
-    const ids = Array.from({ length: 3000 }, () => randomUUID());
+  it('checks GIN eligibility and records unforced search plans on a representative dataset', async () => {
+    const ids = Array.from({ length: 20000 }, () => randomUUID());
     pageIds.push(...ids);
     const rarePageId = ids[0];
     await prisma.$executeRaw`
@@ -645,6 +1246,7 @@ describe('page search on PostgreSQL', () => {
       FROM unnest(${ids}::uuid[]) AS generated(id)
     `;
     await prisma.$executeRaw`ANALYZE "Page"`;
+    await prisma.$executeRaw`ANALYZE "PageDocument"`;
     await prisma.$executeRaw`ANALYZE "PageSearchDocument"`;
 
     const { titlePlan, bodyPlan } = await prisma.$transaction(async (transaction) => {
@@ -660,14 +1262,88 @@ describe('page search on PostgreSQL', () => {
         EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
         SELECT projection."pageId"
         FROM "PageSearchDocument" projection
-        JOIN "PageDocument" document ON document."pageId" = projection."pageId"
-        WHERE projection."sourceStorageRevision" = document."storageRevision"
-          AND projection."searchVector" @@ websearch_to_tsquery('simple', 'planrare')
+        WHERE projection."searchVector" @@ websearch_to_tsquery('simple', 'planrare')
       `;
       return { bodyPlan, titlePlan };
     });
 
     expect(JSON.stringify(titlePlan)).toContain('Page_title_search_idx');
     expect(JSON.stringify(bodyPlan)).toContain('PageSearchDocument_searchVector_idx');
-  });
+
+    const titleCandidatePlan = await prisma.$queryRaw<Array<{ 'QUERY PLAN': ExplainPlanEntry[] }>>`
+      EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
+      SELECT page.id
+      FROM "Page" page
+      JOIN "Project" project
+        ON project.id = page."projectId" AND project."deletedAt" IS NULL
+      WHERE page."deletedAt" IS NULL
+        AND to_tsvector('simple', COALESCE(page."title", ''))
+          @@ websearch_to_tsquery('simple', 'planrare')
+    `;
+    const bodyCandidatePlan = await prisma.$queryRaw<Array<{ 'QUERY PLAN': ExplainPlanEntry[] }>>`
+      EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
+      SELECT page.id
+      FROM "PageSearchDocument" projection
+      JOIN "PageDocument" document ON document."pageId" = projection."pageId"
+      JOIN "Page" page
+        ON page.id = projection."pageId" AND page."deletedAt" IS NULL
+      JOIN "Project" project
+        ON project.id = page."projectId" AND project."deletedAt" IS NULL
+      WHERE projection."sourceStorageRevision" = document."storageRevision"
+        AND projection."searchVector" @@ websearch_to_tsquery('simple', 'planrare')
+    `;
+    const combinedPlans = await Promise.all(
+      [0, 100, 200].map(
+        (offset) =>
+          prisma.$queryRaw<Array<{ 'QUERY PLAN': ExplainPlanEntry[] }>>`
+          EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
+          WITH parsed AS (
+            SELECT websearch_to_tsquery('simple', 'filler') AS query
+          ), usable AS (
+            SELECT query FROM parsed WHERE querytree(query) NOT IN ('', 'T')
+          ), candidates AS (
+            SELECT page.id AS "pageId", TRUE AS "titleMatch", FALSE AS "bodyMatch",
+                   ts_rank_cd(setweight(to_tsvector('simple', COALESCE(page."title", '')), 'A'), usable.query) AS "titleRank",
+                   0::real AS "bodyRank"
+            FROM "Page" page
+            JOIN "Project" project
+              ON project.id = page."projectId" AND project."deletedAt" IS NULL
+            CROSS JOIN usable
+            WHERE page."deletedAt" IS NULL
+              AND to_tsvector('simple', COALESCE(page."title", '')) @@ usable.query
+            UNION ALL
+            SELECT page.id AS "pageId", FALSE AS "titleMatch", TRUE AS "bodyMatch",
+                   0::real AS "titleRank",
+                   ts_rank_cd(setweight(projection."searchVector", 'D'), usable.query) AS "bodyRank"
+            FROM "PageSearchDocument" projection
+            JOIN "PageDocument" document ON document."pageId" = projection."pageId"
+            JOIN "Page" page
+              ON page.id = projection."pageId" AND page."deletedAt" IS NULL
+            JOIN "Project" project
+              ON project.id = page."projectId" AND project."deletedAt" IS NULL
+            CROSS JOIN usable
+            WHERE projection."sourceStorageRevision" = document."storageRevision"
+              AND projection."searchVector" @@ usable.query
+          ), grouped AS (
+            SELECT "pageId", BOOL_OR("titleMatch") AS "titleMatch",
+                   BOOL_OR("bodyMatch") AS "bodyMatch", MAX("titleRank") AS "titleRank",
+                   MAX("bodyRank") AS "bodyRank"
+            FROM candidates GROUP BY "pageId"
+          )
+          SELECT "pageId", "titleMatch", "bodyMatch", "titleRank", "bodyRank"
+          FROM grouped
+          ORDER BY "titleMatch" DESC, GREATEST("titleRank", "bodyRank") DESC, "pageId" ASC
+          LIMIT 100 OFFSET ${offset}
+        `,
+      ),
+    );
+    console.info(
+      '[search-plan] unforced EXPLAIN ANALYZE (20,000 pages):',
+      JSON.stringify({
+        title: summarizePlan(titleCandidatePlan),
+        body: summarizePlan(bodyCandidatePlan),
+        combinedOffsets: combinedPlans.map(summarizePlan),
+      }),
+    );
+  }, 60000);
 });

@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import type { TransactionScope } from '../database/transaction';
 import { PageNotFoundError } from '../pages/errors';
 import { PageRole } from './constants';
 import { assertRole, roleAtLeast } from './helpers';
@@ -33,6 +34,10 @@ export class PagePermissionsService {
 
   resolveRoles(userId: string, pageIds: readonly string[]): Promise<ResolvedPageRole[]> {
     return this.permissions.resolveRoles(userId, pageIds);
+  }
+
+  bind(scope: TransactionScope): PagePermissionsService {
+    return new PagePermissionsService(this.permissions.bind(scope));
   }
 
   /**

@@ -140,6 +140,10 @@ Search API MUST предоставлять bearer-authenticated `GET /api/v1/sea
 - **WHEN** body projection отсутствует или отстаёт от текущего `storageRevision`
 - **THEN** запрос не завершается ошибкой, body не участвует в поиске до актуализации, а поиск по текущему title продолжает работать
 
+#### Scenario: Body revision changes after candidate selection
+- **WHEN** body-only кандидат найден по projection, но к финальному чтению `sourceStorageRevision` уже не равен `PageDocument.storageRevision`
+- **THEN** страница исключается из результатов; актуальное совпадение title по-прежнему может вернуть страницу, но устаревший body не используется для snippet
+
 ### Requirement: Search results obey effective permissions
 
 Search API MUST применять актуальные effective permissions к кандидатам до выбора итогового limit и до выдачи title/snippet. Он MUST учитывать ownership, direct и inherited permissions, `RESTRICTED` boundaries, soft-deleted страницы и проекты. Search MUST NOT реализовывать независимый permission algorithm.
@@ -159,6 +163,10 @@ Search API MUST применять актуальные effective permissions к
 #### Scenario: Access is revoked between requests
 - **WHEN** доступ отозван после одного запроса Search и пользователь отправляет следующий запрос
 - **THEN** следующий ответ уже не содержит страницу, её title, snippet или metadata
+
+#### Scenario: Permission and result metadata share a request snapshot
+- **WHEN** Search проверяет effective roles и читает title/snippet кандидатов из одного или нескольких batches
+- **THEN** все операции выполняются в одном PostgreSQL `REPEATABLE READ` snapshot через существующий permissions layer; отзыв, committed до начала согласованного чтения, исключает страницу, а изменение после начала snapshot учитывается следующим Search request
 
 #### Scenario: Inaccessible matches precede accessible matches
 - **WHEN** FTS-совпадения недоступных страниц имеют более высокий rank, чем совпадения доступных страниц

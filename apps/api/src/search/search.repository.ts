@@ -1,5 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import {
+  type DatabaseClient,
+  databaseClientOf,
+  type TransactionScope,
+} from '../database/transaction';
 
 export interface SearchCandidate {
   pageId: string;
@@ -17,7 +22,11 @@ export interface SearchResultRecord {
 
 @Injectable()
 export class SearchRepository {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(@Inject(PrismaService) private readonly prisma: DatabaseClient | PrismaService) {}
+
+  bind(scope: TransactionScope): SearchRepository {
+    return new SearchRepository(databaseClientOf(scope));
+  }
 
   findCandidates(query: string, limit: number, offset: number): Promise<SearchCandidate[]> {
     return this.prisma.$queryRaw<SearchCandidate[]>`
@@ -88,6 +97,7 @@ export class SearchRepository {
              CASE
                WHEN page.id = ANY(${[...bodyMatchIds]}::uuid[])
                 AND projection."sourceStorageRevision" = document."storageRevision"
+                AND projection."searchVector" @@ parsed.query
                THEN left(
                  ts_headline(
                    'simple', projection."plainText", parsed.query,
@@ -105,6 +115,14 @@ export class SearchRepository {
       CROSS JOIN parsed
       WHERE page.id = ANY(${[...pageIds]}::uuid[])
         AND page."deletedAt" IS NULL
+        AND (
+          to_tsvector('simple', COALESCE(page."title", '')) @@ parsed.query
+          OR (
+            page.id = ANY(${[...bodyMatchIds]}::uuid[])
+            AND projection."sourceStorageRevision" = document."storageRevision"
+            AND projection."searchVector" @@ parsed.query
+          )
+        )
     `;
   }
 }

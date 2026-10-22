@@ -24,6 +24,7 @@ export interface TransactionScope {
 }
 
 export interface TransactionOptions {
+  isolationLevel?: Prisma.TransactionIsolationLevel;
   maxWaitMs?: number;
   timeoutMs?: number;
 }
@@ -65,6 +66,7 @@ export class PrismaTransactionRunner extends TransactionRunner {
     options?: TransactionOptions,
   ): Promise<T> {
     return this.prisma.$transaction((tx) => operation(new PrismaTransactionScope(tx)), {
+      ...(options?.isolationLevel === undefined ? {} : { isolationLevel: options.isolationLevel }),
       ...(options?.maxWaitMs === undefined ? {} : { maxWait: options.maxWaitMs }),
       ...(options?.timeoutMs === undefined ? {} : { timeout: options.timeoutMs }),
     });

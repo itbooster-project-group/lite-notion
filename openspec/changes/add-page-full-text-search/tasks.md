@@ -42,7 +42,10 @@
 - [x] 6.3 Реализовать rank: title matches прежде body-only, затем `GREATEST(title_rank, body_rank) DESC`, затем `pageId ASC`; получать candidate IDs/rank ограниченными batches и продолжать после permissions filtering.
 - [x] 6.4 Генерировать `ts_headline` snippet только после проверки permission, с пустыми highlight markers, ограничением 240 символов и plain-text API contract; для title-only/missing/stale body возвращать `null`, не выдавать raw `plainText`.
 - [x] 6.5 Добавить PostgreSQL FTS tests для title/body, русского/английского/смешанного query, title ranking, одинакового rank, отсутствия дубликата при совпадении страницы в title и body, split terms across fields, explicit operators, blank/punctuation/negative-only query, limit, rename без reindex и missing/stale projection.
-- [x] 6.6 На репрезентативном объёме выполнить `EXPLAIN (ANALYZE, BUFFERS)` для обеих candidate ветвей после `ANALYZE`; проверить GIN index usage и отсутствие раннего общего LIMIT. Зафиксировать план/проверяемое утверждение в тестовом/ревью результате, не требовать GIN от маленькой fixture.
+- [x] 6.6 На репрезентативном объёме выполнить `EXPLAIN (ANALYZE, BUFFERS)` после `ANALYZE`; сохранить проверку пригодности GIN отдельно от естественного плана и записать фактические cardinality, сортировку и стоимость обеих ветвей и итоговой выдачи без требования обязательного Index Scan.
+- [x] 6.7 Разрешать effective permissions и читать metadata всех candidate batches одного Search request через один `REPEATABLE READ` transaction client; проверить конкурентный revoke между batches и логическими фазами на PostgreSQL.
+- [x] 6.8 Повторно проверять title/body match в финальном read и исключать stale body-only candidate; проверить revision update между candidate selection и финальным read.
+- [x] 6.9 Измерить несколько OFFSET batches, SQL call count, стабильность порядка и повторный FTS/aggregation cost; сохранить OFFSET, так как измеренная стоимость определяется повторным FTS/GROUP BY, а keyset не устраняет эту часть.
 
 ## 7. Permissions integration
 
@@ -66,6 +69,7 @@
 - [x] 9.3 Покрыть permissions/lifecycle: owner, direct access, inaccessible result, revoke, inherited access, explicit child under restricted parent, no metadata leaks, soft delete page/project и restore.
 - [x] 9.4 Покрыть backfill/rebuild: первоначальные существующие документы, повторный rebuild, rebuild одновременно с редактированием и повреждённый документ без остановки batch.
 - [x] 9.5 Поведение PostgreSQL locking, FTS/indexes, `tsvector`, `ON CONFLICT`, transaction rollback и concurrent revision writes проверять настоящими API integration tests с PostgreSQL; unit mocks не считать доказательством этих гарантий.
+- [x] 9.6 Проверить stale success/failure writers и конкурентную authoritative persistence независимыми PostgreSQL соединениями, включая наблюдаемый `FOR UPDATE` lock wait и commit.
 
 ## 10. Финальная проверка
 
