@@ -29,7 +29,7 @@
 - **THEN** приложение не открывает поиск и не отменяет обработку сочетания editor
 
 ### Requirement: Search query follows the Search API contract
-Поиск MUST отправлять запросы через существующий Search API и MUST использовать только непустой query после trim. UI MUST ограничивать ввод 200 символами, MUST разрешать запросы любой ненулевой длины, поскольку backend не задаёт минимальную длину, и MUST NOT выполнять запрос для пустой или пробельной строки. Запрос MUST отправляться после debounce около 300 мс. Результаты MUST относиться только к текущему debounced query; UI MUST NOT показывать результаты предыдущего query как актуальные во время debounce, загрузки или ответа более раннего запроса. Порядок и состав результатов полностью определяются API.
+Поиск MUST отправлять запросы через существующий Search API и MUST использовать только непустой query после trim. UI MUST ограничивать ввод 200 символами, MUST разрешать запросы любой ненулевой длины, поскольку backend не задаёт минимальную длину, и MUST NOT выполнять запрос для пустой или пробельной строки. Запрос MUST отправляться после debounce около 300 мс. Search API поддерживает prefix matching в title и актуальном TipTap text projection; UI MUST отправлять короткий префикс как query и MUST NOT выполнять собственную tokenization, фильтрацию или сортировку. Результаты MUST относиться только к текущему debounced query; UI MUST NOT показывать результаты предыдущего query как актуальные во время debounce, загрузки или ответа более раннего запроса. Порядок и состав результатов полностью определяются API.
 
 #### Scenario: Empty query does not call Search API
 - **WHEN** поле пустое или после trim содержит только пробелы
@@ -42,6 +42,10 @@
 #### Scenario: Query is trimmed and bounded
 - **WHEN** пользователь вводит query с пробелами по краям или достигает максимальной длины поля
 - **THEN** запрос содержит trim-нутый query длиной не более 200 символов
+
+#### Scenario: Prefix query is delegated to Search API
+- **WHEN** пользователь вводит начало слова из title или содержимого страницы
+- **THEN** нормализованный префикс отправляется в Search API, а frontend отображает только возвращённую выдачу без локальной фильтрации
 
 #### Scenario: Debounce avoids a request per keystroke
 - **WHEN** пользователь быстро вводит несколько символов
@@ -126,11 +130,16 @@
 - **THEN** dialog закрывается, а Base UI возвращает фокус на кнопку поиска
 
 ### Requirement: Navigation rechecks current workspace access
-Выбор результата MUST немедленно закрыть диалог, очистить его временные данные и начать переход через штатный маршрут `/pages/{pageId}` без ожидания workspace tree/shared requests. Результат Search API MUST NOT считаться гарантией действующего доступа. Существующий private page-route flow MUST подтвердить доступ свежим ответом generated page-read endpoint до показа page-specific title, content или editor; cached page/tree metadata MUST NOT использоваться как подтверждение. Workspace tree/shared queries MAY инвалидироваться без ожидания до `router.push`, а route flow MUST обновлять их после перехода. `403/404` MUST показывать штатное нейтральное unavailable/error состояние без поискового fallback и без клиентского дублирования authorization rules. Страница, доступная через sharing, MUST открываться тем же flow независимо от её наличия в собственном page tree.
+Выбор результата MUST немедленно закрыть диалог, очистить его временные данные и начать переход через штатный маршрут `/pages/{pageId}` без ожидания workspace queries. Результат Search API MUST NOT считаться гарантией действующего доступа. Существующий private page-route flow MUST выполнить свежий generated `GET /pages/{pageId}` до показа page-specific title, breadcrumbs, content или editor; query с cached PageDto и активным refetch MUST оставаться pending, и cached response MUST NOT считаться подтверждением. Свежий `200` PageDto является источником текущих title/accessRole и позволяет открыть страницу, даже если она отсутствует в owned/shared tree. Page content MUST NOT ждать tree/shared/projects requests; эти queries не должны принудительно refetch-иться на каждом page route и их ошибка MUST NOT блокировать доступную страницу. При pending/error/403/404 page-read приватная route metadata из cache MUST быть скрыта; `403/404` показывают штатное нейтральное unavailable state, прочая ошибка — штатную error/retry state. Не дублировать backend authorization на фронтенде.
 
 #### Scenario: Access is revoked after search
 - **WHEN** доступ к результату отозван после поиска, но до перехода
-- **THEN** приложение сразу начинает route transition, page route ждёт текущий permission-safe page-read response, затем показывает unavailable/error state и не показывает title/content/editor из stale search/page/tree cache
+- **THEN** приложение сразу начинает route transition, скрывает cached title/breadcrumb/content/editor/sidebar labels до свежего page-read response, затем показывает unavailable/error state и не использует stale Search/Page/tree cache
+
+#### Scenario: Cached PageDto still requires a fresh access check
+- **GIVEN** QueryClient содержит PageDto целевого page id
+- **WHEN** пользователь открывает page route и page-read выполняет refetch
+- **THEN** cached title и editor не отображаются до завершения свежего запроса; только успешный текущий ответ разрешает page surface
 
 #### Scenario: Search navigation closes the dialog
 - **WHEN** пользователь открывает страницу из результата
@@ -143,12 +152,21 @@
 #### Scenario: Shared page opens without being in the owned tree
 - **GIVEN** у пользователя нет собственной страницы в соответствующем проекте, но у него есть разрешённый доступ к shared page
 - **WHEN** пользователь находит страницу через Search API и выбирает результат
-- **THEN** приложение открывает её через `/pages/{pageId}` и существующий permission/navigation flow без требования присутствия в owned page tree
+- **THEN** свежий `GET /pages/{pageId}` со статусом `200` открывает страницу через штатный flow независимо от присутствия в owned/shared tree и доступности project metadata
 
 #### Scenario: Revoked shared-page access is denied by route flow
 - **GIVEN** пользователь нашёл shared page, после чего доступ к ней отозвали
 - **WHEN** пользователь выбирает результат поиска
 - **THEN** свежий page-read response не разрешает страницу, и интерфейс показывает нейтральное unavailable/error состояние без stale title/content
+
+#### Scenario: Workspace metadata failure does not block an accessible page
+- **GIVEN** свежий page-read возвращает `200`, но tree, shared pages или projects query завершается ошибкой
+- **WHEN** пользователь открывает страницу по прямому URL или поисковому результату
+- **THEN** page title/content/editor открываются, а ошибка остаётся локальной для workspace navigation
+
+#### Scenario: Ordinary page navigation does not refetch all workspace queries
+- **WHEN** пользователь открывает страницу обычной ссылкой или browser back/forward
+- **THEN** выполняется page-read для целевого id, но приложение не запускает дополнительные tree/shared/projects refetch только из-за смены page route
 
 ### Requirement: Search data is isolated between user sessions
 Search results and other user-scoped query data MUST NOT remain available after logout/session expiration or when a different user authenticates in the same application QueryClient. Cleanup MUST use the existing session lifecycle and MUST NOT add a search-specific cache manager.

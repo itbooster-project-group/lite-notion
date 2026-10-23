@@ -1,12 +1,12 @@
 ## Context
 
-См. `proposal.md` и `specs/web-page-search/spec.md`. Исследование выполнено на локальной `main` (`3f50a2f`, merge PR #104); рабочая копия чистая.
+См. `proposal.md` и `specs/web-page-search/spec.md`. PR #105 уже содержит frontend Search feature и backend Search API из capability `page-search`; этот change уточняет prefix matching и устраняет лишние workspace refetch на page route.
 
 - Search API: `apps/api/src/search/dto/search-query.dto.ts`, `apps/api/src/search/search.controller.ts`, `apps/api/src/search/search-read.service.ts`, `apps/api/openapi.json`. `GET /api/v1/search` принимает обязательный `query` до 200 символов и optional integer `limit` 1–50 (default 20); backend trim-ит query и возвращает `[]` для пустой строки. Минимальной длины нет. DTO ответа — `{ pageId, title, snippet: string | null }`.
 - Orval уже создал `useSearchPages`, query key и query options в `apps/web/src/shared/api/generated/search/search.ts`; query function передаёт TanStack `signal` в `apiFetch`. `SearchPagesParams` и `SearchResultDto` находятся в generated model. `apps/web/src/shared/api/index.ts` пока не публикует эти exports. Сгенерированный MSW handler уже доступен в `search/search.msw.ts` и включён в `generated/index.msw.ts`.
 - Частная рабочая область компонуется в `apps/web/src/app/layouts/private-workspace.tsx`; `PrivateShell` предоставляет header composition, а `AppShell` — постоянную sidebar и мобильный modal sidebar. Страницы открываются по `/pages/{pageId}` через `workspacePagePath` и `router.push`.
 - Shared `Dialog`, `DialogContent`, `DialogTitle`, `Input`, `Button` экспортируются из `apps/web/src/shared/ui`. Base UI dialog уже управляет Escape, modal focus и возвратом фокуса; существующие тесты этих свойств есть в `shared/ui/overlays.spec.tsx` и workspace dialog tests.
-- `workspace-page.tsx` разрешает маршрут из permission-filtered page tree/shared pages и показывает neutral unavailable/error state. `PrivateWorkspace` живёт в постоянном private layout, поэтому `useGetPageTree` и `useGetSharedPages` остаются активными observers при route changes и сохраняют старые результаты, пока выполняется refetch. Сейчас `WorkspacePage` может разрешить `/pages/{pageId}` по этому cached tree и передать страницу в `CollaborativePageEditor`; route-level `GET /pages/{pageId}` для текущей проверки доступа не используется.
+- `workspace-page.tsx` получает page route metadata из permission-filtered tree/shared pages, а `PrivateWorkspace` живёт в постоянном private layout. В PR #105 route уже вызывает generated `useGetPage(pageId)` с `staleTime: 0` и `refetchOnMount: 'always'`, но дополнительно принудительно refetch-ит tree, shared pages и projects на каждый page route и ждёт все три запроса до отображения страницы. Page detail query может одновременно иметь cached data и свежий refetch, поэтому cached DTO сам по себе не подтверждает текущий доступ.
 - `SessionProvider.clearSession` сейчас удаляет только current-user и asset-read-url entries, а смена пользователя очищает только asset-read-url cache. Следовательно, search/query cache может пережить logout или переключение пользователя.
 
 ## Goals / Non-Goals
@@ -16,11 +16,12 @@
 - Добавить доступную поисковую палитру в существующую приватную рабочую область и использовать текущий API/TanStack Query pipeline.
 - Не показывать устаревшую выдачу под новым запросом и сокращать хранение query/snippet в клиентском кеше.
 - Сохранить обычный маршрутный flow и разрешение доступа источником истины.
+- Искать начала слов в title и свежей projection через существующий PostgreSQL FTS без нового индекса и без изменения разрешений.
 - Проверить основные состояния Vitest/RTL и критический пользовательский путь Playwright.
 
 **Non-Goals:**
 
-- API/backend/schema changes, поиск на публичных страницах и клиентская авторизация.
+- Новый endpoint/DTO, миграция или индекс БД, морфологический/fuzzy/trigram/semantic search, поиск на публичных страницах и клиентская авторизация.
 - Breadcrumbs, дополнительный контекст сверх Search DTO, подсветка совпадений, собственная сортировка или дополнительные поисковые возможности.
 - Новый глобальный store, command framework, UI dependency или отдельный search API client.
 
@@ -31,6 +32,14 @@
 Добавить feature `apps/web/src/features/page-search` с публичным export. `model` хранит локальные `query`, debounced query, active result и `open`; model использует существующий generated hook. `ui` содержит composition trigger + dialog + accessible result list. Feature принимает callback выбора результата от внешнего composition, не импортируя Next router. `PrivateWorkspace` остаётся тонким composition boundary: подключает feature в приватной шапке рядом с breadcrumbs/profile через минимальный header slot и передаёт `router.push(workspacePagePath(pageId))`. Поиск не размещается в editor или в page component, поэтому доступен на приватных workspace маршрутах, включая мобильный layout.
 
 В `apps/web/src/shared/api/index.ts` добавить barrel exports для `useSearchPages`, `getSearchPagesQueryKey`, `searchPages` (только если нужен явный retry вызов; предпочтительно retry через query result) и generated DTO/params. Сами generated файлы и OpenAPI не редактировать.
+
+### Prefix matching в существующем PostgreSQL FTS
+
+В `SearchRepository` сначала разобрать параметризованный пользовательский ввод существующей `websearch_to_tsquery('simple', $query)`, затем преобразовать только сформированные PostgreSQL quoted lexemes в prefix terms с `:*` и привести результат обратно к `tsquery`. Сырая строка пользователя не становится SQL/tsquery source: она передаётся через Prisma tagged `$queryRaw`, а grammar operators берутся только из результата `websearch_to_tsquery`.
+
+Префикс применяется к каждому распознанному term, не меняя сгенерированные `&`, `|`, отрицания и phrase adjacency. Поэтому некавычные слова сохраняют текущую AND-семантику в пределах одного поля, `OR`, `-term` и кавычки сохраняют семантику `websearch_to_tsquery`, а query только из отрицаний по-прежнему отсекается `querytree`. Пунктуация/оператороподобный ввод разбирается PostgreSQL parser-ом и не исполняется как SQL. Морфология и отдельный универсальный parser не добавляются.
+
+Одинаковое prefix tsquery используется для candidate selection и финального чтения/snippet predicate. Это поддерживает title search без body projection, но применяет к body только projection с `sourceStorageRevision = storageRevision`. Существующие `Page_title_search_idx` и GIN index `PageSearchDocument.searchVector` принимают prefix `tsquery`; SQL/integration test проверяет планы с тем же преобразованием. Схема БД и projection revision guard не меняются. Document projection validator принимает существующие TipTap heading levels H1–H6; web editor при этом сохраняет свои текущие уровни и UI не меняется.
 
 ### Query normalization, debounce и cache
 
@@ -52,13 +61,13 @@ Dialog trigger для UI-кнопки должен быть зарегистри
 
 ### Навигация и отозванный доступ
 
-Feature передаёт только `pageId` выбранной записи, закрывает dialog и очищает локальное состояние. `PrivateWorkspace` инвалидирует точный `getGetPageQueryKey(pageId)` для немедленного выбора текущей страницы, затем сразу вызывает `router.push(workspacePagePath(pageId))`; invalidation не ожидается. Для нового page route generated `useGetPage(pageId)` выполняет свежий permission-safe read.
+Feature передаёт только `pageId`, закрывает dialog и очищает локальное состояние. `PrivateWorkspace` может инвалидировать точный `getGetPageQueryKey(pageId)` без ожидания и сразу вызвать `router.push(workspacePagePath(pageId))`.
 
-Есть реальный cache gap в текущем route flow: persistent `PrivateWorkspace` не размонтирует tree observers при переходе; при отзыве permission старый tree всё ещё содержит страницу. `WorkspacePage` считает её доступной только по этому tree и может отрисовать старый title и смонтировать editor до обновления cache. Исправление относится к общему private page-route boundary, а не к Search feature: `PrivateWorkspace` проверяет текущий `/pages/{pageId}` через уже сгенерированный `useGetPage(pageId)` с refetch при каждом route entry, включая ранее закешированный `PageDto`. Пока свежий ответ загружается, route показывает нейтральный loading shell, скрывает page-specific crumbs и не монтирует `WorkspacePage` content/editor из tree cache. Свежий `PageDto` подтверждает доступ и даёт title/role; `403/404` переводятся в существующее neutral unavailable/error state и stale page detail не используется. При denied response page-scoped data очищается, а permission-filtered page tree/shared pages инвалидируются; shell не показывает route-specific stale metadata. Навигация не ждёт ни этот запрос, ни tree/shared refetch перед `router.push()`.
+Существующий `useGetPage(pageId)` — единственное подтверждение доступа для page route: query включается при URL `/pages/{pageId}`, `staleTime: 0`, `retry: false`, `refetchOnMount: 'always'`. Эти настройки должны заставлять TanStack Query выполнить свежий GET даже при cached PageDto. Пока query `isPending` или `isFetching`, page context считается неподтверждённым: `WorkspacePage` не показывает title, breadcrumbs, editor или данные дерева для целевой страницы. После свежего `200` текущий PageDto становится источником страницы/title/accessRole; permission-filtered trees используются только для доступной навигационной metadata и не являются условием открытия страницы. `403/404` переходят в существующий нейтральный unavailable state, прочая ошибка — в page-level error/retry; stale detail не используется. При denied/error page access shell не показывает cached workspace tree/shared labels.
 
-Фоновое tree/shared обновление не считается проверкой безопасности: доступ подтверждает только page endpoint, а target page surface скрывается до его свежего ответа. `PageDto` не содержит ancestor path; использовать generic shell без page-specific breadcrumbs и показывать sidebar ancestry только после обновления текущих permission-filtered tree queries. Не восстанавливать ancestry из search результатов.
+Не refetch-ить `treeQuery`, `sharedPagesQuery` и `projectsQuery` на каждом page route и не ожидать их для открытия страницы. Они сохраняют собственный TanStack Query lifecycle и обновляются существующими mutation invalidations/обычным cache policy; их ошибка или pending не блокируют page content после свежего page `200`. Page route должен работать при page detail `200`, даже если страницу ещё нет в owned/shared tree, и при сбое sidebar metadata. Обычные route links, browser back/forward и project navigation остаются существующими механизмами Next router. Page management rename synchronizes cached PageDto вместе с tree cache, чтобы подтверждённая page DTO не ломала текущий optimistic title update.
 
-Shared page проходит тем же `/pages/{pageId}` route guard; availability не должна зависеть от присутствия страницы в собственном page tree. Проверку разрешения выполняет backend endpoint, не новая frontend capabilities модель.
+Search result и успешный page read не являются долговременной гарантией permission: document/editor API остаётся backend authorization boundary и его отказ не получает fallback из Search/Page cache. Не добавлять клиентскую permissions-модель и не восстанавливать breadcrumbs поиска из недоступных ancestors.
 
 Snippet/title отображаются напрямую как React text nodes. Никакого HTML parsing, highlighting, полного документа, клиентского breadcrumb lookup или дополнительной сортировки.
 
@@ -70,7 +79,9 @@ Snippet/title отображаются напрямую как React text nodes.
 
 ## Risks / Trade-offs
 
-- [Persistent workspace tree cache может сохранить страницу после отзыва доступа] → page route повторно проверяет доступ через существующий generated page endpoint и не показывает cached route data до свежего ответа; tree/shared refresh после route push обновляет навигацию без задержки перед переходом.
+- [Persistent workspace cache может сохранить страницу после отзыва доступа] → page route всегда re-fetch-ит существующий generated page endpoint и скрывает private route surface и cached navigation до свежего ответа; при отказе private navigation не отображается.
+- [Tree/project metadata может грузиться с ошибкой или иметь старую копию] → успешный page `GET 200` сам даёт доступный PageDto для рендера, а workspace queries не блокируют страницу; stale ancestors не используются как proof of access.
+- [Prefix tsquery меняет поиск с token equality на token-prefix] → изменение ограничено началом каждой FTS lexeme; OR, отрицания, quoted phrase и порядок релевантности сохраняются; отдельные тесты выполняются на PostgreSQL.
 - [Permission может измениться сразу после успешного page-read] → page GET не рассматривается как долгоживущая гарантия; editor/document APIs остаются backend permission boundary, а route не использует Search/Page cache как fallback при последующем отказе.
 - [Search projection может ещё не содержать только что сохранённый текст] → нейтральный empty state и ручной retry; автоматического polling нет.
 - [Глобальный shortcut пересекается с редактором и браузером] → перехватывать его лишь вне редактируемых элементов и не устанавливать handler вне приватной рабочей области.
@@ -80,7 +91,8 @@ Snippet/title отображаются напрямую как React text nodes.
 ## Migration Plan
 
 1. Экспортировать существующие generated search types/hook из `shared/api` и добавить feature с локальным состоянием, диалогом и feature tests.
-2. Подключить кнопку/диалог и shortcut к приватной workspace композиции; route transition выполняется сразу, а общий page route boundary revalidates доступ и обновляет cached workspace trees без предшествующего ожидания.
-3. Добавить Playwright happy path и выполнить web lint/typecheck/tests/build и `openspec validate add-web-page-search --strict` перед review реализации.
+2. Подключить кнопку/диалог и shortcut к приватной workspace композиции; page route использует свежий `GET /pages/{pageId}` без принудительных workspace refetch.
+3. Добавить prefix matching в действующий SearchRepository и реальные PostgreSQL integration cases, не меняя Search API contract и индексы.
+4. Проверить route guard, web UX, API tests, PostgreSQL integration suite и OpenSpec strict validation перед review реализации.
 
-Изменение не требует миграции данных или координации backend deploy. Откат удаляет feature, её workspace composition и generated barrel exports; Search API остаётся без изменения.
+Изменение не требует миграции данных, generated API или координации DB schema. Для prefix matching нужен backend deploy, Search endpoint и DTO остаются совместимыми. Откат удаляет prefix transformation/validator allowance и web route изменения; существующая Search projection остаётся пригодной.

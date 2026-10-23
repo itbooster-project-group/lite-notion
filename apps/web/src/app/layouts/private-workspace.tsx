@@ -5,7 +5,7 @@ import { House, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { getBreadcrumbs, normalizePageTree, resolvePageRouteContext } from '@/entities/page';
+import { getBreadcrumbs, getPageDisplayTitle, normalizePageTree } from '@/entities/page';
 import { PageAccessPanel } from '@/features/page-access';
 import { PageSearch } from '@/features/page-search';
 import {
@@ -62,6 +62,18 @@ function toDeleteConfirmationIntent(
   return { kind: 'page', returnFocus: intent.returnFocus, title: intent.title };
 }
 
+function pageBreadcrumbs(
+  tree: ReturnType<typeof normalizePageTree>,
+  pageId: string,
+  title: string,
+) {
+  const ancestors = getBreadcrumbs(tree, pageId)
+    .filter((item) => item.id !== pageId)
+    .map((item) => ({ title: item.title, href: workspacePagePath(item.id) }));
+
+  return [...ancestors, { title: getPageDisplayTitle(title), href: workspacePagePath(pageId) }];
+}
+
 export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>) {
   const pathname = usePathname() ?? '/';
   const router = useRouter();
@@ -73,8 +85,6 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
   const [deleteError, setDeleteError] = useState<string>();
   const [deletePending, setDeletePending] = useState(false);
   const [accessPageId, setAccessPageId] = useState<string>();
-  const [refreshedPageId, setRefreshedPageId] = useState<string>();
-  const activeRoutePageId = useRef<string | undefined>(undefined);
   const deletePendingRef = useRef(false);
   const tree = useMemo(() => normalizePageTree(treeQuery.data ?? []), [treeQuery.data]);
   const sharedTree = useMemo(
@@ -92,14 +102,18 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
   const pageAccessUnavailable = isUnavailableStatus(pageQuery.error);
   const pageAccessError = pageQuery.isError && !pageAccessUnavailable;
   const pageAccessPending = Boolean(pageId) && (pageQuery.isPending || pageQuery.isFetching);
-  const routeRefreshPending = Boolean(pageId) && refreshedPageId !== pageId;
   const pageRouteReady =
-    Boolean(pageId) && !routeRefreshPending && !pageAccessPending && !pageQuery.isError;
-  const pageContext = useMemo(
-    () =>
-      pageRouteReady && pageId ? resolvePageRouteContext(tree, sharedTree, pageId) : undefined,
-    [pageId, pageRouteReady, sharedTree, tree],
-  );
+    Boolean(pageId) && !pageAccessPending && !pageQuery.isError && pageQuery.data !== undefined;
+  const pageContext = useMemo(() => {
+    const page = pageRouteReady ? pageQuery.data : undefined;
+    if (!page || !pageId) return undefined;
+
+    return {
+      page,
+      source: page.accessRole === 'owner' ? ('owned' as const) : ('shared' as const),
+      tree: page.accessRole === 'owner' ? tree : sharedTree,
+    };
+  }, [pageId, pageQuery.data, pageRouteReady, sharedTree, tree]);
   const page = pageContext?.page;
   const accessPage = accessPageId ? tree.nodesById[accessPageId] : undefined;
   const effectiveProjectId =
@@ -116,53 +130,30 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
     deleteCleanupCoordinator.setRouteContext(routeContext);
   }, [deleteCleanupCoordinator, routeContext]);
 
-  useEffect(() => {
-    activeRoutePageId.current = pageId;
-    if (!pageId) {
-      setRefreshedPageId(undefined);
-      return;
-    }
-    setRefreshedPageId(undefined);
-    void Promise.all([
-      treeQuery.refetch(),
-      sharedPagesQuery.refetch(),
-      projectsQuery.refetch(),
-    ]).then(() => {
-      if (activeRoutePageId.current === pageId) setRefreshedPageId(pageId);
-    });
-  }, [pageId, projectsQuery.refetch, sharedPagesQuery.refetch, treeQuery.refetch]);
-
   const crumbs: Breadcrumb[] = [{ href: '/', isHome: true, title: 'На главную' }];
   if (pathname === '/trash') crumbs.push({ title: 'Корзина', href: '/trash' });
   else if (pathname === '/profile') crumbs.push({ title: 'Профиль', href: '/profile' });
   else if (
-    !routeRefreshPending &&
     !pageAccessPending &&
     !pageAccessError &&
     !pageAccessUnavailable &&
-    !treeQuery.isPending &&
-    !treeQuery.isError &&
-    !sharedPagesQuery.isPending &&
     !sharedPagesQuery.isError &&
     pageContext?.source === 'shared' &&
     page
   ) {
     crumbs.push({ title: 'Доступные мне', href: '/' });
-    crumbs.push(
-      ...getBreadcrumbs(sharedTree, page.id).map((item) => ({
-        title: item.title,
-        href: workspacePagePath(item.id),
-      })),
-    );
-  } else if (!pending && !failed && project && (!pageId || page)) {
+    crumbs.push(...pageBreadcrumbs(sharedTree, page.id, page.title));
+  } else if (
+    !pageAccessPending &&
+    !pageAccessError &&
+    !pageAccessUnavailable &&
+    !pending &&
+    !failed &&
+    project &&
+    (!pageId || page)
+  ) {
     crumbs.push({ title: project.name, href: workspaceProjectPath(project.id) });
-    if (page)
-      crumbs.push(
-        ...getBreadcrumbs(tree, page.id).map((item) => ({
-          title: item.title,
-          href: workspacePagePath(item.id),
-        })),
-      );
+    if (page) crumbs.push(...pageBreadcrumbs(tree, page.id, page.title));
   } else if (pathname !== '/') {
     crumbs.push({ title: 'Рабочая область', href: pathname });
   }
@@ -245,7 +236,7 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
   }
 
   const navigation =
-    pending || routeRefreshPending || pageAccessPending ? (
+    pageAccessUnavailable || pageAccessError ? null : pending || pageAccessPending ? (
       <Text aria-busy="true">Загружаем дерево…</Text>
     ) : failed ? (
       <div className="space-y-2">
@@ -287,7 +278,7 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
     pageTree: tree,
     sharedTree,
     pageContext,
-    pageAccessPending: pageAccessPending || routeRefreshPending,
+    pageAccessPending,
     pageAccessError,
     pageAccessUnavailable,
     projects: projectsQuery.data ?? [],

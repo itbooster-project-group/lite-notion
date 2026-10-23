@@ -53,10 +53,7 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
     pageTreePending,
     refetchPageTree,
     refetchProjects,
-    refetchSharedPages,
     refetchPageAccess,
-    sharedPagesError,
-    sharedPagesPending,
   } = useWorkspaceData();
   const pageManagement = usePageManagement(route);
   const projectCreation = useProjectCreation();
@@ -92,11 +89,7 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
   }
 
   const metadataPending = route.type !== 'page' && (projectsPending || pageTreePending);
-  const routePending =
-    pageTreePending ||
-    (route.type === 'page' && pageContext?.source === 'owned' && projectsPending) ||
-    (route.type === 'page' && pageContext?.source !== 'owned' && sharedPagesPending);
-  if (metadataPending || routePending) {
+  if (metadataPending) {
     return (
       <ContentContainer className="flex min-h-[60vh] items-center justify-center" aria-busy="true">
         <Text variant="caption">Загружаем рабочую область…</Text>
@@ -104,24 +97,21 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
     );
   }
 
-  const pageRouteError =
-    route.type === 'page' && pageContext?.source !== 'owned' && sharedPagesError;
-  const ownedProjectsError =
-    projectsError && (route.type !== 'page' || pageContext?.source === 'owned');
-  if (ownedProjectsError || pageTreeError || pageRouteError) {
+  const workspaceMetadataError = route.type !== 'page' && (projectsError || pageTreeError);
+  if (workspaceMetadataError) {
     return (
       <WorkspaceError
-        pageLevel={Boolean(pageRouteError)}
+        pageLevel={false}
         onRetry={() => {
           void refetchPageTree();
-          if (route.type !== 'page' || pageContext?.source === 'owned') void refetchProjects();
-          if (route.type === 'page' && pageContext?.source !== 'owned') void refetchSharedPages();
+          void refetchProjects();
         }}
       />
     );
   }
 
-  const pageUnavailable = !activePage || (pageContext?.source === 'owned' && !project);
+  const pageUnavailable =
+    route.type === 'page' ? !activePage : route.type === 'project' && !project;
   if (route.type !== 'root' && (route.type === 'project' ? !project : pageUnavailable)) {
     return <WorkspaceUnavailable />;
   }

@@ -139,7 +139,7 @@ function validatePersistedNodeAttrs(
   attrs: Readonly<Record<string, JsonValue>>,
 ): void {
   if (type === 'heading' && attrs.level !== undefined) {
-    if (typeof attrs.level !== 'number' || ![1, 2, 3].includes(attrs.level)) {
+    if (typeof attrs.level !== 'number' || ![1, 2, 3, 4, 5, 6].includes(attrs.level)) {
       throw invalidContent('heading node has an invalid level.');
     }
   }

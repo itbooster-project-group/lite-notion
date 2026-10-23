@@ -31,7 +31,12 @@ export class SearchRepository {
   findCandidates(query: string, limit: number, offset: number): Promise<SearchCandidate[]> {
     return this.prisma.$queryRaw<SearchCandidate[]>`
       WITH parsed AS (
-        SELECT websearch_to_tsquery('simple', ${query}) AS query
+        SELECT regexp_replace(
+          websearch_to_tsquery('simple', ${query})::text,
+          '''([^'']+)''',
+          E'''\\\\1'':*',
+          'g'
+        )::tsquery AS query
       ), usable AS (
         SELECT query FROM parsed WHERE querytree(query) NOT IN ('', 'T')
       ), candidates AS (
@@ -90,7 +95,12 @@ export class SearchRepository {
 
     return this.prisma.$queryRaw<SearchResultRecord[]>`
       WITH parsed AS (
-        SELECT websearch_to_tsquery('simple', ${query}) AS query
+        SELECT regexp_replace(
+          websearch_to_tsquery('simple', ${query})::text,
+          '''([^'']+)''',
+          E'''\\\\1'':*',
+          'g'
+        )::tsquery AS query
       )
       SELECT page.id AS "pageId",
              page."title",

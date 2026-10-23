@@ -16,9 +16,11 @@ import {
 } from '@/entities/page';
 import {
   type CreatePageDto,
+  getGetPageQueryKey,
   getGetPageTrashQueryKey,
   getGetPageTreeQueryKey,
   getGetProjectTrashQueryKey,
+  type PageDto,
   type PageTreeNodeDto,
   useCreatePage as useCreatePageMutation,
   useDeletePage as useDeletePageMutation,
@@ -53,20 +55,30 @@ export function usePageManagement(routeContext: WorkspaceRouteContext | undefine
 
   async function renamePage(pageId: string, title: string) {
     if (renameMutation.isPending) throw new Error('Rename pending');
-    const queryKey = getGetPageTreeQueryKey();
-    await queryClient.cancelQueries({ queryKey });
-    const snapshot = queryClient.getQueryData<PageTreeNodeDto[]>(queryKey);
-    queryClient.setQueryData<PageTreeNodeDto[]>(queryKey, (current) =>
+    const treeQueryKey = getGetPageTreeQueryKey();
+    const pageQueryKey = getGetPageQueryKey(pageId);
+    await Promise.all([
+      queryClient.cancelQueries({ queryKey: treeQueryKey }),
+      queryClient.cancelQueries({ queryKey: pageQueryKey, exact: true }),
+    ]);
+    const treeSnapshot = queryClient.getQueryData<PageTreeNodeDto[]>(treeQueryKey);
+    const pageSnapshot = queryClient.getQueryData<PageDto>(pageQueryKey);
+    queryClient.setQueryData<PageTreeNodeDto[]>(treeQueryKey, (current) =>
       renamePageInTree(current ?? [], pageId, title),
+    );
+    queryClient.setQueryData<PageDto>(pageQueryKey, (current) =>
+      current ? { ...current, title } : current,
     );
 
     try {
-      await renameMutation.mutateAsync({ data: { title }, pageId });
+      const renamedPage = await renameMutation.mutateAsync({ data: { title }, pageId });
+      queryClient.setQueryData(pageQueryKey, renamedPage);
     } catch (error) {
-      queryClient.setQueryData(queryKey, snapshot);
+      queryClient.setQueryData(treeQueryKey, treeSnapshot);
+      queryClient.setQueryData(pageQueryKey, pageSnapshot);
       throw error;
     } finally {
-      await queryClient.invalidateQueries({ queryKey });
+      await queryClient.invalidateQueries({ queryKey: treeQueryKey });
     }
   }
 

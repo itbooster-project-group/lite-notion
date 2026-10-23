@@ -290,6 +290,34 @@ function stateWithParagraphs(...paragraphs: string[]): Uint8Array<ArrayBuffer> {
   return state;
 }
 
+function stateWithHeadingsAndParagraph(
+  headingValues: readonly string[],
+  paragraphValue: string,
+): Uint8Array<ArrayBuffer> {
+  const ydoc = new Y.Doc();
+  const fragment = ydoc.getXmlFragment('default');
+  const headings = headingValues.map((value, index) => {
+    const heading = new Y.XmlElement('heading');
+    const headingText = new Y.XmlText();
+    heading.setAttribute('level', (index + 1) as unknown as string);
+    headingText.insert(0, value);
+    heading.insert(0, [headingText]);
+    return heading;
+  });
+
+  const paragraph = new Y.XmlElement('paragraph');
+  const paragraphText = new Y.XmlText();
+  paragraphText.insert(0, paragraphValue);
+  paragraph.insert(0, [paragraphText]);
+  fragment.insert(0, [...headings, paragraph]);
+
+  const encoded = Y.encodeStateAsUpdate(ydoc);
+  const state = new Uint8Array(encoded.byteLength);
+  state.set(encoded);
+  ydoc.destroy();
+  return state;
+}
+
 describe('page search on PostgreSQL', () => {
   let prisma: PrismaClient;
   let ownerId: string;
@@ -303,6 +331,7 @@ describe('page search on PostgreSQL', () => {
     id?: string;
     title: string;
     body?: string;
+    documentState?: Uint8Array<ArrayBuffer>;
     parentPageId?: string | null;
     restricted?: boolean;
   }): Promise<string> {
@@ -323,7 +352,7 @@ describe('page search on PostgreSQL', () => {
       data: {
         pageId,
         tiptapSchemaVersion: 2,
-        yjsState: stateWithParagraphs(options.body ?? ''),
+        yjsState: options.documentState ?? stateWithParagraphs(options.body ?? ''),
       },
     });
     pageIds.push(pageId);
@@ -480,6 +509,72 @@ describe('page search on PostgreSQL', () => {
     await indexPage(duplicate);
     const matches = await search.searchPages(ownerId, 'singlehitmarker', 10);
     expect(matches.filter(({ pageId }) => pageId === duplicate)).toHaveLength(1);
+  });
+
+  it('matches complete and prefixed title words even without a body projection', async () => {
+    const pageId = await createPage({ title: 'Документация проекта' });
+
+    await expect(search.searchPages(ownerId, 'Документация', 10)).resolves.toMatchObject([
+      { pageId, title: 'Документация проекта', snippet: null },
+    ]);
+    await expect(search.searchPages(ownerId, 'Докумен', 10)).resolves.toMatchObject([{ pageId }]);
+    await expect(search.searchPages(ownerId, 'проек', 10)).resolves.toMatchObject([{ pageId }]);
+  });
+
+  it('matches prefixes in TipTap H1-H6 headings and paragraphs, including multiple terms', async () => {
+    const pageId = await createPage({
+      title: 'Раздел документа',
+      documentState: stateWithHeadingsAndParagraph(
+        [
+          'Архитектура проекта',
+          'Headingtwo searchable',
+          'Headingthree searchable',
+          'Headingfour searchable',
+          'Headingfive searchable',
+          'Headingsix searchable',
+        ],
+        'Настройки доступа описаны отдельно',
+      ),
+    });
+    await indexPage(pageId);
+
+    await expect(search.searchPages(ownerId, 'Архитектура', 10)).resolves.toMatchObject([
+      { pageId },
+    ]);
+    await expect(search.searchPages(ownerId, 'архит', 10)).resolves.toMatchObject([{ pageId }]);
+    await expect(search.searchPages(ownerId, 'проек', 10)).resolves.toMatchObject([{ pageId }]);
+    for (const prefix of ['headingtw', 'headingth', 'headingfo', 'headingfi', 'headingsi']) {
+      await expect(search.searchPages(ownerId, prefix, 10)).resolves.toMatchObject([{ pageId }]);
+    }
+    await expect(search.searchPages(ownerId, 'настрой дост', 10)).resolves.toMatchObject([
+      { pageId },
+    ]);
+    await expect(search.searchPages(ownerId, 'доступ', 10)).resolves.toMatchObject([{ pageId }]);
+  });
+
+  it('supports mixed Cyrillic, Latin and numeric prefixes while preserving websearch operators', async () => {
+    const mixed = await createPage({ title: 'Архитектура Project2026' });
+    const orFirst = await createPage({ title: 'operatoralpha result' });
+    const orSecond = await createPage({ title: 'operatorbeta result' });
+    const positive = await createPage({ title: 'phraseprefix nextword result' });
+    const negative = await createPage({ title: 'phraseprefix forbidden result' });
+
+    await expect(search.searchPages(ownerId, 'архит project2', 10)).resolves.toMatchObject([
+      { pageId: mixed },
+    ]);
+    const orResults = await search.searchPages(ownerId, 'operatoral OR operatorbe', 10);
+    expect(orResults.map(({ pageId }) => pageId)).toEqual(
+      expect.arrayContaining([orFirst, orSecond]),
+    );
+    expect(orResults).toHaveLength(2);
+    await expect(search.searchPages(ownerId, 'phrasepref -forbid', 10)).resolves.toMatchObject([
+      { pageId: positive },
+    ]);
+    await expect(search.searchPages(ownerId, '"phrasepref nextw"', 10)).resolves.toMatchObject([
+      { pageId: positive },
+    ]);
+    await expect(search.searchPages(ownerId, "';-- |:* ()", 10)).resolves.toEqual([]);
+    await expect(prisma.page.findUnique({ where: { id: negative } })).resolves.not.toBeNull();
   });
 
   it('orders equal title ranks by pageId and matches mixed-language terms in one field', async () => {
@@ -1346,13 +1441,19 @@ describe('page search on PostgreSQL', () => {
         SELECT page.id
         FROM "Page" page
         WHERE to_tsvector('simple', COALESCE(page."title", ''))
-          @@ websearch_to_tsquery('simple', 'planrare')
+          @@ regexp_replace(
+            websearch_to_tsquery('simple', 'planrare')::text,
+            '''([^'']+)''', E'''\\\\1'':*', 'g'
+          )::tsquery
       `;
       const bodyPlan = await transaction.$queryRaw<Array<{ 'QUERY PLAN': unknown }>>`
         EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
         SELECT projection."pageId"
         FROM "PageSearchDocument" projection
-        WHERE projection."searchVector" @@ websearch_to_tsquery('simple', 'planrare')
+        WHERE projection."searchVector" @@ regexp_replace(
+          websearch_to_tsquery('simple', 'planrare')::text,
+          '''([^'']+)''', E'''\\\\1'':*', 'g'
+        )::tsquery
       `;
       return { bodyPlan, titlePlan };
     });
@@ -1368,7 +1469,10 @@ describe('page search on PostgreSQL', () => {
         ON project.id = page."projectId" AND project."deletedAt" IS NULL
       WHERE page."deletedAt" IS NULL
         AND to_tsvector('simple', COALESCE(page."title", ''))
-          @@ websearch_to_tsquery('simple', 'planrare')
+          @@ regexp_replace(
+            websearch_to_tsquery('simple', 'planrare')::text,
+            '''([^'']+)''', E'''\\\\1'':*', 'g'
+          )::tsquery
     `;
     const bodyCandidatePlan = await prisma.$queryRaw<Array<{ 'QUERY PLAN': ExplainPlanEntry[] }>>`
       EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
@@ -1380,7 +1484,10 @@ describe('page search on PostgreSQL', () => {
       JOIN "Project" project
         ON project.id = page."projectId" AND project."deletedAt" IS NULL
       WHERE projection."sourceStorageRevision" = document."storageRevision"
-        AND projection."searchVector" @@ websearch_to_tsquery('simple', 'planrare')
+        AND projection."searchVector" @@ regexp_replace(
+          websearch_to_tsquery('simple', 'planrare')::text,
+          '''([^'']+)''', E'''\\\\1'':*', 'g'
+        )::tsquery
     `;
     const combinedPlans = await Promise.all(
       [0, 100, 200].map(
@@ -1388,7 +1495,10 @@ describe('page search on PostgreSQL', () => {
           prisma.$queryRaw<Array<{ 'QUERY PLAN': ExplainPlanEntry[] }>>`
           EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
           WITH parsed AS (
-            SELECT websearch_to_tsquery('simple', 'filler') AS query
+            SELECT regexp_replace(
+              websearch_to_tsquery('simple', 'filler')::text,
+              '''([^'']+)''', E'''\\\\1'':*', 'g'
+            )::tsquery AS query
           ), usable AS (
             SELECT query FROM parsed WHERE querytree(query) NOT IN ('', 'T')
           ), candidates AS (

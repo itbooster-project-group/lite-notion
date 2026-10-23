@@ -88,11 +88,30 @@
 
 ### Requirement: Search matches current title and current indexed body text
 
-Система MUST искать по текущему `Page.title` и по тексту search projection, соответствующей текущей storage revision. Поиск по title MUST работать и при отсутствующей/отстающей body projection; поиск по body MUST использовать только актуальную projection. Title MUST иметь более высокий приоритет, чем совпадение только в body. Поиск MUST поддерживать русский, английский и смешанные запросы без внешнего search engine.
+Система MUST искать по текущему `Page.title` и по тексту search projection, соответствующей текущей storage revision. Каждая FTS lexeme MUST поддерживать prefix matching с начала слова в title и body, в том числе при отсутствии/отставании body projection для title match. Body MUST использовать только актуальную projection. Title MUST иметь более высокий приоритет, чем совпадение только в body. Поиск MUST поддерживать русский, английский, цифры и смешанные запросы без внешнего search engine. Prefix преобразование MUST выполняться над результатом parameterized `websearch_to_tsquery`, не вставлять сырой пользовательский ввод в SQL и сохранять разбор multi-term AND, `OR`, отрицаний и quoted phrase; другие специальные символы обрабатываются существующим PostgreSQL websearch parser. Морфологический, fuzzy, trigram и semantic search не входят в эту capability.
 
 #### Scenario: Search matches title and body
 - **WHEN** авторизованный пользователь ищет уникальный термин из названия или актуального текста доступной страницы
 - **THEN** Search API возвращает соответствующую страницу
+
+#### Scenario: Complete word and prefix match a title without body projection
+- **GIVEN** текущий title страницы — `Документация проекта`, а body projection отсутствует
+- **WHEN** пользователь ищет `Документация`, `Докумен` или `проек`
+- **THEN** каждый запрос находит страницу по title без требования к body projection
+
+#### Scenario: Prefix matching applies to document headings and paragraphs
+- **GIVEN** актуальная projection содержит TipTap heading H1–H6 и paragraph с обычными/вложенными text nodes
+- **WHEN** пользователь ищет начало слова из одного из этих блоков
+- **THEN** страница находится тем же prefix matching, что и при поиске по title
+
+#### Scenario: Multi-term prefix matching preserves websearch operators
+- **GIVEN** актуальные title/body содержат подходящие lexemes
+- **WHEN** запрос содержит несколько prefix terms, `OR`, отрицательный term или quoted phrase
+- **THEN** каждый term допускает prefix match, а объединение, исключение и phrase adjacency сохраняют семантику `websearch_to_tsquery`
+
+#### Scenario: Special query syntax is parameterized and bounded by the parser
+- **WHEN** query содержит кириллицу, латиницу, цифры, кавычки, пунктуацию или SQL-подобный текст
+- **THEN** он передаётся как параметр, PostgreSQL разбирает только `websearch_to_tsquery` syntax, и произвольный ввод не становится SQL/tsquery-кодом
 
 #### Scenario: Title match ranks above body-only match
 - **WHEN** одинаковый термин встречается в title одной страницы и только в body другой
