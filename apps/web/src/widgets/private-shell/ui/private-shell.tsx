@@ -12,9 +12,10 @@ type PrivateShellProps = Readonly<{
   children: ReactNode;
   breadcrumbs: ReactNode;
   headerStart?: ReactNode;
+  headerEnd?: ReactNode;
 }>;
 
-export function PrivateShell({ children, breadcrumbs, headerStart }: PrivateShellProps) {
+export function PrivateShell({ children, breadcrumbs, headerStart, headerEnd }: PrivateShellProps) {
   const { user } = useSession();
   const avatar = useAssetReadUrl(user?.avatarAssetId, user?.id, {
     id: user?.id ?? '',
@@ -29,7 +30,8 @@ export function PrivateShell({ children, breadcrumbs, headerStart }: PrivateShel
             {headerStart ? <div className="shrink-0">{headerStart}</div> : null}
             {breadcrumbs}
           </div>
-          <div className="flex shrink-0 items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            {headerEnd}
             <Link
               aria-label={user ? `Профиль: ${user.name}` : 'Профиль'}
               className="block size-8 shrink-0 overflow-hidden rounded-full bg-muted text-muted-foreground outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring/50"

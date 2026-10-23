@@ -75,6 +75,9 @@ beforeEach(() => {
       HttpResponse.json([{ id: 'project-a', name: 'Project Alpha', ownerId: 'user-1' }]),
     ),
     http.get('*/api/v1/pages', () => HttpResponse.json(currentTree)),
+    http.get('*/api/v1/pages/child', () =>
+      HttpResponse.json(asPageDto(page('child', 'alpha', 'Child page'))),
+    ),
   );
 });
 

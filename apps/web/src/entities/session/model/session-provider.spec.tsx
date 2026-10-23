@@ -4,7 +4,12 @@ import { HttpResponse, http } from 'msw';
 import type { PropsWithChildren } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { assetReadUrlQueryKey, clearAccessToken } from '@/shared/api';
+import {
+  clearAccessToken,
+  getGetCurrentUserQueryKey,
+  getGetPageTreeQueryKey,
+  getSearchPagesQueryKey,
+} from '@/shared/api';
 import { server } from '@/shared/api/mocks/server';
 
 import { SessionProvider, useSession } from './session-provider';
@@ -105,7 +110,7 @@ describe('SessionProvider', () => {
     expect(result.current.user).toBeUndefined();
   });
 
-  it('clears authorization-sensitive asset URLs when the session ends', async () => {
+  it('clears user-scoped query data when the session ends', async () => {
     server.use(
       http.post('*/api/v1/auth/refresh', () =>
         HttpResponse.json({ accessToken: 'restored-token', expiresIn: 900 }),
@@ -114,17 +119,27 @@ describe('SessionProvider', () => {
     const { queryClient, Wrapper } = createWrapper();
     const { result } = renderHook(() => useSession(), { wrapper: Wrapper });
     await waitFor(() => expect(result.current.status).toBe('authenticated'));
-    queryClient.setQueryData([...assetReadUrlQueryKey, 'asset-1', 'page:page-1', 'user-1'], {
-      url: 'https://signed.example.com/private',
-    });
+    queryClient.setQueryData(getSearchPagesQueryKey({ query: 'private title' }), [
+      { pageId: 'page-1', snippet: 'private snippet', title: 'Private page' },
+    ]);
+    queryClient.setQueryData(getGetPageTreeQueryKey(), [{ id: 'page-1', title: 'Private page' }]);
 
     act(() => result.current.clearSession());
 
-    expect(queryClient.getQueriesData({ queryKey: assetReadUrlQueryKey })).toEqual([]);
+    expect(
+      queryClient.getQueryData(getSearchPagesQueryKey({ query: 'private title' })),
+    ).toBeUndefined();
+    expect(queryClient.getQueryData(getGetPageTreeQueryKey())).toBeUndefined();
+    expect(
+      queryClient
+        .getQueryCache()
+        .getAll()
+        .map((query) => query.queryKey),
+    ).toEqual([getGetCurrentUserQueryKey()]);
     queryClient.clear();
   });
 
-  it('clears authorization-sensitive asset URLs when the authenticated user changes', async () => {
+  it('clears user-scoped query data when the authenticated user changes', async () => {
     server.use(
       http.post('*/api/v1/auth/refresh', () =>
         HttpResponse.json({ accessToken: 'restored-token', expiresIn: 900 }),
@@ -135,9 +150,10 @@ describe('SessionProvider', () => {
     await waitFor(() => expect(result.current.user).toBeDefined());
     const oldUser = result.current.user;
     if (!oldUser) throw new Error('Expected a restored user');
-    queryClient.setQueryData([...assetReadUrlQueryKey, 'asset-1', 'page:page-1', oldUser.id], {
-      url: 'https://signed.example.com/private',
-    });
+    queryClient.setQueryData(getSearchPagesQueryKey({ query: 'private title' }), [
+      { pageId: 'page-1', snippet: 'private snippet', title: 'Private page' },
+    ]);
+    queryClient.setQueryData(getGetPageTreeQueryKey(), [{ id: 'page-1', title: 'Private page' }]);
 
     act(() =>
       result.current.authenticate({
@@ -147,7 +163,13 @@ describe('SessionProvider', () => {
       }),
     );
 
-    expect(queryClient.getQueriesData({ queryKey: assetReadUrlQueryKey })).toEqual([]);
+    expect(
+      queryClient.getQueryData(getSearchPagesQueryKey({ query: 'private title' })),
+    ).toBeUndefined();
+    expect(queryClient.getQueryData(getGetPageTreeQueryKey())).toBeUndefined();
+    expect(queryClient.getQueryData(getGetCurrentUserQueryKey())).toMatchObject({
+      id: 'different-user',
+    });
     queryClient.clear();
   });
 });

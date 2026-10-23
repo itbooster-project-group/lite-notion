@@ -42,6 +42,9 @@ type WorkspaceDeleteIntent =
 export function WorkspacePage({ route }: WorkspacePageProps) {
   const {
     pageContext,
+    pageAccessPending,
+    pageAccessError,
+    pageAccessUnavailable,
     pageTree: normalizedTree,
     projects,
     projectsError,
@@ -51,6 +54,7 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
     refetchPageTree,
     refetchProjects,
     refetchSharedPages,
+    refetchPageAccess,
     sharedPagesError,
     sharedPagesPending,
   } = useWorkspaceData();
@@ -74,6 +78,18 @@ export function WorkspacePage({ route }: WorkspacePageProps) {
     () => buildProjectPageTree(normalizedTree, effectiveProjectId ?? 'unavailable'),
     [effectiveProjectId, normalizedTree],
   );
+
+  if (route.type === 'page' && pageAccessPending) {
+    return (
+      <ContentContainer className="flex min-h-[60vh] items-center justify-center" aria-busy="true">
+        <Text variant="caption">Проверяем доступ к странице…</Text>
+      </ContentContainer>
+    );
+  }
+  if (route.type === 'page' && pageAccessUnavailable) return <WorkspaceUnavailable />;
+  if (route.type === 'page' && pageAccessError) {
+    return <WorkspaceError onRetry={() => void refetchPageAccess()} pageLevel />;
+  }
 
   const metadataPending = route.type !== 'page' && (projectsPending || pageTreePending);
   const routePending =

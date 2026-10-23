@@ -73,6 +73,7 @@ let currentProjects = [
 ];
 
 let currentTree: PageTreeNodeDto[];
+let currentSharedTree: PageTreeNodeDto[];
 
 beforeEach(() => {
   currentProjects = [
@@ -86,9 +87,26 @@ beforeEach(() => {
     page('beta', 'project-a', null, 'Beta page'),
     page('other', 'project-b', null, 'Other project page'),
   ];
+  currentSharedTree = [];
   server.use(
     http.get('*/api/v1/projects', () => HttpResponse.json(currentProjects)),
     http.get('*/api/v1/pages', () => HttpResponse.json(currentTree)),
+    http.get('*/api/v1/pages/shared', () => HttpResponse.json(currentSharedTree)),
+    http.get('*/api/v1/pages/:pageId', ({ params }) => {
+      const pageId = String(params.pageId);
+      const allPages: PageTreeNodeDto[] = [];
+      const collect = (nodes: readonly PageTreeNodeDto[]) => {
+        for (const node of nodes) {
+          allPages.push(node);
+          collect(node.children);
+        }
+      };
+      collect(currentTree);
+      collect(currentSharedTree);
+      const found = allPages.find((node) => node.id === pageId);
+      if (found) return HttpResponse.json(asPageDto(found));
+      return HttpResponse.json({ message: 'Not found' }, { status: 404 });
+    }),
   );
 });
 
@@ -244,17 +262,16 @@ describe('workspace page', () => {
   it('открывает shared page без matching owned project', async () => {
     currentTree = [];
     const permissionsRequests = vi.fn();
+    currentSharedTree = [page('shared-page', 'foreign-project', null, 'Shared page', [], 'viewer')];
     server.use(
-      http.get('*/api/v1/pages/shared', () =>
-        HttpResponse.json([page('shared', 'Shared page', null, 'Shared page', [], 'viewer')]),
-      ),
+      http.get('*/api/v1/pages/shared', () => HttpResponse.json(currentSharedTree)),
       http.get('*/api/v1/pages/:pageId/permissions', () => {
         permissionsRequests();
         return HttpResponse.json([]);
       }),
     );
 
-    renderWorkspace({ pageId: 'shared', type: 'page' });
+    renderWorkspace({ pageId: 'shared-page', type: 'page' });
 
     expect(
       await screen.findByRole('heading', { name: 'Shared page', level: 1 }),
@@ -291,6 +308,37 @@ describe('workspace page', () => {
 
     expect(await screen.findByRole('heading', { name: 'Ничего не найдено' })).toBeInTheDocument();
   });
+
+  it.each([403, 404])(
+    'не показывает cached tree, если свежая проверка доступа вернула %s',
+    async (status) => {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      queryClient.setQueryData(getGetPageTreeQueryKey(), [
+        page('child', 'project-a', null, 'Private cached title'),
+      ]);
+      server.use(
+        http.get('*/api/v1/pages/child', () =>
+          HttpResponse.json({ message: 'Access revoked' }, { status }),
+        ),
+      );
+      navigation.pathname = '/pages/child';
+      render(
+        <QueryClientProvider client={queryClient}>
+          <WorkspaceDeleteCleanupProvider>
+            <PrivateWorkspace>
+              <WorkspacePage route={{ pageId: 'child', type: 'page' }} />
+            </PrivateWorkspace>
+          </WorkspaceDeleteCleanupProvider>
+        </QueryClientProvider>,
+      );
+
+      expect(await screen.findByRole('heading', { name: 'Ничего не найдено' })).toBeInTheDocument();
+      expect(screen.queryByText('Private cached title')).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('heading', { name: 'Private cached title' }),
+      ).not.toBeInTheDocument();
+    },
+  );
 
   it('показывает workspace error и повторяет projects query для owned page', async () => {
     currentTree = [page('owned', 'project-a', null, 'Owned page')];
@@ -333,7 +381,7 @@ describe('workspace page', () => {
     );
   });
 
-  it('строит shared breadcrumbs, пока projects query pending', async () => {
+  it('скрывает shared breadcrumbs, пока permission-filtered workspace metadata обновляется', async () => {
     currentTree = [];
     const projects = createDeferred();
     server.use(
@@ -348,29 +396,22 @@ describe('workspace page', () => {
 
     renderWorkspace({ pageId: 'shared', type: 'page' });
 
+    expect(await screen.findByText('Проверяем доступ к странице…')).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Хлебные крошки' })).not.toHaveTextContent(
+      'Shared page',
+    );
+    projects.resolve();
     expect(await screen.findByRole('heading', { name: 'Shared page' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Хлебные крошки' })).toHaveTextContent(
       'Доступные мне/Shared page',
     );
-    projects.resolve();
   });
 
-  it('ждёт shared query после owned miss и не показывает unavailable во время pending', async () => {
+  it('принимает 404 от page endpoint как штатное недоступное состояние', async () => {
     currentTree = [];
-    const shared = createDeferred();
-    server.use(
-      http.get('*/api/v1/pages/shared', async () => {
-        await shared.promise;
-        return HttpResponse.json([]);
-      }),
-    );
 
     renderWorkspace({ pageId: 'missing', type: 'page' });
 
-    expect(await screen.findByText('Загружаем рабочую область…')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Ничего не найдено' })).not.toBeInTheDocument();
-
-    shared.resolve();
     expect(await screen.findByRole('heading', { name: 'Ничего не найдено' })).toBeInTheDocument();
   });
 
@@ -395,26 +436,26 @@ describe('workspace page', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('показывает page-level retry при shared error после owned miss', async () => {
-    currentTree = [];
+  it('показывает page-level retry при ошибке проверки доступа', async () => {
+    currentTree = [page('owned', 'project-a', null, 'Owned page')];
     let attempts = 0;
     server.use(
-      http.get('*/api/v1/pages/shared', () => {
+      http.get('*/api/v1/pages/owned', () => {
         attempts += 1;
         return attempts === 1
-          ? HttpResponse.json({ message: 'Shared failure' }, { status: 500 })
-          : HttpResponse.json([]);
+          ? HttpResponse.json({ message: 'Private page failure' }, { status: 500 })
+          : HttpResponse.json(asPageDto(page('owned', 'project-a', null, 'Owned page')));
       }),
     );
 
-    renderWorkspace({ pageId: 'missing', type: 'page' });
+    renderWorkspace({ pageId: 'owned', type: 'page' });
 
     expect(
       await screen.findByRole('heading', { name: 'Ошибка загрузки страницы' }),
     ).toBeInTheDocument();
     const retryButtons = screen.getAllByRole('button', { name: 'Повторить' });
     fireEvent.click(retryButtons.at(-1) as HTMLButtonElement);
-    expect(await screen.findByRole('heading', { name: 'Ничего не найдено' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Owned page' })).toBeInTheDocument();
   });
 
   it.each([
