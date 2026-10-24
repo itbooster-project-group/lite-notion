@@ -306,6 +306,88 @@ describe('workspace page', () => {
     expect(await screen.findByRole('heading', { name: 'Owned page' })).toBeInTheDocument();
   });
 
+  it('сохраняет sidebar при переходе A → B и скрывает cache до обновления permission trees', async () => {
+    const treeRefresh = createDeferred();
+    const sharedRefresh = createDeferred();
+    let treeRequests = 0;
+    let sharedRequests = 0;
+    const betaPage = page('beta', 'project-a', null, 'Beta page');
+    const updatedTree = [betaPage];
+    currentTree = [
+      page('alpha', 'project-a', null, 'Alpha page', [
+        page('child', 'project-a', 'alpha', 'Child page'),
+      ]),
+      page('beta', 'project-a', null, 'Beta page'),
+    ];
+    currentSharedTree = [
+      page('stale-shared', 'foreign-project', null, 'Revoked shared page', [], 'viewer'),
+    ];
+    server.use(
+      http.get('*/api/v1/pages', async () => {
+        treeRequests += 1;
+        if (treeRequests === 1) return HttpResponse.json(currentTree);
+        await treeRefresh.promise;
+        return HttpResponse.json(updatedTree);
+      }),
+      http.get('*/api/v1/pages/shared', async () => {
+        sharedRequests += 1;
+        if (sharedRequests === 1) return HttpResponse.json(currentSharedTree);
+        await sharedRefresh.promise;
+        return HttpResponse.json([]);
+      }),
+      http.get('*/api/v1/pages/beta', () => HttpResponse.json(asPageDto(betaPage))),
+    );
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const renderRoute = (pageId: string) => (
+      <QueryClientProvider client={queryClient}>
+        <WorkspaceDeleteCleanupProvider>
+          <PrivateWorkspace>
+            <WorkspacePage route={{ pageId, type: 'page' }} />
+          </PrivateWorkspace>
+        </WorkspaceDeleteCleanupProvider>
+      </QueryClientProvider>
+    );
+    navigation.pathname = '/pages/child';
+    const view = render(renderRoute('child'));
+
+    expect(await screen.findByRole('heading', { name: 'Child page' })).toBeInTheDocument();
+    const sidebar = screen.getByRole('complementary', { name: 'Боковая панель' });
+    const sidebarTreeSlot = sidebar.querySelector('[data-slot="sidebar-page-tree"]');
+    const workspaceTree = sidebarTreeSlot?.querySelector('[role="tree"]');
+    expect(workspaceTree).not.toBeNull();
+    expect(within(sidebar).getByRole('treeitem', { name: 'Alpha page' })).toBeInTheDocument();
+    expect(
+      within(sidebar).getByRole('button', { name: 'Revoked shared page' }),
+    ).toBeInTheDocument();
+
+    currentTree = updatedTree;
+    navigation.pathname = '/pages/beta';
+    view.rerender(renderRoute('beta'));
+
+    expect(await screen.findByRole('heading', { name: 'Beta page' })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(treeRequests).toBe(2);
+      expect(sharedRequests).toBe(2);
+    });
+    expect(screen.getByRole('complementary', { name: 'Боковая панель' })).toBe(sidebar);
+    expect(sidebar).toHaveClass('w-64');
+    expect(sidebar.querySelector('[data-slot="sidebar-page-tree"]')).toBe(sidebarTreeSlot);
+    expect(sidebarTreeSlot?.querySelector('[role="tree"]')).toBe(workspaceTree);
+    expect(within(sidebar).queryByRole('treeitem', { name: 'Alpha page' })).not.toBeInTheDocument();
+    expect(
+      within(sidebar).queryByRole('button', { name: 'Revoked shared page' }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('Загружаем дерево…')).not.toBeInTheDocument();
+
+    treeRefresh.resolve();
+    sharedRefresh.resolve();
+    expect(await within(sidebar).findByRole('treeitem', { name: 'Beta page' })).toBeInTheDocument();
+    expect(within(sidebar).queryByRole('treeitem', { name: 'Alpha page' })).not.toBeInTheDocument();
+    expect(
+      within(sidebar).queryByRole('button', { name: 'Revoked shared page' }),
+    ).not.toBeInTheDocument();
+  });
+
   it('открывает доступную страницу при ошибке обновления дерева без stale ancestor', async () => {
     currentTree = [
       page('parent', 'project-a', null, 'Cached parent', [

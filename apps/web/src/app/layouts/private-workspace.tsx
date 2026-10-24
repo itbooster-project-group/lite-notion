@@ -20,6 +20,8 @@ import {
 import { WorkspaceDataProvider } from '@/pages/workspace';
 import {
   getGetPageQueryKey,
+  getGetPageTreeQueryKey,
+  getGetSharedPagesQueryKey,
   type PageTreeNodeDto,
   type ProjectDto,
   useGetPage,
@@ -122,9 +124,13 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
     previousPageIdRef.current = pageId;
     if (!pageId) return;
 
-    void treeQuery.refetch();
-    void sharedPagesQuery.refetch();
-  }, [pageId, sharedPagesQuery.refetch, treeQuery.refetch]);
+    if (queryClient.getQueryState(getGetPageTreeQueryKey())?.fetchStatus !== 'fetching') {
+      void treeQuery.refetch();
+    }
+    if (queryClient.getQueryState(getGetSharedPagesQueryKey())?.fetchStatus !== 'fetching') {
+      void sharedPagesQuery.refetch();
+    }
+  }, [pageId, queryClient, sharedPagesQuery.refetch, treeQuery.refetch]);
 
   const accessPage = accessPageId ? tree.nodesById[accessPageId] : undefined;
   const effectiveProjectId =
@@ -134,9 +140,10 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
         ? page?.projectId
         : undefined;
   const project = projectsQuery.data?.find((item) => item.id === effectiveProjectId);
-  const pending =
-    projectsQuery.isPending || treeQuery.isPending || (Boolean(pageId) && treeQuery.isFetching);
+  const pending = projectsQuery.isPending || treeQuery.isPending;
   const failed = projectsQuery.isError || treeQuery.isError;
+  const navigationRefreshPending =
+    Boolean(pageId) && (treeQuery.isRefetching || sharedPagesQuery.isRefetching);
 
   useEffect(() => {
     deleteCleanupCoordinator.setRouteContext(routeContext);
@@ -256,7 +263,10 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
         </Button>
       </div>
     ) : (
-      <>
+      <div
+        aria-hidden={navigationRefreshPending || undefined}
+        className={navigationRefreshPending ? 'invisible' : undefined}
+      >
         <WorkspaceTree
           activePageId={pageContext?.source === 'owned' ? page?.id : undefined}
           activeProjectId={project?.id}
@@ -271,16 +281,12 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
         />
         <SharedPagesTree
           isError={sharedPagesQuery.isError}
-          isLoading={sharedPagesQuery.isPending || sharedPagesQuery.isFetching}
+          isLoading={sharedPagesQuery.isPending}
           onRetry={() => void sharedPagesQuery.refetch()}
           onSelectPage={(selectedPageId) => router.push(workspacePagePath(selectedPageId))}
-          pages={
-            sharedPagesQuery.isError || sharedPagesQuery.isFetching
-              ? []
-              : (sharedPagesQuery.data ?? [])
-          }
+          pages={sharedPagesQuery.data ?? []}
         />
-      </>
+      </div>
     );
 
   const workspaceData = {
