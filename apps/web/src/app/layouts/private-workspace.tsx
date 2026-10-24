@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { House, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { getBreadcrumbs, getPageDisplayTitle, normalizePageTree } from '@/entities/page';
 import { PageAccessPanel } from '@/features/page-access';
 import { PageSearch } from '@/features/page-search';
@@ -104,6 +104,7 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
   const pageAccessPending = Boolean(pageId) && (pageQuery.isPending || pageQuery.isFetching);
   const pageRouteReady =
     Boolean(pageId) && !pageAccessPending && !pageQuery.isError && pageQuery.data !== undefined;
+  const previousPageIdRef = useRef(pageId);
   const pageContext = useMemo(() => {
     const page = pageRouteReady ? pageQuery.data : undefined;
     if (!page || !pageId) return undefined;
@@ -115,6 +116,16 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
     };
   }, [pageId, pageQuery.data, pageRouteReady, sharedTree, tree]);
   const page = pageContext?.page;
+
+  useLayoutEffect(() => {
+    if (previousPageIdRef.current === pageId) return;
+    previousPageIdRef.current = pageId;
+    if (!pageId) return;
+
+    void treeQuery.refetch();
+    void sharedPagesQuery.refetch();
+  }, [pageId, sharedPagesQuery.refetch, treeQuery.refetch]);
+
   const accessPage = accessPageId ? tree.nodesById[accessPageId] : undefined;
   const effectiveProjectId =
     routeContext?.type === 'project'
@@ -123,7 +134,8 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
         ? page?.projectId
         : undefined;
   const project = projectsQuery.data?.find((item) => item.id === effectiveProjectId);
-  const pending = projectsQuery.isPending || treeQuery.isPending;
+  const pending =
+    projectsQuery.isPending || treeQuery.isPending || (Boolean(pageId) && treeQuery.isFetching);
   const failed = projectsQuery.isError || treeQuery.isError;
 
   useEffect(() => {
@@ -133,27 +145,20 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
   const crumbs: Breadcrumb[] = [{ href: '/', isHome: true, title: 'На главную' }];
   if (pathname === '/trash') crumbs.push({ title: 'Корзина', href: '/trash' });
   else if (pathname === '/profile') crumbs.push({ title: 'Профиль', href: '/profile' });
-  else if (
-    !pageAccessPending &&
-    !pageAccessError &&
-    !pageAccessUnavailable &&
-    !sharedPagesQuery.isError &&
-    pageContext?.source === 'shared' &&
-    page
-  ) {
+  else if (pageContext?.source === 'shared' && page) {
     crumbs.push({ title: 'Доступные мне', href: '/' });
-    crumbs.push(...pageBreadcrumbs(sharedTree, page.id, page.title));
-  } else if (
-    !pageAccessPending &&
-    !pageAccessError &&
-    !pageAccessUnavailable &&
-    !pending &&
-    !failed &&
-    project &&
-    (!pageId || page)
-  ) {
-    crumbs.push({ title: project.name, href: workspaceProjectPath(project.id) });
-    if (page) crumbs.push(...pageBreadcrumbs(tree, page.id, page.title));
+    crumbs.push(
+      ...(!sharedPagesQuery.isError && !sharedPagesQuery.isFetching
+        ? pageBreadcrumbs(sharedTree, page.id, page.title)
+        : [{ title: getPageDisplayTitle(page.title), href: workspacePagePath(page.id) }]),
+    );
+  } else if (pageContext?.source === 'owned' && page) {
+    if (!treeQuery.isError && !treeQuery.isFetching && !projectsQuery.isError && project) {
+      crumbs.push({ title: project.name, href: workspaceProjectPath(project.id) });
+      crumbs.push(...pageBreadcrumbs(tree, page.id, page.title));
+    } else {
+      crumbs.push({ title: getPageDisplayTitle(page.title), href: workspacePagePath(page.id) });
+    }
   } else if (pathname !== '/') {
     crumbs.push({ title: 'Рабочая область', href: pathname });
   }
@@ -236,7 +241,7 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
   }
 
   const navigation =
-    pageAccessUnavailable || pageAccessError ? null : pending || pageAccessPending ? (
+    pageAccessUnavailable || pageAccessError ? null : pending ? (
       <Text aria-busy="true">Загружаем дерево…</Text>
     ) : failed ? (
       <div className="space-y-2">
@@ -266,10 +271,14 @@ export function PrivateWorkspace({ children }: Readonly<{ children: ReactNode }>
         />
         <SharedPagesTree
           isError={sharedPagesQuery.isError}
-          isLoading={sharedPagesQuery.isPending}
+          isLoading={sharedPagesQuery.isPending || sharedPagesQuery.isFetching}
           onRetry={() => void sharedPagesQuery.refetch()}
           onSelectPage={(selectedPageId) => router.push(workspacePagePath(selectedPageId))}
-          pages={sharedPagesQuery.data ?? []}
+          pages={
+            sharedPagesQuery.isError || sharedPagesQuery.isFetching
+              ? []
+              : (sharedPagesQuery.data ?? [])
+          }
         />
       </>
     );

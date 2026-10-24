@@ -32,6 +32,12 @@ test('opens indexed search fixture with shortcut and navigates to the selected p
 
   await expect(page).toHaveURL(/\/pages\/indexed-target$/);
   await expect(page.getByRole('heading', { name: 'Indexed search target' })).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL('/');
+  await expect(page.getByRole('button', { name: 'Поиск страниц' })).toBeVisible();
+  await page.goForward();
+  await expect(page).toHaveURL(/\/pages\/indexed-target$/);
+  await expect(page.getByRole('heading', { name: 'Indexed search target' })).toBeVisible();
 });
 
 test('keeps the search usable with touch on a narrow mobile viewport', async ({ browser }) => {

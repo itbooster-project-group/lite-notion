@@ -577,6 +577,28 @@ describe('page search on PostgreSQL', () => {
     await expect(prisma.page.findUnique({ where: { id: negative } })).resolves.not.toBeNull();
   });
 
+  it('handles apostrophes, quotes, punctuation and combined special input safely', async () => {
+    const apostrophe = await createPage({ title: "don't stop the rocketship" });
+    const punctuation = await createPage({ title: 'quoted phraseprefix, nextword! mixed' });
+    const privatePage = await createPage({ title: 'syntaxprobe secretprivateword' });
+    await grant(punctuation);
+
+    await expect(search.searchPages(ownerId, "don't stop", 10)).resolves.toMatchObject([
+      { pageId: apostrophe },
+    ]);
+    await expect(search.searchPages(actorId, '"phrasepref nextw"', 10)).resolves.toMatchObject([
+      { pageId: punctuation },
+    ]);
+    await expect(
+      search.searchPages(actorId, 'phrasepref, nextw! (mixed)', 10),
+    ).resolves.toMatchObject([{ pageId: punctuation }]);
+
+    const hostileInput = '\'";-- |:* () syntaxprobe OR secretprivateword';
+    const results = await search.searchPages(actorId, hostileInput, 10);
+    expect(results.some(({ pageId }) => pageId === privatePage)).toBe(false);
+    await expect(search.searchPages(actorId, '\'";-- |:* ()', 10)).resolves.toEqual([]);
+  });
+
   it('orders equal title ranks by pageId and matches mixed-language terms in one field', async () => {
     const firstId = '00000000-0000-4000-8000-000000000003';
     const secondId = '00000000-0000-4000-8000-000000000004';

@@ -188,7 +188,7 @@ describe('workspace mutation orchestration', () => {
     renderPage();
     await screen.findByRole('heading', { name: 'Child page' });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Действия для Child page' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Действия для Child page' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Переместить…' }));
     await screen.findByRole('dialog', { name: 'Переместить страницу' });
     fireEvent.change(screen.getByLabelText('Позиция'), { target: { value: '1' } });

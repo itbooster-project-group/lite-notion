@@ -130,7 +130,7 @@
 - **THEN** dialog закрывается, а Base UI возвращает фокус на кнопку поиска
 
 ### Requirement: Navigation rechecks current workspace access
-Выбор результата MUST немедленно закрыть диалог, очистить его временные данные и начать переход через штатный маршрут `/pages/{pageId}` без ожидания workspace queries. Результат Search API MUST NOT считаться гарантией действующего доступа. Существующий private page-route flow MUST выполнить свежий generated `GET /pages/{pageId}` до показа page-specific title, breadcrumbs, content или editor; query с cached PageDto и активным refetch MUST оставаться pending, и cached response MUST NOT считаться подтверждением. Свежий `200` PageDto является источником текущих title/accessRole и позволяет открыть страницу, даже если она отсутствует в owned/shared tree. Page content MUST NOT ждать tree/shared/projects requests; эти queries не должны принудительно refetch-иться на каждом page route и их ошибка MUST NOT блокировать доступную страницу. При pending/error/403/404 page-read приватная route metadata из cache MUST быть скрыта; `403/404` показывают штатное нейтральное unavailable state, прочая ошибка — штатную error/retry state. Не дублировать backend authorization на фронтенде.
+Выбор результата MUST немедленно закрыть диалог, очистить его временные данные и начать переход через штатный маршрут `/pages/{pageId}` без ожидания workspace queries. Результат Search API MUST NOT считаться гарантией действующего доступа. Существующий private page-route flow MUST выполнить свежий generated `GET /pages/{pageId}` до показа page-specific title, breadcrumbs, content или editor; query с cached PageDto и активным refetch MUST оставаться pending, и cached response MUST NOT считаться подтверждением. Свежий `200` PageDto является источником текущего title/accessRole и позволяет открыть страницу, даже если она отсутствует в owned/shared tree. При смене page route permission-filtered tree и shared-pages queries MUST обновляться в фоне; `router.push()` и page content MUST NOT ждать их завершения. Пока соответствующее дерево обновляется или завершилось ошибкой, UI MUST скрывать его cached navigation labels и ancestors, показывая для подтверждённой страницы только title из свежего PageDto. После успешного обновления дерева доступные breadcrumbs и navigation MUST восстановиться. Ошибка tree/shared query MUST NOT блокировать доступную страницу. Projects query не требуется обновлять только из-за смены page route. При pending/error/403/404 page-read приватная route metadata из cache MUST быть скрыта; `403/404` показывают штатное нейтральное unavailable state, прочая ошибка — штатную error/retry state. Не дублировать backend authorization на фронтенде.
 
 #### Scenario: Access is revoked after search
 - **WHEN** доступ к результату отозван после поиска, но до перехода
@@ -164,9 +164,14 @@
 - **WHEN** пользователь открывает страницу по прямому URL или поисковому результату
 - **THEN** page title/content/editor открываются, а ошибка остаётся локальной для workspace navigation
 
-#### Scenario: Ordinary page navigation does not refetch all workspace queries
+#### Scenario: Ordinary page navigation does not wait for workspace metadata
 - **WHEN** пользователь открывает страницу обычной ссылкой или browser back/forward
-- **THEN** выполняется page-read для целевого id, но приложение не запускает дополнительные tree/shared/projects refetch только из-за смены page route
+- **THEN** выполняется свежий page-read для целевого id, permission-filtered tree/shared queries обновляются в фоне без ожидания от `router.push()` или page content, а projects query не обновляется только из-за смены page route
+
+#### Scenario: Stale ancestors stay hidden until permission-filtered tree refresh
+- **GIVEN** в кеше есть ancestor, которого больше нет в актуальном permission-filtered tree, а свежий page-read подтверждает доступ к дочерней странице
+- **WHEN** пользователь открывает дочернюю страницу
+- **THEN** до успешного tree refresh breadcrumbs показывают только title дочерней страницы; после refresh показывают только ancestors из актуального дерева, а при ошибке refresh старые ancestors остаются скрыты
 
 ### Requirement: Search data is isolated between user sessions
 Search results and other user-scoped query data MUST NOT remain available after logout/session expiration or when a different user authenticates in the same application QueryClient. Cleanup MUST use the existing session lifecycle and MUST NOT add a search-specific cache manager.
