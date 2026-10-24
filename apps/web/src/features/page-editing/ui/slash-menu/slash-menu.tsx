@@ -169,7 +169,7 @@ export function SlashMenu({
           return (
             <button
               aria-selected={index === activeIndex}
-              className="flex min-h-11 w-full items-center gap-2.5 rounded-sm px-2.5 py-2 text-left text-sm/5 outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground sm:min-h-9"
+              className="flex min-h-11 w-full items-center gap-2.5 rounded-sm px-2.5 py-2 text-left text-sm/5 outline-none hover:bg-accent hover:text-accent-foreground aria-selected:bg-accent aria-selected:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground sm:min-h-9"
               key={command.id}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => runCommand(command)}

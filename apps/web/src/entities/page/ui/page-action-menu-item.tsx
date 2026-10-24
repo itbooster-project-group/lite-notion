@@ -18,7 +18,7 @@ export function PageActionMenuItem({
 }: PageActionMenuItemProps) {
   return (
     <MenuItem
-      className="min-h-11 whitespace-nowrap px-2.5 py-2 text-sm/5 sm:min-h-9"
+      className="min-h-11 whitespace-nowrap px-2.5 py-2 text-sm/5 sm:min-h-9 [@media(any-pointer:coarse)]:min-h-11"
       onClick={onSelect}
       variant={destructive ? 'destructive' : 'default'}
     >

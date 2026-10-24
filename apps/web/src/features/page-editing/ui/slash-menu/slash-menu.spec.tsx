@@ -114,6 +114,20 @@ describe('slash menu', () => {
       keyDownHandler?.(new KeyboardEvent('keydown', { cancelable: true, key: 'ArrowDown' }));
     });
     expect(videoOption).toHaveAttribute('aria-selected', 'true');
+    expect(youtubeOption).toHaveAttribute('aria-selected', 'false');
+    await waitFor(() => expect(scrolledItems.at(-1)).toBe(videoOption));
+
+    act(() => {
+      keyDownHandler?.(new KeyboardEvent('keydown', { cancelable: true, key: 'ArrowUp' }));
+    });
+    expect(youtubeOption).toHaveAttribute('aria-selected', 'true');
+    expect(videoOption).toHaveAttribute('aria-selected', 'false');
+    await waitFor(() => expect(scrolledItems.at(-1)).toBe(youtubeOption));
+
+    act(() => {
+      keyDownHandler?.(new KeyboardEvent('keydown', { cancelable: true, key: 'ArrowUp' }));
+    });
+    expect(videoOption).toHaveAttribute('aria-selected', 'true');
     await waitFor(() => expect(scrolledItems.at(-1)).toBe(videoOption));
 
     act(() => {
