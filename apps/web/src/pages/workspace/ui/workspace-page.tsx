@@ -1,6 +1,6 @@
 'use client';
 
-import { MoreHorizontal, Trash2 } from 'lucide-react';
+import { Folder, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { type FormEvent, useMemo, useRef, useState } from 'react';
 import { buildProjectPageTree, getPageCapabilities } from '@/entities/page';
@@ -18,6 +18,14 @@ import { type WorkspaceRouteContext, workspaceProjectPath } from '@/shared/routi
 import {
   Button,
   ContentContainer,
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
   Heading,
   Input,
   Menu,
@@ -210,11 +218,24 @@ function WorkspaceRoot({
   projects: readonly ProjectDto[];
 }>) {
   const [error, setError] = useState<string>();
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [projectName, setProjectName] = useState('');
+  const submittingRef = useRef(false);
+
+  function handleCreateDialogOpenChange(open: boolean) {
+    if (!open && isCreating) return;
+    if (open) {
+      setError(undefined);
+      setProjectName('');
+    }
+    setCreateDialogOpen(open);
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const name = String(formData.get('project-name') ?? '').trim();
+    if (submittingRef.current || isCreating) return;
+
+    const name = projectName.trim();
     if (!name) {
       setError('Введите название проекта');
       return;
@@ -224,39 +245,79 @@ function WorkspaceRoot({
       return;
     }
     setError(undefined);
+    submittingRef.current = true;
     try {
       await onCreateProject(name);
+      setCreateDialogOpen(false);
+      setProjectName('');
     } catch {
       setError('Ошибка создания проекта. Попробуйте ещё раз.');
+    } finally {
+      submittingRef.current = false;
     }
   }
 
   return (
     <ContentContainer as="section" className="space-y-8" aria-labelledby="projects-title">
-      <div className="space-y-3">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <Heading as="h1" id="projects-title" variant="page">
           Проекты
         </Heading>
-        <form className="flex flex-col gap-2 sm:flex-row" noValidate onSubmit={handleSubmit}>
-          <div className="min-w-0 flex-1 space-y-1">
-            <label className="text-sm font-medium" htmlFor="project-name">
-              Название нового проекта
-            </label>
-            <Input id="project-name" maxLength={255} name="project-name" />
-            {error ? (
-              <Text role="alert" variant="error">
-                {error}
-              </Text>
-            ) : null}
-          </div>
-          <Button className="self-start sm:mt-6" disabled={isCreating} type="submit">
-            {isCreating ? 'Создаём…' : 'Создать проект'}
-          </Button>
-        </form>
+        <Dialog open={createDialogOpen} onOpenChange={handleCreateDialogOpenChange}>
+          <DialogTrigger
+            render={
+              <Button type="button">
+                <Plus aria-hidden="true" />
+                Создать проект
+              </Button>
+            }
+          />
+          <DialogContent className="sm:max-w-md" closeLabel="Закрыть">
+            <DialogHeader>
+              <DialogTitle>Создать проект</DialogTitle>
+              <DialogDescription>Введите название нового проекта.</DialogDescription>
+            </DialogHeader>
+            <form className="space-y-4" noValidate onSubmit={handleSubmit}>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" htmlFor="project-name">
+                  Название проекта
+                </label>
+                <Input
+                  aria-describedby={error ? 'project-name-error' : undefined}
+                  aria-invalid={Boolean(error)}
+                  autoFocus
+                  id="project-name"
+                  maxLength={255}
+                  name="project-name"
+                  onChange={(event) => setProjectName(event.currentTarget.value)}
+                  value={projectName}
+                />
+                {error ? (
+                  <Text id="project-name-error" role="alert" variant="error">
+                    {error}
+                  </Text>
+                ) : null}
+              </div>
+              <DialogFooter>
+                <DialogClose
+                  render={<Button disabled={isCreating} type="button" variant="outline" />}
+                >
+                  Отмена
+                </DialogClose>
+                <Button loading={isCreating} type="submit">
+                  {isCreating ? 'Создаём…' : 'Создать проект'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {projects.length > 0 ? (
-        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="Список проектов">
+        <ul
+          className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,17rem),19rem))] justify-start gap-3"
+          aria-label="Список проектов"
+        >
           {projects.map((project) => (
             <li key={project.id}>
               <ProjectCard project={project} onRequestDeleteProject={onRequestDeleteProject} />
@@ -264,7 +325,9 @@ function WorkspaceRoot({
           ))}
         </ul>
       ) : (
-        <Text variant="caption">Создайте первый проект, чтобы начать работу.</Text>
+        <div className="rounded-xl border border-dashed border-border px-6 py-10 text-center">
+          <Text variant="caption">Создайте первый проект, чтобы начать работу.</Text>
+        </div>
       )}
     </ContentContainer>
   );
@@ -280,12 +343,13 @@ function ProjectCard({
   const actionsRef = useRef<HTMLButtonElement>(null);
 
   return (
-    <div className="flex min-h-16 items-start gap-2 rounded-lg border bg-card p-4 shadow-sm transition-colors hover:bg-accent">
+    <article className="flex min-h-20 min-w-0 items-start gap-2 rounded-xl border border-border bg-card p-4 transition-colors hover:bg-accent/50 focus-within:bg-accent/50">
       <Link
-        className="min-w-0 flex-1 rounded-md text-left font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        className="flex min-w-0 flex-1 items-start gap-3 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         href={workspaceProjectPath(project.id)}
       >
-        {project.name}
+        <Folder aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 break-words font-medium leading-snug">{project.name}</span>
       </Link>
       <Menu modal={false}>
         <MenuTrigger
@@ -311,7 +375,7 @@ function ProjectCard({
           </MenuItem>
         </MenuPopup>
       </Menu>
-    </div>
+    </article>
   );
 }
 

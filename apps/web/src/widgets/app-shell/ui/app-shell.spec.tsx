@@ -160,6 +160,7 @@ describe('AppShell', () => {
 
   it('сворачивает и разворачивает desktop-сайдбар доступной кнопкой', async () => {
     renderShell();
+    expect(await screen.findByText('Lite Notion')).toBeInTheDocument();
     const collapse = await screen.findByRole('button', { name: 'Свернуть боковую панель' });
 
     expect(collapse).toHaveAttribute('aria-expanded', 'true');
@@ -174,8 +175,10 @@ describe('AppShell', () => {
 
     const expand = screen.getByRole('button', { name: 'Развернуть боковую панель' });
     expect(expand).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('Lite Notion')).not.toBeInTheDocument();
     expect(screen.queryByText('Пользователь')).not.toBeInTheDocument();
     fireEvent.click(expand);
+    expect(screen.getByText('Lite Notion')).toBeInTheDocument();
     expect(screen.getByText('Пользователь')).toBeInTheDocument();
   });
 
@@ -189,6 +192,9 @@ describe('AppShell', () => {
     expect(
       within(dialog).getByRole('complementary', { name: 'Боковая панель' }),
     ).toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole('button', { name: 'Свернуть боковую панель' }),
+    ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Закрыть боковую панель' }));
 
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());

@@ -178,15 +178,137 @@ describe('workspace page', () => {
     expect(screen.queryByRole('link', { name: 'На главную' })).not.toBeInTheDocument();
     const projectList = screen.getByRole('list', { name: 'Список проектов' });
     expect(projectList).toBeInTheDocument();
-    expect(within(projectList).getByRole('link', { name: 'Project Alpha' })).toBeInTheDocument();
+    expect(within(projectList).getByRole('link', { name: 'Project Alpha' })).toHaveAttribute(
+      'href',
+      '/projects/project-a',
+    );
     expect(screen.queryByText('Рабочая область')).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Название нового проекта'), {
+
+    fireEvent.click(screen.getByRole('button', { name: 'Создать проект' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Создать проект' });
+    const projectName = within(dialog).getByRole('textbox', { name: 'Название проекта' });
+    expect(projectName).toHaveFocus();
+    fireEvent.change(projectName, {
       target: { value: '  Новый проект  ' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Создать проект' }));
+    fireEvent.keyDown(projectName, { key: 'Enter', code: 'Enter' });
+    fireEvent.submit(projectName.closest('form') as HTMLFormElement);
 
     await waitFor(() => expect(createRequests).toHaveBeenCalledWith({ name: 'Новый проект' }));
     expect(navigation.push).toHaveBeenCalledWith('/projects/created-project');
+  });
+
+  it('показывает empty state и открывает создание проекта при пустом списке', async () => {
+    currentProjects = [];
+    renderWorkspace({ type: 'root' });
+
+    expect(
+      await screen.findByText('Создайте первый проект, чтобы начать работу.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Список проектов' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Создать проект' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Создать проект' })).toBeInTheDocument();
+  });
+
+  it('сохраняет независимую клавиатурную навигацию по ссылке и меню карточки', async () => {
+    renderWorkspace({ type: 'root' });
+    const projectList = await screen.findByRole('list', { name: 'Список проектов' });
+    const projectLink = within(projectList).getByRole('link', { name: 'Project Alpha' });
+    projectLink.focus();
+    expect(projectLink).toHaveFocus();
+
+    const projectActions = within(projectList).getByRole('button', {
+      name: 'Действия для проекта Project Alpha',
+    });
+    projectActions.focus();
+    fireEvent.keyDown(projectActions, { key: 'ArrowDown' });
+    const deleteAction = await screen.findByRole('menuitem', { name: 'Удалить проект' });
+    await waitFor(() => expect(deleteAction).toHaveFocus());
+    fireEvent.keyDown(deleteAction, { key: 'Enter' });
+
+    expect(await screen.findByRole('dialog', { name: 'Удалить проект?' })).toBeInTheDocument();
+    expect(navigation.push).not.toHaveBeenCalled();
+  });
+
+  it('показывает валидацию, а после закрытия и повторного открытия очищает старую ошибку', async () => {
+    const createRequests = vi.fn();
+    server.use(
+      http.post('*/api/v1/projects', async ({ request }) => {
+        createRequests(await request.json());
+        return HttpResponse.json({ message: 'Unavailable' }, { status: 500 });
+      }),
+    );
+    renderWorkspace({ type: 'root' });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Создать проект' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Создать проект' });
+    const projectName = within(dialog).getByRole('textbox', { name: 'Название проекта' });
+    const form = projectName.closest('form') as HTMLFormElement;
+    fireEvent.submit(form);
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Введите название проекта');
+    expect(createRequests).not.toHaveBeenCalled();
+
+    fireEvent.change(projectName, { target: { value: 'a'.repeat(256) } });
+    fireEvent.submit(form);
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Название может содержать до 255 символов',
+    );
+    expect(createRequests).not.toHaveBeenCalled();
+
+    fireEvent.change(projectName, { target: { value: 'Retry project' } });
+    fireEvent.submit(form);
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Ошибка создания проекта. Попробуйте ещё раз.',
+    );
+    expect(createRequests).toHaveBeenCalledOnce();
+
+    fireEvent.keyDown(projectName, { key: 'Escape', code: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Создать проект' }));
+
+    const reopenedDialog = await screen.findByRole('dialog', { name: 'Создать проект' });
+    expect(within(reopenedDialog).queryByRole('alert')).not.toBeInTheDocument();
+    expect(within(reopenedDialog).getByRole('textbox', { name: 'Название проекта' })).toHaveValue(
+      '',
+    );
+    fireEvent.click(within(reopenedDialog).getByRole('button', { name: 'Отмена' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('не отправляет повторный запрос, пока создание проекта ожидает ответа', async () => {
+    let releaseCreate!: () => void;
+    const createGate = new Promise<void>((resolve) => {
+      releaseCreate = resolve;
+    });
+    const createRequests = vi.fn();
+    server.use(
+      http.post('*/api/v1/projects', async ({ request }) => {
+        createRequests(await request.json());
+        await createGate;
+        return HttpResponse.json(
+          { id: 'created-project', name: 'New project', ownerId: 'user-1' },
+          { status: 201 },
+        );
+      }),
+    );
+    renderWorkspace({ type: 'root' });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Создать проект' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Создать проект' });
+    const projectName = within(dialog).getByRole('textbox', { name: 'Название проекта' });
+    fireEvent.change(projectName, { target: { value: 'New project' } });
+    const form = projectName.closest('form') as HTMLFormElement;
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+
+    await waitFor(() => expect(createRequests).toHaveBeenCalledOnce());
+    expect(within(dialog).getByRole('button', { name: 'Создаём…' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    releaseCreate();
+    await waitFor(() => expect(navigation.push).toHaveBeenCalledWith('/projects/created-project'));
   });
 
   it('собирает project route, фильтрует дерево и выполняет переходы sidebar', async () => {
@@ -1030,9 +1152,11 @@ describe('workspace page', () => {
       .at(-1);
     if (!alphaProjectActions) throw new Error('Project actions are unavailable');
     fireEvent.click(alphaProjectActions);
+    expect(navigation.push).not.toHaveBeenCalled();
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить проект' }));
 
     expect(await screen.findByRole('dialog', { name: 'Удалить проект?' })).toBeInTheDocument();
+    expect(navigation.push).not.toHaveBeenCalled();
     expect(
       screen.getByText('Проект «Project Alpha» и все его страницы будут перемещены в корзину.'),
     ).toBeInTheDocument();
