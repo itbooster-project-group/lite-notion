@@ -74,6 +74,8 @@ export type {
   RenamePageDto,
   RepublishPageDto,
   RestorePageDto,
+  SearchPagesParams,
+  SearchResultDto,
   SetAccessModeDto,
   SetAssetReferenceDto,
   UpdatePublicationMetadataDto,
@@ -110,6 +112,7 @@ export {
   renamePage,
   useCreatePage,
   useDeletePage,
+  useGetPage,
   useGetPageTrash,
   useGetPageTree,
   useGetSharedPages,
@@ -153,6 +156,10 @@ export {
   useUnpublishPage,
   useUpdatePagePublicationMetadata,
 } from './generated/publications/publications';
+export {
+  getSearchPagesQueryKey,
+  useSearchPages,
+} from './generated/search/search';
 
 export async function startBrowserMocking() {
   const browserMocks = await import('./mocks/browser');

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkspaceDeleteCleanupProvider } from '@/features/workspace-management';
 import { WorkspacePage } from '@/pages/workspace';
 import {
+  getGetPageQueryKey,
   getGetPageTreeQueryKey,
   getListProjectsQueryKey,
   type PageDto,
@@ -73,6 +74,7 @@ let currentProjects = [
 ];
 
 let currentTree: PageTreeNodeDto[];
+let currentSharedTree: PageTreeNodeDto[];
 
 beforeEach(() => {
   currentProjects = [
@@ -86,9 +88,26 @@ beforeEach(() => {
     page('beta', 'project-a', null, 'Beta page'),
     page('other', 'project-b', null, 'Other project page'),
   ];
+  currentSharedTree = [];
   server.use(
     http.get('*/api/v1/projects', () => HttpResponse.json(currentProjects)),
     http.get('*/api/v1/pages', () => HttpResponse.json(currentTree)),
+    http.get('*/api/v1/pages/shared', () => HttpResponse.json(currentSharedTree)),
+    http.get('*/api/v1/pages/:pageId', ({ params }) => {
+      const pageId = String(params.pageId);
+      const allPages: PageTreeNodeDto[] = [];
+      const collect = (nodes: readonly PageTreeNodeDto[]) => {
+        for (const node of nodes) {
+          allPages.push(node);
+          collect(node.children);
+        }
+      };
+      collect(currentTree);
+      collect(currentSharedTree);
+      const found = allPages.find((node) => node.id === pageId);
+      if (found) return HttpResponse.json(asPageDto(found));
+      return HttpResponse.json({ message: 'Not found' }, { status: 404 });
+    }),
   );
 });
 
@@ -230,6 +249,166 @@ describe('workspace page', () => {
     expect(screen.queryByRole('textbox', { name: 'Содержимое страницы' })).toBeNull();
   });
 
+  it('не показывает cached ancestor до permission-filtered обновления дерева', async () => {
+    const treeRefresh = createDeferred();
+    currentTree = [page('child', 'project-a', 'revoked-parent', 'Child page')];
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient.setQueryData(getGetPageTreeQueryKey(), [
+      page('revoked-parent', 'project-a', null, 'Revoked parent', [
+        page('child', 'project-a', 'revoked-parent', 'Child page'),
+      ]),
+    ]);
+    server.use(
+      http.get('*/api/v1/pages', async () => {
+        await treeRefresh.promise;
+        return HttpResponse.json(currentTree);
+      }),
+      http.get('*/api/v1/pages/child', () =>
+        HttpResponse.json(asPageDto(page('child', 'project-a', 'revoked-parent', 'Child page'))),
+      ),
+    );
+    navigation.pathname = '/pages/child';
+    render(
+      <QueryClientProvider client={queryClient}>
+        <WorkspaceDeleteCleanupProvider>
+          <PrivateWorkspace>
+            <WorkspacePage route={{ pageId: 'child', type: 'page' }} />
+          </PrivateWorkspace>
+        </WorkspaceDeleteCleanupProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Child page' })).toBeInTheDocument();
+    const breadcrumbs = screen.getByRole('navigation', { name: 'Хлебные крошки' });
+    expect(breadcrumbs).toHaveTextContent('Child page');
+    expect(breadcrumbs).not.toHaveTextContent('Revoked parent');
+    treeRefresh.resolve();
+    await waitFor(() => expect(breadcrumbs).not.toHaveTextContent('Revoked parent'));
+    expect(breadcrumbs).toHaveTextContent('Child page');
+  });
+
+  it('оставляет обновлённую sidebar навигацию видимой при медленном page access check', async () => {
+    const pageRead = createDeferred();
+    currentTree = [page('owned', 'project-a', null, 'Owned page')];
+    server.use(
+      http.get('*/api/v1/pages/owned', async () => {
+        await pageRead.promise;
+        return HttpResponse.json(asPageDto(page('owned', 'project-a', null, 'Owned page')));
+      }),
+    );
+    renderWorkspace({ pageId: 'owned', type: 'page' });
+
+    expect(await screen.findByText('Проверяем доступ к странице…')).toBeInTheDocument();
+    expect(await screen.findByRole('treeitem', { name: 'Owned page' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Owned page' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Содержимое страницы' })).not.toBeInTheDocument();
+    pageRead.resolve();
+    expect(await screen.findByRole('heading', { name: 'Owned page' })).toBeInTheDocument();
+  });
+
+  it('сохраняет sidebar при переходе A → B и скрывает cache до обновления permission trees', async () => {
+    const treeRefresh = createDeferred();
+    const sharedRefresh = createDeferred();
+    let treeRequests = 0;
+    let sharedRequests = 0;
+    const betaPage = page('beta', 'project-a', null, 'Beta page');
+    const updatedTree = [betaPage];
+    currentTree = [
+      page('alpha', 'project-a', null, 'Alpha page', [
+        page('child', 'project-a', 'alpha', 'Child page'),
+      ]),
+      page('beta', 'project-a', null, 'Beta page'),
+    ];
+    currentSharedTree = [
+      page('stale-shared', 'foreign-project', null, 'Revoked shared page', [], 'viewer'),
+    ];
+    server.use(
+      http.get('*/api/v1/pages', async () => {
+        treeRequests += 1;
+        if (treeRequests === 1) return HttpResponse.json(currentTree);
+        await treeRefresh.promise;
+        return HttpResponse.json(updatedTree);
+      }),
+      http.get('*/api/v1/pages/shared', async () => {
+        sharedRequests += 1;
+        if (sharedRequests === 1) return HttpResponse.json(currentSharedTree);
+        await sharedRefresh.promise;
+        return HttpResponse.json([]);
+      }),
+      http.get('*/api/v1/pages/beta', () => HttpResponse.json(asPageDto(betaPage))),
+    );
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const renderRoute = (pageId: string) => (
+      <QueryClientProvider client={queryClient}>
+        <WorkspaceDeleteCleanupProvider>
+          <PrivateWorkspace>
+            <WorkspacePage route={{ pageId, type: 'page' }} />
+          </PrivateWorkspace>
+        </WorkspaceDeleteCleanupProvider>
+      </QueryClientProvider>
+    );
+    navigation.pathname = '/pages/child';
+    const view = render(renderRoute('child'));
+
+    expect(await screen.findByRole('heading', { name: 'Child page' })).toBeInTheDocument();
+    const sidebar = screen.getByRole('complementary', { name: 'Боковая панель' });
+    const sidebarTreeSlot = sidebar.querySelector('[data-slot="sidebar-page-tree"]');
+    const workspaceTree = sidebarTreeSlot?.querySelector('[role="tree"]');
+    expect(workspaceTree).not.toBeNull();
+    expect(within(sidebar).getByRole('treeitem', { name: 'Alpha page' })).toBeInTheDocument();
+    expect(
+      within(sidebar).getByRole('button', { name: 'Revoked shared page' }),
+    ).toBeInTheDocument();
+
+    currentTree = updatedTree;
+    navigation.pathname = '/pages/beta';
+    view.rerender(renderRoute('beta'));
+
+    expect(await screen.findByRole('heading', { name: 'Beta page' })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(treeRequests).toBe(2);
+      expect(sharedRequests).toBe(2);
+    });
+    expect(screen.getByRole('complementary', { name: 'Боковая панель' })).toBe(sidebar);
+    expect(sidebar).toHaveClass('w-64');
+    expect(sidebar.querySelector('[data-slot="sidebar-page-tree"]')).toBe(sidebarTreeSlot);
+    expect(sidebarTreeSlot?.querySelector('[role="tree"]')).toBe(workspaceTree);
+    expect(within(sidebar).queryByRole('treeitem', { name: 'Alpha page' })).not.toBeInTheDocument();
+    expect(
+      within(sidebar).queryByRole('button', { name: 'Revoked shared page' }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('Загружаем дерево…')).not.toBeInTheDocument();
+
+    treeRefresh.resolve();
+    sharedRefresh.resolve();
+    expect(await within(sidebar).findByRole('treeitem', { name: 'Beta page' })).toBeInTheDocument();
+    expect(within(sidebar).queryByRole('treeitem', { name: 'Alpha page' })).not.toBeInTheDocument();
+    expect(
+      within(sidebar).queryByRole('button', { name: 'Revoked shared page' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('открывает доступную страницу при ошибке обновления дерева без stale ancestor', async () => {
+    currentTree = [
+      page('parent', 'project-a', null, 'Cached parent', [
+        page('child', 'project-a', 'parent', 'Child page'),
+      ]),
+    ];
+    server.use(
+      http.get('*/api/v1/pages', () =>
+        HttpResponse.json({ message: 'Tree refresh failed' }, { status: 500 }),
+      ),
+    );
+
+    renderWorkspace({ pageId: 'child', type: 'page' });
+
+    expect(await screen.findByRole('heading', { name: 'Child page' })).toBeInTheDocument();
+    const breadcrumbs = screen.getByRole('navigation', { name: 'Хлебные крошки' });
+    expect(breadcrumbs).toHaveTextContent('Child page');
+    expect(breadcrumbs).not.toHaveTextContent('Cached parent');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Не удалось загрузить дерево.');
+  });
+
   it('показывает fallback для legacy title во всех представлениях', async () => {
     currentTree = [page('legacy', 'project-a', null, '   ')];
     renderWorkspace({ pageId: 'legacy', type: 'page' });
@@ -244,17 +423,16 @@ describe('workspace page', () => {
   it('открывает shared page без matching owned project', async () => {
     currentTree = [];
     const permissionsRequests = vi.fn();
+    currentSharedTree = [page('shared-page', 'foreign-project', null, 'Shared page', [], 'viewer')];
     server.use(
-      http.get('*/api/v1/pages/shared', () =>
-        HttpResponse.json([page('shared', 'Shared page', null, 'Shared page', [], 'viewer')]),
-      ),
+      http.get('*/api/v1/pages/shared', () => HttpResponse.json(currentSharedTree)),
       http.get('*/api/v1/pages/:pageId/permissions', () => {
         permissionsRequests();
         return HttpResponse.json([]);
       }),
     );
 
-    renderWorkspace({ pageId: 'shared', type: 'page' });
+    renderWorkspace({ pageId: 'shared-page', type: 'page' });
 
     expect(
       await screen.findByRole('heading', { name: 'Shared page', level: 1 }),
@@ -265,6 +443,65 @@ describe('workspace page', () => {
     expect(screen.queryByRole('heading', { name: 'Ничего не найдено' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Доступ к странице' })).not.toBeInTheDocument();
     expect(permissionsRequests).not.toHaveBeenCalled();
+  });
+
+  it('открывает shared page из свежего page endpoint, даже если её нет в workspace trees', async () => {
+    currentTree = [];
+    currentSharedTree = [];
+    const sharedPage = page(
+      'shared-outside-tree',
+      'foreign-project',
+      null,
+      'Fresh shared page',
+      [],
+      'viewer',
+    );
+    server.use(
+      http.get('*/api/v1/pages/shared', () => HttpResponse.json([])),
+      http.get('*/api/v1/pages/shared-outside-tree', () =>
+        HttpResponse.json(asPageDto(sharedPage)),
+      ),
+    );
+
+    renderWorkspace({ pageId: 'shared-outside-tree', type: 'page' });
+
+    expect(
+      await screen.findByRole('heading', { name: 'Fresh shared page', level: 1 }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Загружаем рабочую область…')).not.toBeInTheDocument();
+  });
+
+  it('показывает разрешённую страницу до завершения workspace queries без повторных запросов', async () => {
+    let releaseMetadata!: () => void;
+    const metadataGate = new Promise<void>((resolve) => {
+      releaseMetadata = resolve;
+    });
+    const requests = { projects: 0, tree: 0, shared: 0 };
+    server.use(
+      http.get('*/api/v1/projects', async () => {
+        requests.projects += 1;
+        await metadataGate;
+        return HttpResponse.json(currentProjects);
+      }),
+      http.get('*/api/v1/pages', async () => {
+        requests.tree += 1;
+        await metadataGate;
+        return HttpResponse.json(currentTree);
+      }),
+      http.get('*/api/v1/pages/shared', async () => {
+        requests.shared += 1;
+        await metadataGate;
+        return HttpResponse.json(currentSharedTree);
+      }),
+    );
+
+    renderWorkspace({ pageId: 'child', type: 'page' });
+
+    expect(
+      await screen.findByRole('heading', { name: 'Child page', level: 1 }),
+    ).toBeInTheDocument();
+    expect(requests).toEqual({ projects: 1, tree: 1, shared: 1 });
+    releaseMetadata();
   });
 
   it('открывает owned page сразу, пока shared query загружается', async () => {
@@ -283,16 +520,86 @@ describe('workspace page', () => {
     expect(screen.queryByText('Ничего не найдено')).not.toBeInTheDocument();
   });
 
-  it('сохраняет unavailable для owned page без matching project', async () => {
+  it('открывает страницу после подтверждённого page read без ожидания project metadata', async () => {
     currentProjects = [{ id: 'project-b', name: 'Project Beta', ownerId: 'user-1' }];
     currentTree = [page('owned', 'project-a', null, 'Owned page')];
 
     renderWorkspace({ pageId: 'owned', type: 'page' });
 
-    expect(await screen.findByRole('heading', { name: 'Ничего не найдено' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Owned page' })).toBeInTheDocument();
   });
 
-  it('показывает workspace error и повторяет projects query для owned page', async () => {
+  it.each([403, 404])(
+    'не показывает cached tree, если свежая проверка доступа вернула %s',
+    async (status) => {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      queryClient.setQueryData(getGetPageTreeQueryKey(), [
+        page('child', 'project-a', null, 'Private cached title'),
+      ]);
+      queryClient.setQueryData(
+        getGetPageQueryKey('child'),
+        asPageDto(page('child', 'project-a', null, 'Cached page title')),
+      );
+      server.use(
+        http.get('*/api/v1/pages/child', () =>
+          HttpResponse.json({ message: 'Access revoked' }, { status }),
+        ),
+      );
+      navigation.pathname = '/pages/child';
+      render(
+        <QueryClientProvider client={queryClient}>
+          <WorkspaceDeleteCleanupProvider>
+            <PrivateWorkspace>
+              <WorkspacePage route={{ pageId: 'child', type: 'page' }} />
+            </PrivateWorkspace>
+          </WorkspaceDeleteCleanupProvider>
+        </QueryClientProvider>,
+      );
+
+      expect(await screen.findByRole('heading', { name: 'Ничего не найдено' })).toBeInTheDocument();
+      expect(screen.queryByText('Private cached title')).not.toBeInTheDocument();
+      expect(screen.queryByText('Cached page title')).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('heading', { name: 'Private cached title' }),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it('hides cached PageDto and route metadata until the fresh page read completes', async () => {
+    const pageRead = createDeferred();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient.setQueryData(
+      getGetPageQueryKey('child'),
+      asPageDto(page('child', 'project-a', null, 'Cached old title')),
+    );
+    queryClient.setQueryData(getGetPageTreeQueryKey(), [
+      page('child', 'project-a', null, 'Cached old title'),
+    ]);
+    server.use(
+      http.get('*/api/v1/pages/child', async () => {
+        await pageRead.promise;
+        return HttpResponse.json(asPageDto(page('child', 'project-a', null, 'Fresh page title')));
+      }),
+    );
+    navigation.pathname = '/pages/child';
+    render(
+      <QueryClientProvider client={queryClient}>
+        <WorkspaceDeleteCleanupProvider>
+          <PrivateWorkspace>
+            <WorkspacePage route={{ pageId: 'child', type: 'page' }} />
+          </PrivateWorkspace>
+        </WorkspaceDeleteCleanupProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText('Проверяем доступ к странице…')).toBeInTheDocument();
+    expect(screen.queryByText('Cached old title')).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Содержимое страницы' })).not.toBeInTheDocument();
+    pageRead.resolve();
+    expect(await screen.findByRole('heading', { name: 'Fresh page title' })).toBeInTheDocument();
+  });
+
+  it('ошибка projects query не блокирует страницу с подтверждённым доступом', async () => {
     currentTree = [page('owned', 'project-a', null, 'Owned page')];
     let attempts = 0;
     server.use(
@@ -306,26 +613,22 @@ describe('workspace page', () => {
 
     renderWorkspace({ pageId: 'owned', type: 'page' });
 
-    expect(
-      await screen.findByRole('heading', { name: 'Ошибка загрузки рабочей области' }),
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Повторить' }));
     expect(await screen.findByRole('heading', { name: 'Owned page' })).toBeInTheDocument();
-    expect(attempts).toBe(2);
+    fireEvent.click(screen.getByRole('button', { name: 'Повторить загрузку дерева' }));
+    await waitFor(() => expect(attempts).toBe(2));
+    expect(screen.getByRole('heading', { name: 'Owned page' })).toBeInTheDocument();
   });
 
   it('открывает shared page при ошибке projects и строит shared breadcrumbs', async () => {
     currentTree = [];
+    currentSharedTree = [page('shared-page', 'foreign-project', null, 'Shared page', [], 'viewer')];
     server.use(
       http.get('*/api/v1/projects', () =>
         HttpResponse.json({ message: 'Projects failure' }, { status: 500 }),
       ),
-      http.get('*/api/v1/pages/shared', () =>
-        HttpResponse.json([page('shared', 'foreign-project', null, 'Shared page', [], 'viewer')]),
-      ),
     );
 
-    renderWorkspace({ pageId: 'shared', type: 'page' });
+    renderWorkspace({ pageId: 'shared-page', type: 'page' });
 
     expect(await screen.findByRole('heading', { name: 'Shared page' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Хлебные крошки' })).toHaveTextContent(
@@ -333,44 +636,35 @@ describe('workspace page', () => {
     );
   });
 
-  it('строит shared breadcrumbs, пока projects query pending', async () => {
+  it('скрывает shared breadcrumbs, пока permission-filtered workspace metadata обновляется', async () => {
     currentTree = [];
+    currentSharedTree = [page('shared-page', 'foreign-project', null, 'Shared page', [], 'viewer')];
     const projects = createDeferred();
     server.use(
       http.get('*/api/v1/projects', async () => {
         await projects.promise;
         return HttpResponse.json(currentProjects);
       }),
-      http.get('*/api/v1/pages/shared', () =>
-        HttpResponse.json([page('shared', 'foreign-project', null, 'Shared page', [], 'viewer')]),
-      ),
     );
 
-    renderWorkspace({ pageId: 'shared', type: 'page' });
+    renderWorkspace({ pageId: 'shared-page', type: 'page' });
 
+    expect(await screen.findByText('Проверяем доступ к странице…')).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Хлебные крошки' })).not.toHaveTextContent(
+      'Shared page',
+    );
+    projects.resolve();
     expect(await screen.findByRole('heading', { name: 'Shared page' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Хлебные крошки' })).toHaveTextContent(
       'Доступные мне/Shared page',
     );
-    projects.resolve();
   });
 
-  it('ждёт shared query после owned miss и не показывает unavailable во время pending', async () => {
+  it('принимает 404 от page endpoint как штатное недоступное состояние', async () => {
     currentTree = [];
-    const shared = createDeferred();
-    server.use(
-      http.get('*/api/v1/pages/shared', async () => {
-        await shared.promise;
-        return HttpResponse.json([]);
-      }),
-    );
 
     renderWorkspace({ pageId: 'missing', type: 'page' });
 
-    expect(await screen.findByText('Загружаем рабочую область…')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Ничего не найдено' })).not.toBeInTheDocument();
-
-    shared.resolve();
     expect(await screen.findByRole('heading', { name: 'Ничего не найдено' })).toBeInTheDocument();
   });
 
@@ -395,26 +689,26 @@ describe('workspace page', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('показывает page-level retry при shared error после owned miss', async () => {
-    currentTree = [];
+  it('показывает page-level retry при ошибке проверки доступа', async () => {
+    currentTree = [page('owned', 'project-a', null, 'Owned page')];
     let attempts = 0;
     server.use(
-      http.get('*/api/v1/pages/shared', () => {
+      http.get('*/api/v1/pages/owned', () => {
         attempts += 1;
         return attempts === 1
-          ? HttpResponse.json({ message: 'Shared failure' }, { status: 500 })
-          : HttpResponse.json([]);
+          ? HttpResponse.json({ message: 'Private page failure' }, { status: 500 })
+          : HttpResponse.json(asPageDto(page('owned', 'project-a', null, 'Owned page')));
       }),
     );
 
-    renderWorkspace({ pageId: 'missing', type: 'page' });
+    renderWorkspace({ pageId: 'owned', type: 'page' });
 
     expect(
       await screen.findByRole('heading', { name: 'Ошибка загрузки страницы' }),
     ).toBeInTheDocument();
     const retryButtons = screen.getAllByRole('button', { name: 'Повторить' });
     fireEvent.click(retryButtons.at(-1) as HTMLButtonElement);
-    expect(await screen.findByRole('heading', { name: 'Ничего не найдено' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Owned page' })).toBeInTheDocument();
   });
 
   it.each([
@@ -616,11 +910,13 @@ describe('workspace page', () => {
     const { queryClient } = renderWorkspace({ pageId: 'child', type: 'page' });
     await screen.findByRole('heading', { name: 'Child page' });
 
+    fireEvent.click(await screen.findByRole('button', { name: 'Действия для Child page' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить' }));
+    expect(await screen.findByRole('dialog', { name: 'Удалить страницу?' })).toBeInTheDocument();
+
     const refetchPromise = queryClient.invalidateQueries({ queryKey: getGetPageTreeQueryKey() });
     await waitFor(() => expect(pageTreeRequests).toBe(2));
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Действия для Child page' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить' }));
     fireEvent.click(screen.getByRole('button', { name: 'Удалить' }));
 
     await waitFor(() => expect(deleteRequests).toHaveBeenCalledWith('child'));

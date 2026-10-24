@@ -75,6 +75,9 @@ beforeEach(() => {
       HttpResponse.json([{ id: 'project-a', name: 'Project Alpha', ownerId: 'user-1' }]),
     ),
     http.get('*/api/v1/pages', () => HttpResponse.json(currentTree)),
+    http.get('*/api/v1/pages/child', () =>
+      HttpResponse.json(asPageDto(page('child', 'alpha', 'Child page'))),
+    ),
   );
 });
 
@@ -185,7 +188,7 @@ describe('workspace mutation orchestration', () => {
     renderPage();
     await screen.findByRole('heading', { name: 'Child page' });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Действия для Child page' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Действия для Child page' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Переместить…' }));
     await screen.findByRole('dialog', { name: 'Переместить страницу' });
     fireEvent.change(screen.getByLabelText('Позиция'), { target: { value: '1' } });

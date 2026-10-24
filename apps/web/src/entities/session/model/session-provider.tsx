@@ -14,7 +14,6 @@ import {
 
 import {
   type AuthResponseDto,
-  assetReadUrlQueryKey,
   clearAccessToken,
   configureAuthTransport,
   getAccessToken,
@@ -57,8 +56,8 @@ export function SessionProvider({ children }: SessionProviderProps) {
   const clearSession = useCallback(() => {
     lifecycleGeneration.current += 1;
     clearAccessToken();
-    queryClient.removeQueries({ queryKey: getGetCurrentUserQueryKey() });
-    queryClient.removeQueries({ queryKey: assetReadUrlQueryKey });
+    void queryClient.cancelQueries();
+    queryClient.clear();
     setStatus('unauthenticated');
   }, [queryClient]);
 
@@ -140,7 +139,8 @@ export function SessionProvider({ children }: SessionProviderProps) {
     (response: AuthResponseDto) => {
       const currentUser = queryClient.getQueryData<UserProfileDto>(getGetCurrentUserQueryKey());
       if (currentUser && currentUser.id !== response.user.id) {
-        queryClient.removeQueries({ queryKey: assetReadUrlQueryKey });
+        void queryClient.cancelQueries();
+        queryClient.clear();
       }
       lifecycleGeneration.current += 1;
       setAccessToken(response.accessToken);

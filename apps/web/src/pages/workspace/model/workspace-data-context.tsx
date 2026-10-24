@@ -8,6 +8,9 @@ export type WorkspaceData = Readonly<{
   pageTree: NormalizedPageTree;
   sharedTree: NormalizedPageTree;
   pageContext: PageRouteContext | undefined;
+  pageAccessPending: boolean;
+  pageAccessError: boolean;
+  pageAccessUnavailable: boolean;
   projects: readonly ProjectDto[];
   projectsPending: boolean;
   projectsError: boolean;
@@ -18,6 +21,7 @@ export type WorkspaceData = Readonly<{
   refetchProjects: () => Promise<unknown>;
   refetchPageTree: () => Promise<unknown>;
   refetchSharedPages: () => Promise<unknown>;
+  refetchPageAccess: () => Promise<unknown>;
 }>;
 
 const WorkspaceDataContext = createContext<WorkspaceData | undefined>(undefined);

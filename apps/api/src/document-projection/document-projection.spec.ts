@@ -175,10 +175,22 @@ describe('projectDocument', () => {
     ]);
   });
 
+  it('accepts all TipTap heading levels from H1 through H6', () => {
+    const yjsState = createState((fragment) => {
+      for (let level = 1; level <= 6; level += 1) {
+        const heading = appendElement(fragment, 'heading', { level });
+        appendText(heading, `Heading ${level}`);
+      }
+    });
+
+    const headings = projectDocument({ yjsState, tiptapSchemaVersion: 1 }).contentJson.content;
+    expect(headings?.map(({ attrs }) => attrs?.level)).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
   it('rejects malformed persisted node attrs and invalid link href values', () => {
     const cases = [
       createState((fragment) => appendElement(fragment, 'heading', { level: 0 })),
-      createState((fragment) => appendElement(fragment, 'heading', { level: 4 })),
+      createState((fragment) => appendElement(fragment, 'heading', { level: 7 })),
       createState((fragment) => appendElement(fragment, 'heading', { level: '2' })),
       createState((fragment) => {
         const taskList = appendElement(fragment, 'taskList');
