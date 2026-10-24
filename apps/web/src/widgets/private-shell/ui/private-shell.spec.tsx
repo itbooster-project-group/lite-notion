@@ -29,12 +29,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function renderShell(headerStart?: ReactNode) {
+function renderShell(headerStart?: ReactNode, breadcrumbText = 'Проекты') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
       <PrivateShell
-        breadcrumbs={<nav aria-label="Хлебные крошки">Проекты</nav>}
+        breadcrumbs={<nav aria-label="Хлебные крошки">{breadcrumbText}</nav>}
         headerStart={headerStart}
       >
         <main>Приватный экран</main>
@@ -74,6 +74,15 @@ describe('private shell navigation', () => {
     expect(screen.getByRole('button', { name: 'Меню' })).toBeInTheDocument();
     expect(headerContent).toHaveClass('px-page-inline');
     expect(headerContent).not.toHaveClass('pl-14', 'ml-14');
+  });
+
+  it('сохраняет длинное слово в breadcrumbs целиком для переноса', () => {
+    const breadcrumbText = 'Оченьдлинноесловобезпробелов'.repeat(12);
+    renderShell(undefined, breadcrumbText);
+
+    expect(screen.getByRole('navigation', { name: 'Хлебные крошки' })).toHaveTextContent(
+      breadcrumbText,
+    );
   });
 
   it('сохраняет доступный переход в профиль до появления имени пользователя', () => {

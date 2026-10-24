@@ -24,8 +24,8 @@ export function PrivateShell({ children, breadcrumbs, headerStart, headerEnd }: 
 
   return (
     <div className="grid min-h-dvh grid-rows-[auto_minmax(0,1fr)] bg-background">
-      <header className="border-b bg-card">
-        <div className="flex items-center justify-between gap-4 px-page-inline py-4">
+      <header className="bg-card">
+        <div className="flex items-center justify-between gap-4 border-b px-page-inline py-4 md:min-h-16 md:py-3">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             {headerStart ? <div className="shrink-0">{headerStart}</div> : null}
             {breadcrumbs}

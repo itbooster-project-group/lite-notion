@@ -11,6 +11,11 @@ import { SlashMenu } from './slash-menu';
 
 const editors: Editor[] = [];
 const documents: Y.Doc[] = [];
+const originalScrollIntoView = Object.getOwnPropertyDescriptor(
+  HTMLElement.prototype,
+  'scrollIntoView',
+);
+const originalInnerHeight = Object.getOwnPropertyDescriptor(window, 'innerHeight');
 
 afterEach(() => {
   cleanup();
@@ -18,6 +23,12 @@ afterEach(() => {
   for (const document of documents) document.destroy();
   editors.length = 0;
   documents.length = 0;
+  if (originalScrollIntoView) {
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', originalScrollIntoView);
+  } else {
+    Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+  }
+  if (originalInnerHeight) Object.defineProperty(window, 'innerHeight', originalInnerHeight);
 });
 
 function createEditor(content: string): Editor {
@@ -37,6 +48,127 @@ function createEditor(content: string): Editor {
 }
 
 describe('slash menu', () => {
+  it('показывает иконку у каждой существующей команды', () => {
+    const editor = createEditor('/');
+    render(
+      <SlashMenu
+        editor={editor}
+        onKeyDownChange={vi.fn()}
+        onLinkCommand={vi.fn()}
+        onMediaCommand={vi.fn()}
+      />,
+    );
+
+    const options = screen.getAllByRole('option');
+    expect(options).toHaveLength(11);
+    const iconNames = options.map(
+      (option) =>
+        option
+          .querySelector('svg[aria-hidden="true"]')
+          ?.getAttribute('class')
+          ?.match(/lucide-([\w-]+)/)?.[1],
+    );
+    expect(iconNames).toEqual([
+      'pilcrow',
+      'heading1',
+      'heading2',
+      'heading3',
+      'list',
+      'list-ordered',
+      'list-todo',
+      'link',
+      'image',
+      'circle-play',
+      'video',
+    ]);
+  });
+
+  it('сохраняет клавиатурный выбор и прокручивает активный пункт в видимую область', async () => {
+    const editor = createEditor('/ви');
+    let keyDownHandler: ((event: KeyboardEvent) => boolean) | undefined;
+    const scrolledItems: HTMLElement[] = [];
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value(this: HTMLElement) {
+        scrolledItems.push(this);
+      },
+    });
+    const onMediaCommand = vi.fn();
+
+    render(
+      <SlashMenu
+        editor={editor}
+        onKeyDownChange={(handler) => {
+          keyDownHandler = handler;
+        }}
+        onLinkCommand={vi.fn()}
+        onMediaCommand={onMediaCommand}
+      />,
+    );
+
+    const youtubeOption = screen.getByRole('option', { name: 'YouTube видео' });
+    const videoOption = screen.getByRole('option', { name: 'Видео' });
+    expect(youtubeOption).toHaveAttribute('aria-selected', 'true');
+
+    act(() => {
+      keyDownHandler?.(new KeyboardEvent('keydown', { cancelable: true, key: 'ArrowDown' }));
+    });
+    expect(videoOption).toHaveAttribute('aria-selected', 'true');
+    expect(youtubeOption).toHaveAttribute('aria-selected', 'false');
+    await waitFor(() => expect(scrolledItems.at(-1)).toBe(videoOption));
+
+    act(() => {
+      keyDownHandler?.(new KeyboardEvent('keydown', { cancelable: true, key: 'ArrowUp' }));
+    });
+    expect(youtubeOption).toHaveAttribute('aria-selected', 'true');
+    expect(videoOption).toHaveAttribute('aria-selected', 'false');
+    await waitFor(() => expect(scrolledItems.at(-1)).toBe(youtubeOption));
+
+    act(() => {
+      keyDownHandler?.(new KeyboardEvent('keydown', { cancelable: true, key: 'ArrowUp' }));
+    });
+    expect(videoOption).toHaveAttribute('aria-selected', 'true');
+    await waitFor(() => expect(scrolledItems.at(-1)).toBe(videoOption));
+
+    act(() => {
+      keyDownHandler?.(new KeyboardEvent('keydown', { cancelable: true, key: 'Enter' }));
+    });
+    expect(onMediaCommand).toHaveBeenCalledWith('video');
+    expect(editor.getText()).toBe('');
+  });
+
+  it('удерживает меню у нижнего края маленького viewport', async () => {
+    const editor = createEditor('/зада');
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 220 });
+    const coordinates = vi.mocked(editor.view.coordsAtPos);
+    coordinates.mockReturnValue({ bottom: 210, left: 64, right: 64, top: 190 });
+
+    render(
+      <SlashMenu
+        editor={editor}
+        onKeyDownChange={vi.fn()}
+        onLinkCommand={vi.fn()}
+        onMediaCommand={vi.fn()}
+      />,
+    );
+
+    const menu = screen.getByRole('listbox', { name: 'Команды редактора' });
+    vi.spyOn(menu, 'getBoundingClientRect').mockReturnValue({
+      bottom: 204,
+      height: 204,
+      left: 64,
+      right: 352,
+      top: 0,
+      width: 288,
+      x: 64,
+      y: 0,
+      toJSON: () => {},
+    });
+    fireEvent.resize(window);
+
+    await waitFor(() => expect(menu).toHaveStyle({ top: '8px' }));
+  });
+
   it('удаляет media query по Enter и передаёт focus в первое поле формы', async () => {
     const editor = createEditor('/изо');
     let keyDownHandler: ((event: KeyboardEvent) => boolean) | undefined;

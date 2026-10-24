@@ -133,7 +133,12 @@ export function AppShell({ actions, children, pageTree, user }: AppShellProps) {
         )}
         id={DESKTOP_SIDEBAR_ID}
       >
-        <div className="flex h-12 shrink-0 items-center justify-end px-3">
+        <div className="flex h-16 shrink-0 items-center justify-between border-b border-sidebar-border px-3">
+          {!collapsed ? (
+            <span className="min-w-0 truncate text-sm font-semibold tracking-tight">
+              Lite Notion
+            </span>
+          ) : null}
           <Tooltip label={collapsed ? 'Развернуть боковую панель' : 'Свернуть боковую панель'}>
             <Button
               aria-controls={DESKTOP_SIDEBAR_ID}

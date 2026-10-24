@@ -41,6 +41,7 @@ function renderTree(activePageId: string | undefined = undefined) {
   const callbacks = {
     onCreatePage: vi.fn().mockResolvedValue(undefined),
     onMovePage: vi.fn().mockResolvedValue(undefined),
+    onOpenPageAccess: vi.fn(),
     onRenamePage: vi.fn().mockResolvedValue(undefined),
     onRequestDeletePage: vi.fn(),
     onSelectPage: vi.fn(),
@@ -69,6 +70,7 @@ describe('workspace page tree', () => {
         projectTree={buildProjectPageTree(normalizedTree, 'project-a')}
         onCreatePage={vi.fn().mockResolvedValue(undefined)}
         onMovePage={vi.fn().mockResolvedValue(undefined)}
+        onOpenPageAccess={vi.fn()}
         onRenamePage={vi.fn().mockResolvedValue(undefined)}
         onRequestDeletePage={vi.fn()}
         onSelectPage={vi.fn()}
@@ -89,6 +91,7 @@ describe('workspace page tree', () => {
         projectTree={buildProjectPageTree(normalizedTree, 'project-a')}
         onCreatePage={vi.fn().mockResolvedValue(undefined)}
         onMovePage={vi.fn().mockResolvedValue(undefined)}
+        onOpenPageAccess={vi.fn()}
         onRenamePage={vi.fn().mockResolvedValue(undefined)}
         onRequestDeletePage={vi.fn()}
         onSelectPage={vi.fn()}
@@ -100,6 +103,7 @@ describe('workspace page tree', () => {
     expect(screen.getByRole('menuitem', { name: 'Переименовать' })).toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: 'Переместить…' })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: 'Удалить' })).toBeNull();
+    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
   });
 
   it('рендерит ARIA tree в server order и раскрывает ancestor chain active page', async () => {
@@ -182,6 +186,7 @@ describe('workspace page tree', () => {
         projectTree={buildProjectPageTree(normalizedTree, 'project-a')}
         onCreatePage={vi.fn().mockRejectedValue(new Error('Raw create detail'))}
         onMovePage={vi.fn().mockResolvedValue(undefined)}
+        onOpenPageAccess={vi.fn()}
         onRenamePage={vi.fn().mockResolvedValue(undefined)}
         onRequestDeletePage={vi.fn()}
         onSelectPage={vi.fn()}
@@ -243,6 +248,7 @@ describe('workspace page tree', () => {
         projectTree={buildProjectPageTree(normalizedTree, 'project-a')}
         onCreatePage={vi.fn().mockResolvedValue(undefined)}
         onMovePage={vi.fn().mockResolvedValue(undefined)}
+        onOpenPageAccess={vi.fn()}
         onRenamePage={onRenamePage}
         onRequestDeletePage={vi.fn()}
         onSelectPage={vi.fn()}
@@ -285,17 +291,47 @@ describe('workspace page tree', () => {
   });
 
   it('формирует delete intent из node actions без mutation logic', async () => {
-    const { onRequestDeletePage } = renderTree('a');
+    const { onRequestDeletePage, onSelectPage } = renderTree('a');
     const trigger = screen.getByRole('button', { name: 'Действия для Alpha' });
 
-    fireEvent.click(trigger);
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Удалить' }));
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    const items = await screen.findAllByRole('menuitem');
+    expect(items.map((item) => item.textContent)).toEqual([
+      'Добавить дочернюю',
+      'Переименовать',
+      'Переместить…',
+      'Настроить доступ',
+      'Удалить',
+    ]);
+    expect(screen.getByRole('separator')).toBeInTheDocument();
+    await waitFor(() => expect(items[0]).toHaveFocus());
+    for (let index = 1; index < items.length; index += 1) {
+      const previousItem = items[index - 1];
+      const nextItem = items[index];
+      if (!previousItem || !nextItem) throw new Error('Menu item fixtures are incomplete');
+      fireEvent.keyDown(previousItem, { key: 'ArrowDown' });
+      await waitFor(() => expect(nextItem).toHaveFocus());
+    }
+    const deleteAction = items.at(-1);
+    if (!deleteAction) throw new Error('Delete action is unavailable');
+    fireEvent.keyDown(deleteAction, { key: 'Enter' });
 
     expect(onRequestDeletePage).toHaveBeenCalledWith({
       pageId: 'a',
       returnFocus: trigger,
       title: 'Alpha',
     });
+    expect(onSelectPage).not.toHaveBeenCalled();
+  });
+
+  it('передаёт ID страницы в действие настройки доступа, не выбирая страницу', async () => {
+    const { onOpenPageAccess, onSelectPage } = renderTree();
+    fireEvent.click(screen.getByRole('button', { name: 'Действия для Alpha' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Настроить доступ' }));
+
+    expect(onOpenPageAccess).toHaveBeenCalledWith('a');
+    expect(onSelectPage).not.toHaveBeenCalled();
   });
 
   it('перемещает Page A внутрь пустой Page B через pointer DnD', async () => {

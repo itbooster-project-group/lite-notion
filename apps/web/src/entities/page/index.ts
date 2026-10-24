@@ -33,3 +33,4 @@ export {
   toMoveIntent,
   UNTITLED_PAGE_LABEL,
 } from './model/page-tree';
+export { PageActionMenuItem } from './ui/page-action-menu-item';
