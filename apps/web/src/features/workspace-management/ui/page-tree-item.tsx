@@ -1,10 +1,20 @@
 'use client';
 
 import type { ItemInstance } from '@headless-tree/core';
-import { ChevronDown, ChevronRight, GripVertical, MoreHorizontal, Trash2 } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  FilePlus2,
+  FolderInput,
+  GripVertical,
+  MoreHorizontal,
+  Pencil,
+  ShieldCheck,
+  Trash2,
+} from 'lucide-react';
 import { useRef, useState } from 'react';
-import type { PageCapabilities, PageTreeItemData } from '@/entities/page';
-import { Button, Input, Menu, MenuItem, MenuPopup, MenuTrigger, Tooltip } from '@/shared/ui';
+import { PageActionMenuItem, type PageCapabilities, type PageTreeItemData } from '@/entities/page';
+import { Button, Input, Menu, MenuPopup, MenuSeparator, MenuTrigger, Tooltip } from '@/shared/ui';
 import type { PageDeleteRequest } from '../model/delete-intent';
 import { PageDraft } from './page-draft';
 
@@ -23,6 +33,7 @@ type PageTreeItemProps = Readonly<{
   onChangeCreate: (value: string) => void;
   onCompleteRename: () => void;
   onCreateChild: () => void;
+  onOpenPageAccess: (pageId: string) => void;
   onRequestDelete: (request: PageDeleteRequest) => void;
   onStartMove: (returnFocus: HTMLElement | undefined) => void;
   onSubmitCreate: () => void;
@@ -43,6 +54,7 @@ export function PageTreeItem({
   onChangeCreate,
   onCompleteRename,
   onCreateChild,
+  onOpenPageAccess,
   onRequestDelete,
   onStartMove,
   onSubmitCreate,
@@ -142,6 +154,7 @@ export function PageTreeItem({
         {(capabilities.canCreateChild ||
           capabilities.canRenamePage ||
           capabilities.canMovePage ||
+          capabilities.canManageAccess ||
           capabilities.canDeletePage) && (
           <Menu
             modal={false}
@@ -171,32 +184,53 @@ export function PageTreeItem({
             >
               <MoreHorizontal aria-hidden="true" />
             </MenuTrigger>
-            <MenuPopup finalFocus={() => !renameRequestRef.current} sideOffset={4}>
+            <MenuPopup
+              className="w-56 min-w-0 max-w-[calc(100vw-2rem)]"
+              finalFocus={() => !renameRequestRef.current}
+              sideOffset={4}
+            >
               {capabilities.canCreateChild ? (
-                <MenuItem onClick={onCreateChild}>Добавить дочернюю</MenuItem>
+                <PageActionMenuItem icon={FilePlus2} onSelect={onCreateChild}>
+                  Добавить дочернюю
+                </PageActionMenuItem>
               ) : null}
               {capabilities.canRenamePage ? (
-                <MenuItem
-                  onClick={() => {
+                <PageActionMenuItem
+                  icon={Pencil}
+                  onSelect={() => {
                     renameRequestRef.current = true;
                   }}
                 >
                   Переименовать
-                </MenuItem>
+                </PageActionMenuItem>
               ) : null}
               {capabilities.canMovePage ? (
-                <MenuItem
-                  onClick={() => {
+                <PageActionMenuItem
+                  icon={FolderInput}
+                  onSelect={() => {
                     moveRequestRef.current = { returnFocus: actionsRef.current ?? undefined };
                   }}
                 >
                   Переместить…
-                </MenuItem>
+                </PageActionMenuItem>
+              ) : null}
+              {capabilities.canManageAccess ? (
+                <PageActionMenuItem icon={ShieldCheck} onSelect={() => onOpenPageAccess(data.id)}>
+                  Настроить доступ
+                </PageActionMenuItem>
+              ) : null}
+              {capabilities.canDeletePage &&
+              (capabilities.canCreateChild ||
+                capabilities.canRenamePage ||
+                capabilities.canMovePage ||
+                capabilities.canManageAccess) ? (
+                <MenuSeparator />
               ) : null}
               {capabilities.canDeletePage ? (
-                <MenuItem
-                  variant="destructive"
-                  onClick={() =>
+                <PageActionMenuItem
+                  destructive
+                  icon={Trash2}
+                  onSelect={() =>
                     onRequestDelete({
                       pageId: data.id,
                       returnFocus: actionsRef.current ?? undefined,
@@ -204,9 +238,8 @@ export function PageTreeItem({
                     })
                   }
                 >
-                  <Trash2 aria-hidden="true" />
                   Удалить
-                </MenuItem>
+                </PageActionMenuItem>
               ) : null}
             </MenuPopup>
           </Menu>

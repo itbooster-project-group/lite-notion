@@ -67,6 +67,7 @@ function tree(
   const callbacks = {
     onCreatePage: vi.fn().mockResolvedValue(undefined),
     onMovePage: vi.fn().mockResolvedValue(undefined),
+    onOpenPageAccess: vi.fn(),
     onRenamePage: vi.fn().mockResolvedValue(undefined),
     onRequestDeletePage: vi.fn(),
     onRequestDeleteProject: vi.fn(),
@@ -253,6 +254,40 @@ describe('workspace tree', () => {
       returnFocus: trigger,
       title: 'Alpha page',
     });
+    expect(navigation.push).not.toHaveBeenCalled();
+  });
+
+  it('показывает page actions в заданном порядке и запускает доступ без навигации', async () => {
+    const view = tree();
+    render(view.ui);
+    const trigger = await screen.findByRole('button', { name: 'Действия для Alpha page' });
+
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    const createChild = await screen.findByRole('menuitem', { name: 'Добавить дочернюю' });
+    await waitFor(() => expect(createChild).toHaveFocus());
+
+    const items = screen.getAllByRole('menuitem');
+    expect(items.map((item) => item.textContent)).toEqual([
+      'Добавить дочернюю',
+      'Переименовать',
+      'Переместить…',
+      'Настроить доступ',
+      'Удалить',
+    ]);
+    expect(screen.getByRole('separator')).toBeInTheDocument();
+
+    fireEvent.keyDown(createChild, { key: 'ArrowDown' });
+    const rename = screen.getByRole('menuitem', { name: 'Переименовать' });
+    fireEvent.keyDown(rename, { key: 'ArrowDown' });
+    const move = screen.getByRole('menuitem', { name: 'Переместить…' });
+    fireEvent.keyDown(move, { key: 'ArrowDown' });
+    const pageAccess = screen.getByRole('menuitem', { name: 'Настроить доступ' });
+    await waitFor(() => expect(pageAccess).toHaveFocus());
+    fireEvent.keyDown(pageAccess, { key: 'Enter' });
+
+    expect(view.callbacks.onOpenPageAccess).toHaveBeenCalledWith('alpha');
+    expect(navigation.push).not.toHaveBeenCalled();
   });
 
   it('формирует project delete intent из project actions', async () => {
@@ -286,6 +321,7 @@ describe('workspace tree', () => {
     expect(screen.queryByRole('menuitem', { name: 'Переместить…' })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: 'Удалить' })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: 'Настроить доступ' })).toBeNull();
+    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
   });
 
   it('скрывает все page mutation actions для viewer и не использует project branch', async () => {

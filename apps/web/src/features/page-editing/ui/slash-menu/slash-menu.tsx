@@ -1,6 +1,20 @@
 'use client';
 
 import type { Editor } from '@tiptap/core';
+import {
+  CirclePlay,
+  Heading1,
+  Heading2,
+  Heading3,
+  Image as ImageIcon,
+  Link,
+  List,
+  ListOrdered,
+  ListTodo,
+  type LucideIcon,
+  Pilcrow,
+  Video,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   filterPageEditorSlashCommands,
@@ -10,6 +24,20 @@ import {
   runPageEditorSlashCommand,
 } from '../../model/slash-menu';
 import { useEditorPopupPosition } from '../editor-popup-position/use-editor-popup-position';
+
+const commandIcons: Record<string, LucideIcon> = {
+  'heading-1': Heading1,
+  'heading-2': Heading2,
+  'heading-3': Heading3,
+  image: ImageIcon,
+  link: Link,
+  'bullet-list': List,
+  'ordered-list': ListOrdered,
+  paragraph: Pilcrow,
+  'task-list': ListTodo,
+  video: Video,
+  youtube: CirclePlay,
+};
 
 export type SlashMenuProps = Readonly<{
   editor: Editor;
@@ -129,28 +157,38 @@ export function SlashMenu({
   return (
     <div
       aria-label="Команды редактора"
-      className="fixed z-50 max-h-72 w-64 overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+      className="fixed z-50 max-h-[min(18rem,calc(100dvh-1rem))] w-72 min-w-0 max-w-[calc(100vw-1rem)] overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
       ref={popup.floatingRef}
       role="listbox"
       style={popup.position}
     >
       {commands.length ? (
-        commands.map((command, index) => (
-          <button
-            aria-selected={index === activeIndex}
-            className="flex w-full items-center rounded-sm px-3 py-2 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground"
-            key={command.id}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => runCommand(command)}
-            role="option"
-            type="button"
-          >
-            {command.label}
-          </button>
-        ))
+        commands.map((command, index) => {
+          const Icon = commandIcons[command.id] ?? Pilcrow;
+
+          return (
+            <button
+              aria-selected={index === activeIndex}
+              className="flex min-h-11 w-full items-center gap-2.5 rounded-sm px-2.5 py-2 text-left text-sm/5 outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground sm:min-h-9"
+              key={command.id}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => runCommand(command)}
+              role="option"
+              ref={index === activeIndex ? scrollActiveOptionIntoView : undefined}
+              type="button"
+            >
+              <Icon aria-hidden="true" className="size-4 shrink-0" />
+              <span className="min-w-0 truncate">{command.label}</span>
+            </button>
+          );
+        })
       ) : (
         <p role="status">Команды не найдены.</p>
       )}
     </div>
   );
+}
+
+function scrollActiveOptionIntoView(element: HTMLButtonElement | null) {
+  element?.scrollIntoView?.({ block: 'nearest' });
 }

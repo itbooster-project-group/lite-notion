@@ -89,4 +89,29 @@ describe('shared overlays', () => {
     expect(onRename).toHaveBeenCalledOnce();
     await waitFor(() => expect(trigger).toHaveFocus());
   });
+
+  it('закрывает dropdown menu по Escape и нажатию вне меню', async () => {
+    render(
+      <>
+        <Button>Снаружи</Button>
+        <Menu>
+          <MenuTrigger render={<Button>Действия</Button>} />
+          <MenuPopup>
+            <MenuItem>Переименовать</MenuItem>
+          </MenuPopup>
+        </Menu>
+      </>,
+    );
+
+    const trigger = screen.getByRole('button', { name: 'Действия' });
+    trigger.click();
+    const item = await screen.findByRole('menuitem', { name: 'Переименовать' });
+    fireEvent.keyDown(item, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+
+    trigger.click();
+    await screen.findByRole('menuitem', { name: 'Переименовать' });
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Снаружи' }));
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+  });
 });

@@ -38,6 +38,7 @@ export type PageTreeProps = Readonly<{
   normalizedTree: NormalizedPageTree;
   onCreatePage: (parentPageId: string | null, title: string) => Promise<void>;
   onMovePage: (intent: MoveIntent) => Promise<void>;
+  onOpenPageAccess: (pageId: string) => void;
   onRequestDeletePage: (request: PageDeleteRequest) => void;
   onRenamePage: (pageId: string, title: string) => Promise<void>;
   onSelectPage: (pageId: string) => void;
@@ -50,6 +51,7 @@ export function PageTree({
   normalizedTree,
   onCreatePage,
   onMovePage,
+  onOpenPageAccess,
   onRequestDeletePage,
   onRenamePage,
   onSelectPage,
@@ -272,6 +274,7 @@ export function PageTree({
             onChangeCreate={setDraftTitle}
             onCompleteRename={() => tree.completeRenaming()}
             onCreateChild={() => startDraft(item.getId())}
+            onOpenPageAccess={onOpenPageAccess}
             onRequestDelete={onRequestDeletePage}
             onStartMove={(returnFocus) => {
               setMoveReturnFocus(returnFocus);

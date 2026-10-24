@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import {
   getPageCapabilities,
   getPageDisplayTitle,
@@ -45,6 +46,7 @@ export function WorkspaceMain({
   projectTree,
 }: WorkspaceMainProps) {
   const router = useRouter();
+  const [accessPageId, setAccessPageId] = useState<string>();
   const page = activePage ?? selectPage(normalizedTree, activePageId);
 
   if (!page) {
@@ -61,10 +63,21 @@ export function WorkspaceMain({
           projectTree={projectTree}
           onCreatePage={onCreatePage}
           onMovePage={onMovePage}
+          onOpenPageAccess={setAccessPageId}
           onRenamePage={onRenamePage}
           onRequestDeletePage={onRequestDeletePage}
           onSelectPage={(pageId) => router.push(workspacePagePath(pageId))}
         />
+        {accessPageId && normalizedTree.nodesById[accessPageId] ? (
+          <PageAccessPanel
+            key={accessPageId}
+            open
+            page={normalizedTree.nodesById[accessPageId]}
+            onOpenChange={(open) => {
+              if (!open) setAccessPageId(undefined);
+            }}
+          />
+        ) : null}
       </ContentContainer>
     );
   }

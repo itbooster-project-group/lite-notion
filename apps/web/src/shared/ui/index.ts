@@ -36,6 +36,7 @@ export {
   DropdownMenu as Menu,
   DropdownMenuContent as MenuPopup,
   DropdownMenuItem as MenuItem,
+  DropdownMenuSeparator as MenuSeparator,
   DropdownMenuTrigger as MenuTrigger,
 } from './shadcn/dropdown-menu';
 export { Text, type TextProps } from './text';
